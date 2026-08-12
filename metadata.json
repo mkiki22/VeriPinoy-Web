@@ -1,0 +1,8 @@
+{
+  "name": "VeriPinoy",
+  "description": "BBB-style business authentication architecture built exclusively for the Philippines with Tatak Pinoy trust verification.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
