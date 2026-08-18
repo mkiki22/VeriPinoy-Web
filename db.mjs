@@ -45,8 +45,13 @@ export async function initDatabase() {
   const SQL = await initSqlJs();
 
   if (fs.existsSync(DB_FILE)) {
-    const fileBuffer = fs.readFileSync(DB_FILE);
-    db = new SQL.Database(fileBuffer);
+    try {
+      const fileBuffer = fs.readFileSync(DB_FILE);
+      db = new SQL.Database(fileBuffer);
+    } catch (e) {
+      console.warn("Existing db file corrupted or invalid, creating fresh database:", e.message);
+      db = new SQL.Database();
+    }
   } else {
     db = new SQL.Database();
   }
@@ -422,14 +427,35 @@ export async function initDatabase() {
     CREATE TABLE IF NOT EXISTS kyb_documents (
       id TEXT PRIMARY KEY,
       kyb_application_id TEXT NOT NULL,
+      doc_type TEXT, -- sec_dti, mayors_permit, bir_2303, tin_proof, signatory_id, board_resolution
       file_name TEXT NOT NULL,
       file_type TEXT NOT NULL,
       file_size TEXT NOT NULL,
       doc_status TEXT DEFAULT 'Pending Review',
       masked_reg_number TEXT,
       file_storage_path TEXT NOT NULL,
+      expiry_date TEXT,
+      notes TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (kyb_application_id) REFERENCES kyb_applications(id) ON DELETE CASCADE
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS business_kyb_settings (
+      business_id TEXT PRIMARY KEY,
+      required_docs TEXT,
+      threshold TEXT DEFAULT 'standard',
+      dti_api_enabled INTEGER DEFAULT 1,
+      dti_api_endpoint TEXT DEFAULT 'https://api.dti.gov.ph/pbr/v2/verify',
+      sec_api_enabled INTEGER DEFAULT 1,
+      sec_api_endpoint TEXT DEFAULT 'https://crs.sec.gov.ph/api/v1/entities',
+      bir_api_enabled INTEGER DEFAULT 1,
+      bir_api_endpoint TEXT DEFAULT 'https://api.bir.gov.ph/tin/v1/validate',
+      ocr_auto_verify INTEGER DEFAULT 1,
+      auto_revalidate_frequency TEXT DEFAULT 'annual',
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
     );
   `);
 
@@ -1372,34 +1398,125 @@ function seedDatabaseIfEmpty() {
       address: 'Legaspi Village, Makati City',
       contact_info: '+63 2 812 3456 / owner@bahaykubo.ph',
       owner_director_info: 'Roberto Mendoza (President & Managing Director)',
-      verification_status: 'in_progress',
+      verification_status: 'verified',
+      risk_level: 'low',
+      assigned_reviewer_id: 'STF-103',
+      initial_reviewer_id: 'STF-103',
+      reviewer_notes: JSON.stringify([{ author: 'Elena Reyes (Senior KYB Auditor)', text: 'SEC Certificate and 2026 Makati Mayor Permit fully cross-referenced against LGU database. BIR 2303 TIN 402-918-204-000 active. Tatak Pinoy verified merchant badge granted.', timestamp: now }]),
+      submission_date: '2026-08-11T08:30:00Z',
+      docs: [
+        { doc_type: 'sec_dti', file_name: 'SEC_Certificate_Incorporation_2026.pdf', file_type: 'pdf', file_size: '4.2 MB', status: 'Verified', masked: 'SEC-****-0812', expiry_date: '2050-12-31', notes: 'Valid SEC Certificate of Incorporation with Articles of Incorporation', path: '/private/kyb/3/SEC_Cert.pdf' },
+        { doc_type: 'mayors_permit', file_name: 'Makati_Mayors_Business_Permit_2026.pdf', file_type: 'pdf', file_size: '2.9 MB', status: 'Verified', masked: 'LGU-MKT-****-2026', expiry_date: '2026-12-31', notes: 'Official Business Permit issued by Makati LGU for current fiscal year 2026', path: '/private/kyb/3/Mayors_Permit.pdf' },
+        { doc_type: 'bir_2303', file_name: 'BIR_Form_2303_Certificate_of_Registration.pdf', file_type: 'pdf', file_size: '3.1 MB', status: 'Verified', masked: 'BIR-RDO-****-047', expiry_date: '2099-12-31', notes: 'BIR Form 2303 RDO 047 East Makati active tax compliance record', path: '/private/kyb/3/BIR_2303.pdf' },
+        { doc_type: 'tin_proof', file_name: 'Official_BIR_TIN_Verification_Proof.pdf', file_type: 'pdf', file_size: '1.8 MB', status: 'Verified', masked: 'TIN-402-***-204-000', expiry_date: '2099-12-31', notes: 'Corporate Tax Identification Number authenticated against Revenue Data Service', path: '/private/kyb/3/TIN_Proof.pdf' },
+        { doc_type: 'signatory_id', file_name: 'Authorized_Signatory_Passport_Roberto_Mendoza.pdf', file_type: 'pdf', file_size: '3.4 MB', status: 'Verified', masked: 'PASSPORT-P****812A', expiry_date: '2032-05-18', notes: 'Government ID & Corporate Secretary Certificate authorizing President Roberto Mendoza', path: '/private/kyb/3/Signatory_ID.pdf' }
+      ]
+    },
+    {
+      id: 'KYB-20482',
+      business_id: '1',
+      legal_business_name: 'Manila Bay Express Logistics Corp.',
+      registration_number: 'SEC-2026-4481',
+      business_type: 'Corporation',
+      industry: 'Services',
+      address: 'Roxas Blvd, Manila Hub',
+      contact_info: '+63 2 888 9900 / contact@manilabaylogistics.ph',
+      owner_director_info: 'Eduardo Tan (Managing Director)',
+      verification_status: 'verified',
+      risk_level: 'low',
+      assigned_reviewer_id: 'STF-103',
+      initial_reviewer_id: 'STF-103',
+      reviewer_notes: JSON.stringify([{ author: 'Elena Reyes', text: 'All corporate filings active and verified.', timestamp: now }]),
+      submission_date: '2026-08-01T10:00:00Z',
+      docs: [
+        { doc_type: 'sec_dti', file_name: 'SEC_Registration_ManilaBay.pdf', file_type: 'pdf', file_size: '3.8 MB', status: 'Verified', masked: 'SEC-****-4481', expiry_date: '2050-12-31', notes: 'SEC Registered', path: '/private/kyb/1/sec.pdf' },
+        { doc_type: 'mayors_permit', file_name: 'Manila_City_Mayors_Permit_2026.pdf', file_type: 'pdf', file_size: '2.5 MB', status: 'Verified', masked: 'LGU-MNL-****-2026', expiry_date: '2026-12-31', notes: 'Manila City LGU Permit', path: '/private/kyb/1/permit.pdf' },
+        { doc_type: 'bir_2303', file_name: 'BIR_2303_ManilaBay.pdf', file_type: 'pdf', file_size: '2.2 MB', status: 'Verified', masked: 'BIR-****-8812', expiry_date: '2099-12-31', notes: 'BIR Registered', path: '/private/kyb/1/bir.pdf' }
+      ]
+    },
+    {
+      id: 'KYB-20483',
+      business_id: '2',
+      legal_business_name: 'Sari-Sari Mart Cubao Trading',
+      registration_number: 'DTI-2026-8812',
+      business_type: 'Sole Proprietorship',
+      industry: 'Retail',
+      address: 'Cubao, Quezon City',
+      contact_info: '0917 111 2233 / owner@sarisarimart.ph',
+      owner_director_info: 'Teresa Bautista (Proprietor)',
+      verification_status: 'verified',
+      risk_level: 'low',
+      assigned_reviewer_id: 'STF-103',
+      initial_reviewer_id: 'STF-103',
+      reviewer_notes: JSON.stringify([{ author: 'Elena Reyes', text: 'DTI Business Name and QC Mayor Permit verified.', timestamp: now }]),
+      submission_date: '2026-08-05T14:15:00Z',
+      docs: [
+        { doc_type: 'sec_dti', file_name: 'DTI_BNRS_Certificate_2026.pdf', file_type: 'pdf', file_size: '1.9 MB', status: 'Verified', masked: 'DTI-****-8812', expiry_date: '2031-08-05', notes: 'DTI Business Name Registration Certificate', path: '/private/kyb/2/dti.pdf' },
+        { doc_type: 'mayors_permit', file_name: 'QC_Mayors_Permit_2026.pdf', file_type: 'pdf', file_size: '2.1 MB', status: 'Verified', masked: 'LGU-QC-****-2026', expiry_date: '2026-12-31', notes: 'Quezon City Business Permit', path: '/private/kyb/2/permit.pdf' },
+        { doc_type: 'bir_2303', file_name: 'BIR_2303_SariSari.pdf', file_type: 'pdf', file_size: '2.0 MB', status: 'Verified', masked: 'BIR-****-9921', expiry_date: '2099-12-31', notes: 'BIR Certificate Form 2303', path: '/private/kyb/2/bir.pdf' }
+      ]
+    },
+    {
+      id: 'KYB-20484',
+      business_id: '4',
+      legal_business_name: 'TechFix PH IT Solutions',
+      registration_number: 'DTI-2026-1190',
+      business_type: 'Sole Proprietorship',
+      industry: 'Electronics',
+      address: 'IT Park, Cebu City',
+      contact_info: '0922 555 7788 / support@techfix.ph',
+      owner_director_info: 'Mark Anthony Villar',
+      verification_status: 'action_required',
       risk_level: 'medium',
       assigned_reviewer_id: 'STF-103',
       initial_reviewer_id: 'STF-103',
-      reviewer_notes: JSON.stringify([{ author: 'Elena Reyes', text: 'SEC Articles of Incorporation match corporate name. Verifying Makati LGU Mayor permit validity.', timestamp: now }]),
-      submission_date: '2026-08-11T08:30:00Z',
+      reviewer_notes: JSON.stringify([{ author: 'Elena Reyes', text: 'Mayor permit scan is blurred. Action required: re-upload high-resolution 2026 Cebu LGU permit.', timestamp: now }]),
+      submission_date: '2026-08-14T09:00:00Z',
       docs: [
-        { file_name: 'SEC_Certificate_2026.pdf', file_type: 'pdf', file_size: '4.2 MB', status: 'Verified', masked: 'SEC-****-0812', path: '/private/kyb/3/SEC_Cert.pdf' },
-        { file_name: 'Makati_Mayors_Permit_2026.pdf', file_type: 'pdf', file_size: '2.9 MB', status: 'Under Verification', masked: 'PERMIT-****-2026', path: '/private/kyb/3/Mayors_Permit.pdf' }
+        { doc_type: 'sec_dti', file_name: 'DTI_BNRS_TechFix.pdf', file_type: 'pdf', file_size: '2.1 MB', status: 'Verified', masked: 'DTI-****-1190', expiry_date: '2031-01-10', notes: 'DTI Certificate valid', path: '/private/kyb/4/dti.pdf' },
+        { doc_type: 'mayors_permit', file_name: 'Cebu_Mayors_Permit_Scan.pdf', file_type: 'pdf', file_size: '1.2 MB', status: 'Action Required', masked: 'LGU-CEB-****-PEND', expiry_date: '2026-12-31', notes: 'Blurred official receipt stamp. Re-upload requested.', path: '/private/kyb/4/permit.pdf' }
       ]
     }
   ];
 
   for (const b of kybApps) {
     executeRun(
-      `INSERT INTO kyb_applications (id, business_id, legal_business_name, registration_number, business_type, industry, address, contact_info, owner_director_info, verification_status, risk_level, assigned_reviewer_id, initial_reviewer_id, reviewer_notes, submission_date, created_at, updated_at)
+      `INSERT OR REPLACE INTO kyb_applications (id, business_id, legal_business_name, registration_number, business_type, industry, address, contact_info, owner_director_info, verification_status, risk_level, assigned_reviewer_id, initial_reviewer_id, reviewer_notes, submission_date, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [b.id, b.business_id, b.legal_business_name, b.registration_number, b.business_type, b.industry, b.address, b.contact_info, b.owner_director_info, b.verification_status, b.risk_level, b.assigned_reviewer_id, b.initial_reviewer_id, b.reviewer_notes, b.submission_date, now, now]
     );
 
     for (const d of b.docs) {
       executeRun(
-        `INSERT INTO kyb_documents (id, kyb_application_id, file_name, file_type, file_size, doc_status, masked_reg_number, file_storage_path, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [`doc_${Math.random().toString(36).substring(2)}`, b.id, d.file_name, d.file_type, d.file_size, d.status, d.masked, d.path, now]
+        `INSERT OR REPLACE INTO kyb_documents (id, kyb_application_id, doc_type, file_name, file_type, file_size, doc_status, masked_reg_number, file_storage_path, expiry_date, notes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [`doc_${b.id}_${d.doc_type || 'file'}`, b.id, d.doc_type || 'sec_dti', d.file_name, d.file_type, d.file_size, d.status, d.masked, d.path, d.expiry_date || '2026-12-31', d.notes || '', now]
       );
     }
   }
+
+  /* SEED BUSINESS TEAM MEMBERS */
+  const teamMembers = [
+    { id: 'BTM-301', business_id: '3', user_id: 'USR-BIZ-301', name: 'Roberto Mendoza', email: 'owner@bahaykubo.ph', role: 'owner', status: 'active' },
+    { id: 'BTM-302', business_id: '3', user_id: 'USR-BIZ-302', name: 'Atty. Clarissa Dizon', email: 'compliance@bahaykubo.ph', role: 'compliance_officer', status: 'active' },
+    { id: 'BTM-303', business_id: '3', user_id: 'USR-BIZ-303', name: 'Gabriel Cruz', email: 'auditor.gabriel@bahaykubo.ph', role: 'kyb_auditor', status: 'active' },
+    { id: 'BTM-304', business_id: '3', user_id: 'USR-BIZ-304', name: 'Sheila Santos', email: 'admin.sheila@bahaykubo.ph', role: 'kyb_submitter', status: 'active' },
+    { id: 'BTM-305', business_id: '3', user_id: 'USR-BIZ-305', name: 'Mark Villanueva', email: 'operations@bahaykubo.ph', role: 'manager', status: 'active' }
+  ];
+  for (const tm of teamMembers) {
+    executeRun(
+      `INSERT OR REPLACE INTO business_users (id, business_id, user_id, name, email, role, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tm.id, tm.business_id, tm.user_id, tm.name, tm.email, tm.role, tm.status, now, now]
+    );
+  }
+
+  /* SEED BUSINESS KYB CONFIGURATION SETTINGS */
+  executeRun(
+    `INSERT OR REPLACE INTO business_kyb_settings (business_id, required_docs, threshold, dti_api_enabled, dti_api_endpoint, sec_api_enabled, sec_api_endpoint, bir_api_enabled, bir_api_endpoint, ocr_auto_verify, auto_revalidate_frequency, updated_at)
+     VALUES ('3', ?, 'standard', 1, 'https://api.dti.gov.ph/pbr/v2/verify', 1, 'https://crs.sec.gov.ph/api/v1/entities', 1, 'https://api.bir.gov.ph/tin/v1/validate', 1, 'annual', ?)`,
+    [JSON.stringify(['sec_dti', 'mayors_permit', 'bir_2303', 'tin_proof', 'signatory_id']), now]
+  );
 
   /* CUSTOMER REVIEWS & MODERATION CASES */
   const reviews = [
@@ -1543,18 +1660,23 @@ function seedDatabaseIfEmpty() {
     [now, now, now]
   );
 
-  /* REVIEW NOTIFICATIONS */
-  executeRun(
-    `INSERT INTO review_notifications (id, recipient_type, recipient_id, review_id, type, title, message, link, is_read, created_at)
-     VALUES ('NOTIF-101', 'business', '3', 'REV-104', 'new_review', 'New 2-Star Review Received', 'Carlos M. posted a 2-star review for Bahay Kubo Restaurant regarding Allergen Spec.', '/business/reviews', 0, ?)`,
-    [now]
-  );
+  /* REVIEW & KYB NOTIFICATIONS */
+  const seedNotifs = [
+    { id: 'NOTIF-KYB-101', recipient_type: 'business', recipient_id: '3', type: 'kyb_approved', title: '🎉 SEC Registration Certificate Verified', message: 'Your SEC Certificate of Incorporation (SEC-2026-0812) was verified by Senior Reviewer Elena Reyes.', link: '#m-panel-kyb' },
+    { id: 'NOTIF-KYB-102', recipient_type: 'business', recipient_id: '3', type: 'permit_expiry_warning', title: '⏰ Annual Mayor\'s Permit Renewal Notice', message: 'Makati LGU Mayor\'s Permit renewal window is approaching (valid through Dec 31, 2026). Upload early to retain continuous Tatak Pinoy badge.', link: '#m-panel-kyb' },
+    { id: 'NOTIF-KYB-103', recipient_type: 'business', recipient_id: '3', type: 'kyb_verified', title: '🛡️ BIR 2303 & Corporate TIN Validated', message: 'TIN 402-918-204-000 successfully cross-checked with Philippine Revenue database.', link: '#m-panel-kyb' },
+    { id: 'NOTIF-KYB-104', recipient_type: 'business', recipient_id: '3', type: 'dispute_protection', title: '⚖️ Customer Claim Received — KYB Protection Active', message: 'Claim #CLM-2026-904 filed. Because your business is KYB-Verified, expedited neutral arbitration is available.', link: '#m-panel-disputes' },
+    { id: 'NOTIF-101', recipient_type: 'business', recipient_id: '3', type: 'new_review', title: 'New 2-Star Review Received', message: 'Carlos M. posted a 2-star review for Bahay Kubo Restaurant regarding Allergen Spec.', link: '#m-panel-reviews' },
+    { id: 'NOTIF-301', recipient_type: 'customer', recipient_id: 'CUST-303', type: 'claim_requested', title: 'Action Required regarding your VeriPinoy Review', message: 'VeriPinoy compliance team requests transaction verification for your Sari-Sari Mart review.', link: '/customer/claims' }
+  ];
 
-  executeRun(
-    `INSERT INTO review_notifications (id, recipient_type, recipient_id, review_id, type, title, message, link, is_read, created_at)
-     VALUES ('NOTIF-301', 'customer', 'CUST-303', 'REV-301', 'claim_requested', 'Action Required regarding your VeriPinoy Review', 'VeriPinoy compliance team requests transaction verification for your Sari-Sari Mart review.', '/customer/claims', 0, ?)`,
-    [now]
-  );
+  for (const sn of seedNotifs) {
+    executeRun(
+      `INSERT OR REPLACE INTO review_notifications (id, recipient_type, recipient_id, review_id, type, title, message, link, is_read, created_at)
+       VALUES (?, ?, ?, NULL, ?, ?, ?, ?, 0, ?)`,
+      [sn.id, sn.recipient_type, sn.recipient_id, sn.type, sn.title, sn.message, sn.link, now]
+    );
+  }
 
   /* CASE ASSIGNMENT HISTORY */
   executeRun(
@@ -1999,7 +2121,7 @@ function seedDiscoveryMasterData(now = new Date().toISOString()) {
   if (checkLoc && checkLoc.count > 0) return;
 
   // 1. Countries, Regions, Provinces
-  executeRun(`INSERT INTO countries (id, name, code) VALUES ('COUNTRY-PH', 'Philippines', 'PH')`);
+  executeRun(`INSERT OR IGNORE INTO countries (id, name, code) VALUES ('COUNTRY-PH', 'Philippines', 'PH')`);
 
   const regions = [
     { id: 'REG-NCR', country_id: 'COUNTRY-PH', name: 'National Capital Region', code: 'NCR' },
@@ -2008,7 +2130,7 @@ function seedDiscoveryMasterData(now = new Date().toISOString()) {
     { id: 'REG-R11', country_id: 'COUNTRY-PH', name: 'Davao Region (Region XI)', code: 'R11' }
   ];
   for (const r of regions) {
-    executeRun(`INSERT INTO regions (id, country_id, name, code) VALUES (?, ?, ?, ?)`, [r.id, r.country_id, r.name, r.code]);
+    executeRun(`INSERT OR IGNORE INTO regions (id, country_id, name, code) VALUES (?, ?, ?, ?)`, [r.id, r.country_id, r.name, r.code]);
   }
 
   const provinces = [
@@ -2018,7 +2140,7 @@ function seedDiscoveryMasterData(now = new Date().toISOString()) {
     { id: 'PROV-DAVAO', region_id: 'REG-R11', name: 'Davao del Sur' }
   ];
   for (const p of provinces) {
-    executeRun(`INSERT INTO provinces (id, region_id, name) VALUES (?, ?, ?)`, [p.id, p.region_id, p.name]);
+    executeRun(`INSERT OR IGNORE INTO provinces (id, region_id, name) VALUES (?, ?, ?)`, [p.id, p.region_id, p.name]);
   }
 
   // 2. Cities / Municipalities
@@ -2033,7 +2155,7 @@ function seedDiscoveryMasterData(now = new Date().toISOString()) {
     { id: 'CITY-PASIG', province_id: 'PROV-MM', name: 'Pasig', slug: 'pasig' }
   ];
   for (const c of cities) {
-    executeRun(`INSERT INTO cities (id, province_id, name, slug, status) VALUES (?, ?, ?, ?, 'active')`, [c.id, c.province_id, c.name, c.slug]);
+    executeRun(`INSERT OR IGNORE INTO cities (id, province_id, name, slug, status) VALUES (?, ?, ?, ?, 'active')`, [c.id, c.province_id, c.name, c.slug]);
   }
 
   // 3. Industries & Hierarchical Categories
@@ -2063,7 +2185,7 @@ function seedDiscoveryMasterData(now = new Date().toISOString()) {
     { id: 'IND-LOG', name: 'Transportation & Logistics', slug: 'transportation-logistics', parent_id: null }
   ];
   for (const ind of industries) {
-    executeRun(`INSERT INTO industries (id, name, slug, parent_id, status) VALUES (?, ?, ?, ?, 'active')`, [ind.id, ind.name, ind.slug, ind.parent_id]);
+    executeRun(`INSERT OR IGNORE INTO industries (id, name, slug, parent_id, status) VALUES (?, ?, ?, ?, 'active')`, [ind.id, ind.name, ind.slug, ind.parent_id]);
   }
 
   // 4. Seed Business Listings
@@ -2315,7 +2437,7 @@ function seedDiscoveryMasterData(now = new Date().toISOString()) {
 
   for (const b of businesses) {
     executeRun(
-      `INSERT INTO businesses (id, user_id, business_name, slug, business_email, business_phone, business_type, industry, industry_id, city_id, province_id, business_address, website, social_media, authorized_representative, account_status, verification_status, rating, review_count, short_description, services, years_in_business, business_size, logo, verified_at, featured, created_at, updated_at)
+      `INSERT OR REPLACE INTO businesses (id, user_id, business_name, slug, business_email, business_phone, business_type, industry, industry_id, city_id, province_id, business_address, website, social_media, authorized_representative, account_status, verification_status, rating, review_count, short_description, services, years_in_business, business_size, logo, verified_at, featured, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         b.id, b.user_id, b.business_name, b.slug, b.business_email, b.business_phone, b.business_type,
@@ -2327,7 +2449,7 @@ function seedDiscoveryMasterData(now = new Date().toISOString()) {
 
     // Also add entry to business_locations
     executeRun(
-      `INSERT INTO business_locations (id, business_id, city_id, address, lat, lng, is_primary, is_public)
+      `INSERT OR REPLACE INTO business_locations (id, business_id, city_id, address, lat, lng, is_primary, is_public)
        VALUES (?, ?, ?, ?, 14.5995, 120.9842, 1, 1)`,
       [`LOC_${b.id}`, b.id, b.city_id, b.business_address]
     );

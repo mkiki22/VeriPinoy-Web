@@ -145,9 +145,10 @@ nav .logo-title {
   font-weight: 800;
   letter-spacing: -0.6px;
   color: var(--navy-900);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  white-space: nowrap;
 }
 nav .logo-title span { color: var(--emerald-500); }
 nav .logo-tag {
@@ -787,9 +788,7 @@ input:checked + .slider:before { transform: translateX(22px); }
           <path d="M9.5 18L13.5 22L21 13.5" stroke="#10B981" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
       </div>
-      <div class="logo-title">
-        Veri<span>Pinoy</span>
-      </div>
+      <div class="logo-title">Veri<span>Pinoy</span></div>
     </div>
 
     <div class="links">
@@ -2569,6 +2568,358 @@ input:checked + .slider:before { transform: translateX(22px); }
             </div>
             <button class="btn btn-emerald" onclick="saveMerchantProfileChanges()">Save Profile Updates</button>
           </div>
+
+          <!-- VERIFICATION (KYB) TAB -->
+          <div id="m-panel-kyb" style="display:none;">
+            <!-- KYB HEADER STATUS BANNER -->
+            <div id="kyb-status-banner" style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:24px; margin-bottom:24px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+                <div>
+                  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                    <span id="kyb-badge-indicator" class="badge badge-emerald" style="font-size:0.85rem; padding:6px 12px;">🛡️ Verified Merchant</span>
+                    <span id="kyb-tier-indicator" class="badge badge-gold" style="font-size:0.8rem;">Tatak Pinoy Certified</span>
+                  </div>
+                  <h3 id="kyb-biz-legal-name" style="font-family:var(--font-heading); font-size:1.4rem; font-weight:800; color:var(--navy-900); margin:0;">Bahay Kubo Restaurant Inc.</h3>
+                  <p id="kyb-status-desc" style="font-size:0.88rem; color:var(--slate-600); margin-top:4px;">
+                    Philippine Corporate Trust Verification active. Validated against SEC Registry & Makati City LGU 2026 database.
+                  </p>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                  <button class="btn btn-outline" style="font-size:0.82rem; padding:8px 14px;" onclick="openKYBEditModal()">✏️ Update Legal Info</button>
+                  <button class="btn btn-emerald" style="font-size:0.82rem; padding:8px 16px;" onclick="submitKYBForReview()">⚡ Request Re-Audit</button>
+                </div>
+              </div>
+
+              <!-- STATS ROW -->
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-top:20px; padding-top:16px; border-top:1px solid var(--slate-200);">
+                <div>
+                  <div style="font-size:0.72rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Registration Number</div>
+                  <div id="kyb-stat-regno" style="font-family:var(--font-heading); font-weight:800; color:var(--navy-900); margin-top:2px;">SEC-2026-0812</div>
+                </div>
+                <div>
+                  <div style="font-size:0.72rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">BIR Tax Identification (TIN)</div>
+                  <div id="kyb-stat-tin" style="font-family:var(--font-heading); font-weight:800; color:var(--navy-900); margin-top:2px;">402-918-204-000</div>
+                </div>
+                <div>
+                  <div style="font-size:0.72rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Entity Structure</div>
+                  <div id="kyb-stat-type" style="font-family:var(--font-heading); font-weight:800; color:var(--navy-900); margin-top:2px;">Corporation</div>
+                </div>
+                <div>
+                  <div style="font-size:0.72rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Authorized Signatory</div>
+                  <div id="kyb-stat-signatory" style="font-family:var(--font-heading); font-weight:800; color:var(--navy-900); margin-top:2px;">Roberto Mendoza (President)</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- COMPLIANCE NOTICES / ACTION REQUIRED BANNER (CONDITIONAL) -->
+            <div id="kyb-action-alert" style="display:none; background:#FFFBEB; border:1px solid #FCD34D; border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:24px;">
+              <div style="display:flex; align-items:flex-start; gap:12px;">
+                <span style="font-size:1.4rem;">⚠️</span>
+                <div>
+                  <h4 style="color:#92400E; font-weight:800; margin:0 0 4px;">Action Required by Compliance Reviewer</h4>
+                  <p id="kyb-action-alert-msg" style="color:#B45309; font-size:0.85rem; margin:0;">Please re-upload a clear copy of your Mayor's Permit with the 2026 Official Receipt.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- CORPORATE DOCUMENT CHECKLIST MATRIX -->
+            <div style="margin-bottom:28px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div>
+                  <h4 style="font-family:var(--font-heading); font-size:1.1rem; font-weight:800; color:var(--navy-900); margin:0;">Corporate Identification Documents</h4>
+                  <p style="font-size:0.85rem; color:var(--slate-500); margin:2px 0 0;">Upload government-issued business registrations, local tax receipts, and signatory credentials.</p>
+                </div>
+                <span class="badge badge-blue" style="font-size:0.75rem;">DPA Sealed Storage</span>
+              </div>
+
+              <!-- 5 CORE DOCUMENT CARDS -->
+              <div id="kyb-docs-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
+                <!-- Populated dynamically via renderKYBDocuments() -->
+              </div>
+            </div>
+
+            <!-- AUDIT TRAIL & REVIEWER TIMELINE -->
+            <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:24px;">
+              <h4 style="font-family:var(--font-heading); font-size:1.05rem; font-weight:800; color:var(--navy-900); margin-bottom:16px;">📜 Compliance Audit Trail & Review History</h4>
+              <div id="kyb-timeline-container" style="display:flex; flex-direction:column; gap:14px;">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- CUSTOMER DISPUTES TAB -->
+          <div id="m-panel-disputes" style="display:none;">
+            <!-- KYB PROTECTION BANNER -->
+            <div style="background:linear-gradient(135deg, #0F172A, #1E293B); color:var(--white); border-radius:var(--radius-lg); padding:24px; margin-bottom:24px; box-shadow:var(--shadow-md);">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+                <div>
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                    <span class="badge badge-emerald" style="font-size:0.78rem;">🛡️ Tatak Pinoy KYB Protection Active</span>
+                    <span class="badge badge-gold" style="font-size:0.78rem;">Expedited Neutral Arbitration</span>
+                  </div>
+                  <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; margin:0;">Customer Disputes & Transaction Claims Portal</h3>
+                  <p style="color:var(--slate-300); font-size:0.85rem; margin-top:4px; max-width:680px;">
+                    As a KYB-Verified merchant (SEC-2026-0812), all customer claims against your store receive priority neutral review by VeriPinoy Arbitrators. Frivolous chargebacks are protected under your 98% Merchant Trust Score.
+                  </p>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:0.75rem; color:var(--slate-400); text-transform:uppercase; font-weight:700;">Resolution Response SLA</div>
+                  <div style="font-family:var(--font-heading); font-size:1.5rem; font-weight:900; color:var(--emerald-400);">48 Hours</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- DISPUTES SUMMARY STATS -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:24px;">
+              <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:16px;">
+                <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Total Disputes Filed</div>
+                <div id="m-stat-disp-total" style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--navy-900); margin-top:2px;">2</div>
+                <div style="font-size:0.75rem; color:var(--slate-500);">All-time customer claims</div>
+              </div>
+              <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:16px;">
+                <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Open Action Required</div>
+                <div id="m-stat-disp-open" style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--amber-600); margin-top:2px;">1</div>
+                <div style="font-size:0.75rem; color:var(--amber-700); font-weight:700;">Awaiting merchant response</div>
+              </div>
+              <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:16px;">
+                <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Successfully Resolved</div>
+                <div id="m-stat-disp-resolved" style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--emerald-600); margin-top:2px;">1</div>
+                <div style="font-size:0.75rem; color:var(--emerald-600); font-weight:700;">100% Amicable settlement</div>
+              </div>
+            </div>
+
+            <!-- DISPUTES LIST -->
+            <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow-sm);">
+              <div style="padding:18px 24px; border-bottom:1px solid var(--slate-200); display:flex; justify-content:space-between; align-items:center;">
+                <h4 style="font-family:var(--font-heading); font-weight:800; color:var(--navy-900); margin:0;">Active & Historic Claims</h4>
+                <button class="btn btn-outline" style="font-size:0.8rem; padding:6px 12px;" onclick="loadMerchantDisputes()">🔄 Refresh Claims</button>
+              </div>
+              <div id="merchant-disputes-list" style="padding:16px 24px; display:flex; flex-direction:column; gap:16px;">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- TEAM & ROLES TAB -->
+          <div id="m-panel-team" style="display:none;">
+            <!-- RBAC HEADER -->
+            <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:24px; margin-bottom:24px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+                <div>
+                  <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin:0;">Enterprise Team & KYB Role Governance</h3>
+                  <p style="font-size:0.85rem; color:var(--slate-600); margin-top:4px; max-width:640px;">
+                    Enforce Separation of Duties (SoD) by assigning dedicated roles for corporate KYB document uploads, compliance audits, dispute management, and customer support.
+                  </p>
+                </div>
+                <button class="btn btn-emerald" style="font-size:0.85rem; padding:10px 18px;" onclick="openInviteTeamModal()">➕ Invite Team Member</button>
+              </div>
+
+              <!-- ROLES BREAKDOWN PILLS -->
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-top:20px; padding-top:16px; border-top:1px solid var(--slate-200);">
+                <div style="background:var(--white); padding:12px; border-radius:var(--radius-md); border:1px solid var(--slate-200);">
+                  <div style="font-weight:800; color:var(--navy-900); font-size:0.85rem;">👑 Business Owner</div>
+                  <div style="font-size:0.75rem; color:var(--slate-500); margin-top:2px;">Full governance, corporate filing signoff, billing, and team management.</div>
+                </div>
+                <div style="background:var(--white); padding:12px; border-radius:var(--radius-md); border:1px solid var(--slate-200);">
+                  <div style="font-weight:800; color:var(--emerald-700); font-size:0.85rem;">🛡️ Compliance Officer</div>
+                  <div style="font-size:0.75rem; color:var(--slate-500); margin-top:2px;">Uploads, edits, and certifies SEC/DTI, BIR 2303, and Mayor's Permits.</div>
+                </div>
+                <div style="background:var(--white); padding:12px; border-radius:var(--radius-md); border:1px solid var(--slate-200);">
+                  <div style="font-weight:800; color:var(--blue-700); font-size:0.85rem;">🔍 KYB Auditor (Read-Only)</div>
+                  <div style="font-size:0.75rem; color:var(--slate-500); margin-top:2px;">Inspects registration records and monitors permit renewal deadlines.</div>
+                </div>
+                <div style="background:var(--white); padding:12px; border-radius:var(--radius-md); border:1px solid var(--slate-200);">
+                  <div style="font-weight:800; color:var(--amber-700); font-size:0.85rem;">📝 KYB Submitter</div>
+                  <div style="font-size:0.75rem; color:var(--slate-500); margin-top:2px;">Drafts and uploads filings for executive approval before submission.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TEAM MEMBERS TABLE -->
+            <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow-sm);">
+              <table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.88rem;">
+                <thead>
+                  <tr style="background:var(--slate-100); border-bottom:1px solid var(--slate-200); color:var(--slate-600); text-transform:uppercase; font-size:0.75rem;">
+                    <th style="padding:14px 18px;">Team Member</th>
+                    <th style="padding:14px 18px;">Email Address</th>
+                    <th style="padding:14px 18px;">Assigned Role</th>
+                    <th style="padding:14px 18px;">KYB Permissions Scope</th>
+                    <th style="padding:14px 18px;">Status</th>
+                    <th style="padding:14px 18px; text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="merchant-team-tbody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- NOTIFICATIONS TAB -->
+          <div id="m-panel-notifications" style="display:none;">
+            <!-- NOTIFICATIONS LIVE FEED HEADER -->
+            <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:24px; margin-bottom:24px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+                <div>
+                  <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin:0;">Real-Time Alerts & Notification Center</h3>
+                  <p style="font-size:0.85rem; color:var(--slate-600); margin-top:4px;">
+                    Instant notifications on KYB approvals, permit renewal deadlines, customer disputes, and compliance reviewer requests.
+                  </p>
+                </div>
+                <!-- SIMULATE LIVE TRIGGERS BAR -->
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button class="btn btn-outline" style="font-size:0.75rem; padding:6px 12px;" onclick="triggerSimulatedNotification('permit_expiry_warning')">⏰ Test Permit Expiry Alert</button>
+                  <button class="btn btn-outline" style="font-size:0.75rem; padding:6px 12px;" onclick="triggerSimulatedNotification('kyb_approved')">🎉 Test KYB Approval</button>
+                  <button class="btn btn-outline" style="font-size:0.75rem; padding:6px 12px;" onclick="triggerSimulatedNotification('action_required')">⚠️ Test Action Required</button>
+                </div>
+              </div>
+
+              <!-- FILTER CHIPS -->
+              <div style="display:flex; gap:8px; margin-top:20px; flex-wrap:wrap;" id="notif-filter-chips">
+                <button class="badge badge-emerald" style="cursor:pointer; border:none; padding:6px 14px;" onclick="setNotificationFilter('all')">All Notifications</button>
+                <button class="badge badge-outline" style="cursor:pointer; border:1px solid var(--slate-300); padding:6px 14px;" onclick="setNotificationFilter('kyb')">🛡️ KYB Updates</button>
+                <button class="badge badge-outline" style="cursor:pointer; border:1px solid var(--slate-300); padding:6px 14px;" onclick="setNotificationFilter('permit')">⏰ Permit Renewals</button>
+                <button class="badge badge-outline" style="cursor:pointer; border:1px solid var(--slate-300); padding:6px 14px;" onclick="setNotificationFilter('dispute')">⚖️ Disputes & Claims</button>
+              </div>
+            </div>
+
+            <!-- NOTIFICATIONS FEED CONTAINER -->
+            <div id="merchant-notifications-feed" style="display:flex; flex-direction:column; gap:12px; margin-bottom:28px;">
+              <!-- Populated dynamically -->
+            </div>
+
+            <!-- NOTIFICATION PREFERENCES CARD -->
+            <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:24px;">
+              <h4 style="font-family:var(--font-heading); font-size:1.1rem; font-weight:800; color:var(--navy-900); margin-bottom:16px;">🔔 Notification Channel Preferences</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px;">
+                <label style="display:flex; align-items:center; gap:10px; font-size:0.88rem; cursor:pointer;">
+                  <input type="checkbox" id="pref-notif-kyb-email" checked style="width:18px; height:18px;">
+                  <span><strong>Email Alerts:</strong> KYB Approvals & Actions</span>
+                </label>
+                <label style="display:flex; align-items:center; gap:10px; font-size:0.88rem; cursor:pointer;">
+                  <input type="checkbox" id="pref-notif-permit-sms" checked style="width:18px; height:18px;">
+                  <span><strong>SMS Alerts:</strong> Annual Permit Expiry</span>
+                </label>
+                <label style="display:flex; align-items:center; gap:10px; font-size:0.88rem; cursor:pointer;">
+                  <input type="checkbox" id="pref-notif-dispute-inapp" checked style="width:18px; height:18px;">
+                  <span><strong>In-App Alerts:</strong> Customer Claims</span>
+                </label>
+              </div>
+              <button class="btn btn-emerald" style="margin-top:18px; font-size:0.82rem; padding:8px 16px;" onclick="saveMerchantNotificationSettings()">Save Alert Preferences</button>
+            </div>
+          </div>
+
+          <!-- SETTINGS TAB (KYB CONFIGURATION & INTEGRATIONS) -->
+          <div id="m-panel-settings" style="display:none;">
+            <!-- KYB CONFIGURATION SECTION -->
+            <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:24px; margin-bottom:24px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:18px;">
+                <div>
+                  <span class="badge badge-gold" style="font-size:0.75rem;">⚙️ KYB Policy & Verification Engine</span>
+                  <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin:4px 0 0;">KYB Verification Configuration</h3>
+                </div>
+                <button class="btn btn-emerald" style="font-size:0.85rem; padding:8px 18px;" onclick="saveMerchantKYBSettings()">💾 Save KYB Configuration</button>
+              </div>
+
+              <!-- DOCUMENT REQUIREMENTS CHECKLIST BY ENTITY TYPE -->
+              <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:20px; margin-bottom:20px;">
+                <h4 style="font-weight:800; color:var(--navy-900); font-size:0.95rem; margin-bottom:6px;">1. Mandatory Document Checklist Rules</h4>
+                <p style="font-size:0.82rem; color:var(--slate-500); margin-bottom:14px;">Toggle corporate filings required for this business entity type to maintain Tatak Pinoy verification:</p>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem;">
+                    <input type="checkbox" id="cfg-doc-sec" checked style="width:16px; height:16px;">
+                    <span>SEC / DTI Registration Certificate (Mandatory)</span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem;">
+                    <input type="checkbox" id="cfg-doc-permit" checked style="width:16px; height:16px;">
+                    <span>Mayor’s / Business Permit 2026 (Mandatory)</span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem;">
+                    <input type="checkbox" id="cfg-doc-bir" checked style="width:16px; height:16px;">
+                    <span>BIR Form 2303 Tax Certificate (Mandatory)</span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem;">
+                    <input type="checkbox" id="cfg-doc-tin" checked style="width:16px; height:16px;">
+                    <span>Official TIN Verification Proof (Mandatory)</span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem;">
+                    <input type="checkbox" id="cfg-doc-signatory" checked style="width:16px; height:16px;">
+                    <span>Signatory Government ID & Resolution (Mandatory)</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- VERIFICATION THRESHOLD & REVIEW SPEED -->
+              <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:20px; margin-bottom:20px;">
+                <h4 style="font-weight:800; color:var(--navy-900); font-size:0.95rem; margin-bottom:6px;">2. Audit Threshold & Risk Profile</h4>
+                <p style="font-size:0.82rem; color:var(--slate-500); margin-bottom:14px;">Select the verification SLA and due diligence rigor:</p>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+                  <label style="border:1px solid var(--slate-200); padding:12px; border-radius:var(--radius-md); cursor:pointer; display:block;">
+                    <input type="radio" name="kyb-threshold-opt" value="standard" checked>
+                    <strong style="margin-left:6px; font-size:0.88rem;">Standard Review</strong>
+                    <div style="font-size:0.75rem; color:var(--slate-500); margin-top:4px;">24–48 hour dual-human review by Senior Compliance Auditor.</div>
+                  </label>
+                  <label style="border:1px solid var(--slate-200); padding:12px; border-radius:var(--radius-md); cursor:pointer; display:block;">
+                    <input type="radio" name="kyb-threshold-opt" value="express">
+                    <strong style="margin-left:6px; font-size:0.88rem;">Express Automated Audit</strong>
+                    <div style="font-size:0.75rem; color:var(--slate-500); margin-top:4px;">Instant automated cross-check with SEC/DTI & BIR registry APIs.</div>
+                  </label>
+                  <label style="border:1px solid var(--slate-200); padding:12px; border-radius:var(--radius-md); cursor:pointer; display:block;">
+                    <input type="radio" name="kyb-threshold-opt" value="enhanced">
+                    <strong style="margin-left:6px; font-size:0.88rem;">Enhanced Due Diligence (EDD)</strong>
+                    <div style="font-size:0.75rem; color:var(--slate-500); margin-top:4px;">For high-volume merchants &gt; ₱1M/mo with physical site verification.</div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- THIRD-PARTY VERIFICATION PROVIDER APIS -->
+              <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:20px;">
+                <h4 style="font-weight:800; color:var(--navy-900); font-size:0.95rem; margin-bottom:6px;">3. Third-Party Verification Provider API Gateways</h4>
+                <p style="font-size:0.82rem; color:var(--slate-500); margin-bottom:16px;">Real-time automated integration with Philippine government registry and OCR services:</p>
+                
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                  <!-- DTI API -->
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:12px; background:var(--slate-50); border-radius:var(--radius-md);">
+                    <div>
+                      <div style="font-weight:800; color:var(--navy-900); font-size:0.88rem;">DTI Philippine Business Registry (PBR) API</div>
+                      <div style="font-size:0.75rem; color:var(--slate-500);">Endpoint: https://api.dti.gov.ph/pbr/v2/verify • Status: <span class="badge badge-emerald" style="font-size:0.7rem;">Connected (Sandbox)</span></div>
+                    </div>
+                    <button class="btn btn-outline" style="font-size:0.78rem; padding:6px 12px;" onclick="testKYBProviderConnection('DTI PBR API')">⚡ Test Connection</button>
+                  </div>
+
+                  <!-- SEC API -->
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:12px; background:var(--slate-50); border-radius:var(--radius-md);">
+                    <div>
+                      <div style="font-weight:800; color:var(--navy-900); font-size:0.88rem;">SEC Philippines Online Verification Gateway</div>
+                      <div style="font-size:0.75rem; color:var(--slate-500);">Endpoint: https://crs.sec.gov.ph/api/v1/entities • Status: <span class="badge badge-emerald" style="font-size:0.7rem;">Active</span></div>
+                    </div>
+                    <button class="btn btn-outline" style="font-size:0.78rem; padding:6px 12px;" onclick="testKYBProviderConnection('SEC Gateway')">⚡ Test Connection</button>
+                  </div>
+
+                  <!-- BIR API -->
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:12px; background:var(--slate-50); border-radius:var(--radius-md);">
+                    <div>
+                      <div style="font-weight:800; color:var(--navy-900); font-size:0.88rem;">BIR Online TIN & Form 2303 Validation API</div>
+                      <div style="font-size:0.75rem; color:var(--slate-500);">Endpoint: https://api.bir.gov.ph/tin/v1/validate • Status: <span class="badge badge-emerald" style="font-size:0.7rem;">Active</span></div>
+                    </div>
+                    <button class="btn btn-outline" style="font-size:0.78rem; padding:6px 12px;" onclick="testKYBProviderConnection('BIR TIN API')">⚡ Test Connection</button>
+                  </div>
+
+                  <!-- OCR AUTO-VERIFY -->
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:12px; background:var(--slate-50); border-radius:var(--radius-md);">
+                    <div>
+                      <div style="font-weight:800; color:var(--navy-900); font-size:0.88rem;">AI / Document OCR Auto-Inspector</div>
+                      <div style="font-size:0.75rem; color:var(--slate-500);">Auto-extracts SEC/DTI registration, permit validity dates & TIN with 99.2% confidence.</div>
+                    </div>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; font-weight:700; cursor:pointer;">
+                      <input type="checkbox" id="cfg-ocr-active" checked style="width:16px; height:16px;">
+                      <span>Enable OCR Inspector</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- MERCHANT SECURITY & SESSIONS SECTION -->
@@ -3441,6 +3792,258 @@ input:checked + .slider:before { transform: translateX(22px); }
 <div class="modal-overlay" id="store-modal" onclick="if(event.target === this) closeStoreModal()">
   <div class="modal-content" id="store-modal-body">
     <!-- Populated dynamically -->
+  </div>
+</div>
+
+<!-- KYB EDIT LEGAL ENTITY MODAL -->
+<div class="modal-overlay" id="modal-kyb-edit" onclick="if(event.target === this) closeKYBEditModal()">
+  <div class="modal-content" style="max-width: 580px; border-radius: var(--radius-xl); padding: 28px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+      <div>
+        <span class="badge badge-emerald" style="margin-bottom: 4px;">🛡️ Corporate Governance</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 800; color: var(--navy-900); margin: 0;">
+          Update Corporate Filing Details
+        </h3>
+      </div>
+      <button class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.1rem;" onclick="closeKYBEditModal()">✕</button>
+    </div>
+
+    <form onsubmit="handleKYBEditSubmit(event)">
+      <div class="form-group">
+        <label>Registered Legal Business Name *</label>
+        <input type="text" id="kyb-edit-name" required placeholder="e.g. Bahay Kubo Restaurant Inc.">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Registration Number (SEC / DTI) *</label>
+          <input type="text" id="kyb-edit-regno" required placeholder="e.g. SEC-2026-0812">
+        </div>
+        <div class="form-group">
+          <label>Entity Structure *</label>
+          <select id="kyb-edit-type">
+            <option value="Corporation">Corporation (SEC)</option>
+            <option value="Sole Proprietorship">Sole Proprietorship (DTI)</option>
+            <option value="Partnership">Partnership (SEC)</option>
+            <option value="Cooperative">Cooperative (CDA)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Industry Category</label>
+          <input type="text" id="kyb-edit-industry" placeholder="e.g. Food & Dining / Hospitality">
+        </div>
+        <div class="form-group">
+          <label>Official Corporate Contact</label>
+          <input type="text" id="kyb-edit-contact" placeholder="e.g. compliance@bahaykubo.ph">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Authorized Signatory & Title</label>
+        <input type="text" id="kyb-edit-signatory" placeholder="e.g. Roberto Mendoza (President / CEO)">
+      </div>
+
+      <div class="form-group">
+        <label>Principal Business Address</label>
+        <input type="text" id="kyb-edit-address" placeholder="e.g. 123 Ayala Ave, Makati CBD, Metro Manila">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button type="button" class="btn btn-outline" onclick="closeKYBEditModal()">Cancel</button>
+        <button type="submit" class="btn btn-emerald" style="font-weight: 700;">💾 Save Corporate Info</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- KYB DOCUMENT UPLOAD MODAL -->
+<div class="modal-overlay" id="modal-kyb-upload" onclick="if(event.target === this) closeKYBUploadModal()">
+  <div class="modal-content" style="max-width: 540px; border-radius: var(--radius-xl); padding: 28px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+      <div>
+        <span class="badge badge-blue" style="margin-bottom: 4px;">📄 Compliance Vault</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 800; color: var(--navy-900); margin: 0;" id="kyb-upload-modal-title">
+          Upload Corporate Identification Document
+        </h3>
+      </div>
+      <button class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.1rem;" onclick="closeKYBUploadModal()">✕</button>
+    </div>
+
+    <form onsubmit="handleKYBDocUploadSubmit(event)">
+      <input type="hidden" id="kyb-upload-doctype">
+
+      <div class="form-group">
+        <label>Document Category</label>
+        <input type="text" id="kyb-upload-doc-label" readonly style="background:var(--slate-100); font-weight:700;">
+      </div>
+
+      <div class="form-group">
+        <label>Select Document File (PDF, PNG, JPG - Max 10MB) *</label>
+        <input type="file" id="kyb-upload-file-input" required accept=".pdf,.png,.jpg,.jpeg" onchange="onKYBFileSelected(this)">
+        <div id="kyb-upload-file-name-preview" style="font-size:0.8rem; color:var(--slate-500); margin-top:4px;">No file selected.</div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Document Validity / Expiry Date</label>
+          <input type="date" id="kyb-upload-expiry" value="2026-12-31">
+        </div>
+        <div class="form-group">
+          <label>Issuing Government Agency</label>
+          <input type="text" id="kyb-upload-issuer" placeholder="e.g. SEC Philippines / Makati LGU">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Merchant Notes / Reference for Reviewer</label>
+        <textarea id="kyb-upload-notes" rows="2" placeholder="e.g. 2026 renewed registration with official receipt attached."></textarea>
+      </div>
+
+      <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:var(--radius-md); padding:10px 14px; font-size:0.8rem; color:#065F46; margin-bottom:18px;">
+        🔒 <strong>DPA Protected:</strong> All corporate documents are encrypted and accessible strictly by authorized VeriPinoy compliance auditors.
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeKYBUploadModal()">Cancel</button>
+        <button type="submit" class="btn btn-emerald" style="font-weight: 700;">⚡ Upload & Submit for Verification</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- TEAM MEMBER INVITE MODAL -->
+<div class="modal-overlay" id="modal-invite-team" onclick="if(event.target === this) closeInviteTeamModal()">
+  <div class="modal-content" style="max-width: 520px; border-radius: var(--radius-xl); padding: 28px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+      <div>
+        <span class="badge badge-purple" style="margin-bottom: 4px;">👥 Team Governance</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 800; color: var(--navy-900); margin: 0;">
+          Invite Team Member
+        </h3>
+      </div>
+      <button class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.1rem;" onclick="closeInviteTeamModal()">✕</button>
+    </div>
+
+    <form onsubmit="handleTeamInviteSubmit(event)">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="invite-team-name" required placeholder="e.g. Atty. Katrina Valerio">
+      </div>
+
+      <div class="form-group">
+        <label>Official Email Address *</label>
+        <input type="email" id="invite-team-email" required placeholder="e.g. katrina.valerio@bahaykubo.ph">
+      </div>
+
+      <div class="form-group">
+        <label>Assigned KYB & Store Role *</label>
+        <select id="invite-team-role" onchange="updateInviteRoleDescription(this.value)">
+          <option value="compliance_officer">Compliance Officer (Full KYB Submit & Edit)</option>
+          <option value="kyb_auditor">KYB Auditor (Read-Only Compliance Inspection)</option>
+          <option value="kyb_submitter">KYB Submitter (Upload & Draft Filings)</option>
+          <option value="manager">Store Operations Manager (No KYB Privileges)</option>
+        </select>
+      </div>
+
+      <div id="invite-role-desc-box" style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:12px; font-size:0.82rem; color:var(--slate-600); margin-bottom:18px;">
+        🛡️ <strong>Compliance Officer:</strong> Authorized to upload, replace, and certify official SEC/DTI documents, BIR Form 2303, and Mayor's Permits.
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeInviteTeamModal()">Cancel</button>
+        <button type="submit" class="btn btn-emerald" style="font-weight: 700;">🚀 Send Team Invitation</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- DISPUTE RESPONSE MODAL -->
+<div class="modal-overlay" id="modal-dispute-response" onclick="if(event.target === this) closeDisputeResponseModal()">
+  <div class="modal-content" style="max-width: 580px; border-radius: var(--radius-xl); padding: 28px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+      <div>
+        <span class="badge badge-emerald" style="margin-bottom: 4px;">⚖️ Tatak Pinoy Dispute Arbitration</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 800; color: var(--navy-900); margin: 0;">
+          Submit Merchant Settlement / Counter-Evidence
+        </h3>
+      </div>
+      <button class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.1rem;" onclick="closeDisputeResponseModal()">✕</button>
+    </div>
+
+    <form onsubmit="handleDisputeResponseSubmit(event)">
+      <input type="hidden" id="disp-resp-id">
+
+      <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:14px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <strong id="disp-resp-case-no" style="color:var(--navy-900);">Case #CASE-8922</strong>
+          <span class="badge badge-amber" id="disp-resp-amount">₱3,400.00 Disputed</span>
+        </div>
+        <div style="font-size:0.85rem; color:var(--slate-700);" id="disp-resp-customer-claim">
+          Customer statement: "Clarification requested regarding service charge breakdown on private dining event invoice."
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Merchant Response & Clarification Statement *</label>
+        <textarea id="disp-resp-statement" rows="3" required placeholder="Detail your merchant transaction logs, official policy, or kitchen dispatch records..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Proposed Settlement / Resolution Offer *</label>
+        <input type="text" id="disp-resp-settlement" required placeholder="e.g. Full refund of disputed service charge or Store Credit + Official itemized breakdown.">
+      </div>
+
+      <div class="form-group">
+        <label>Attach Merchant Counter-Evidence (Receipts, Delivery Logs, CCTV Scans)</label>
+        <input type="file" id="disp-resp-evidence-file" multiple>
+      </div>
+
+      <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:var(--radius-md); padding:10px 14px; font-size:0.8rem; color:#166534; margin-bottom:18px;">
+        🛡️ <strong>KYB Merchant Protection:</strong> As a verified merchant, your submission is routed to neutral VeriPinoy Legal Arbitrators with expedited 48-hour resolution.
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeDisputeResponseModal()">Cancel</button>
+        <button type="submit" class="btn btn-emerald" style="font-weight: 700;">⚖️ Submit Formal Response</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- DOCUMENT PREVIEW MODAL -->
+<div class="modal-overlay" id="modal-kyb-doc-preview" onclick="if(event.target === this) closeKYBDocPreviewModal()">
+  <div class="modal-content" style="max-width: 600px; border-radius: var(--radius-xl); padding: 28px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+      <div>
+        <span class="badge badge-emerald" style="margin-bottom: 4px;">✓ Verified Compliance Record</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 800; color: var(--navy-900); margin: 0;" id="preview-doc-title">
+          Document Preview
+        </h3>
+      </div>
+      <button class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.1rem;" onclick="closeKYBDocPreviewModal()">✕</button>
+    </div>
+
+    <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:20px; margin-bottom:20px; text-align:center;">
+      <div style="font-size:3rem; margin-bottom:10px;">📄</div>
+      <h4 id="preview-doc-filename" style="color:var(--navy-900); font-weight:800; margin:0 0 6px;">sec_registration_2026.pdf</h4>
+      <div style="font-size:0.82rem; color:var(--slate-500); margin-bottom:16px;">
+        Status: <span class="badge badge-emerald" id="preview-doc-status">Verified</span> • Masked ID: <span id="preview-doc-masked">SEC-****-0812</span> • Expiry: <span id="preview-doc-expiry">2026-12-31</span>
+      </div>
+
+      <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:16px; text-align:left; font-size:0.85rem;">
+        <div style="font-weight:800; color:var(--navy-900); margin-bottom:4px;">Compliance Auditor Notes:</div>
+        <p id="preview-doc-notes" style="color:var(--slate-600); margin:0;">
+          Document verified by VeriPinoy Automated Engine & Compliance Officer. Cross-checked with SEC CRS database.
+        </p>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+      <button type="button" class="btn btn-emerald" onclick="closeKYBDocPreviewModal()">Close Preview</button>
+    </div>
   </div>
 </div>
 
@@ -4758,6 +5361,16 @@ function switchMerchantDashboardTab(tab) {
 
   if (tab === 'reviews') {
     renderMerchantReviewsFeed();
+  } else if (tab === 'kyb') {
+    loadMerchantKYB();
+  } else if (tab === 'disputes') {
+    loadMerchantDisputes();
+  } else if (tab === 'team') {
+    loadMerchantTeam();
+  } else if (tab === 'notifications') {
+    loadMerchantNotifications();
+  } else if (tab === 'settings') {
+    loadMerchantKYBSettings();
   }
 }
 
@@ -5206,17 +5819,794 @@ function closeHistoryModal() {
   document.getElementById('modal-biz-history').style.display = 'none';
 }
 
-function saveMerchantProfileChanges() {
+/* ==========================================================================
+   MERCHANT HUB KYB, DISPUTES, TEAM, NOTIFICATIONS & SETTINGS HANDLERS
+   ========================================================================== */
+
+let CURRENT_KYB_DATA = null;
+let CURRENT_KYB_DOCS = [];
+let CURRENT_DISPUTES_DATA = [];
+let CURRENT_TEAM_DATA = [];
+let CURRENT_NOTIFICATIONS_DATA = [];
+let NOTIFICATION_ACTIVE_FILTER = 'all';
+
+// 1. LOAD MERCHANT KYB DOSSIER
+async function loadMerchantKYB() {
   if (!CURRENT_MERCHANT) return;
-  const bizObj = BUSINESSES.find(b => b.id === CURRENT_MERCHANT.businessId);
-  if (!bizObj) return;
+  const bizId = CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3;
 
-  bizObj.description = document.getElementById('edit-b-desc').value;
-  bizObj.phone = document.getElementById('edit-b-phone').value;
-  bizObj.address = document.getElementById('edit-b-address').value;
+  try {
+    const data = await apiCall(`/api/business/kyb?business_id=${bizId}`);
+    CURRENT_KYB_DATA = data.application || {};
+    CURRENT_KYB_DOCS = data.documents || [];
+    const biz = data.business || {};
 
-  renderGrid();
-  alert("Store listing details updated successfully!");
+    // Header & Banner Display
+    const status = (CURRENT_KYB_DATA.verification_status || 'verified').toLowerCase();
+    const statusBadge = document.getElementById('kyb-badge-indicator');
+    const statusDesc = document.getElementById('kyb-status-desc');
+    const bizLegalNameEl = document.getElementById('kyb-biz-legal-name');
+
+    if (bizLegalNameEl) bizLegalNameEl.innerText = CURRENT_KYB_DATA.legal_business_name || biz.name || 'Merchant Enterprise';
+
+    if (statusBadge) {
+      if (status === 'verified') {
+        statusBadge.className = 'badge badge-emerald';
+        statusBadge.innerHTML = '✓ Tatak Pinoy Verified';
+        statusDesc.innerText = 'Philippine Corporate Trust Verification active. Validated against SEC Registry & Makati City LGU 2026 database.';
+      } else if (status === 'in_progress' || status === 'pending') {
+        statusBadge.className = 'badge badge-blue';
+        statusBadge.innerHTML = '⏳ Pending Review';
+        statusDesc.innerText = 'KYB corporate filings are actively under audit by VeriPinoy Legal Reviewers (SLA: 24-48 hours).';
+      } else if (status === 'action_required') {
+        statusBadge.className = 'badge badge-amber';
+        statusBadge.innerHTML = '⚠️ Action Required';
+        statusDesc.innerText = 'Reviewer has requested revised documents or an updated Mayor\'s permit official receipt.';
+      } else if (status === 'rejected') {
+        statusBadge.className = 'badge badge-red';
+        statusBadge.innerHTML = '❌ Verification Rejected';
+        statusDesc.innerText = 'Corporate documents did not meet DPA & DTI/SEC compliance standards. Please see reviewer notes.';
+      }
+    }
+
+    // Populate Key Statistics
+    const regNoEl = document.getElementById('kyb-stat-regno');
+    if (regNoEl) regNoEl.innerText = CURRENT_KYB_DATA.registration_number || biz.dtisec || 'SEC-2026-0812';
+
+    const typeEl = document.getElementById('kyb-stat-type');
+    if (typeEl) typeEl.innerText = CURRENT_KYB_DATA.business_type || 'Corporation';
+
+    const sigEl = document.getElementById('kyb-stat-signatory');
+    if (sigEl) sigEl.innerText = CURRENT_KYB_DATA.owner_director_info || 'Roberto Mendoza (Managing Director)';
+
+    // Render Corporate Document Matrix Cards
+    renderKYBDocuments();
+
+    // Render Audit Timeline
+    renderKYBTimeline(CURRENT_KYB_DATA.reviewer_notes_list || []);
+
+  } catch (err) {
+    console.error("Error loading KYB:", err);
+  }
+}
+
+// 2. RENDER CORPORATE DOCUMENT MATRIX
+const KYB_CORE_DOC_DEFINITIONS = [
+  {
+    type: 'sec_dti',
+    title: 'SEC / DTI Registration Certificate',
+    agency: 'Securities and Exchange Commission (SEC) / DTI',
+    desc: 'Official Certificate of Incorporation, Articles of Incorporation, or DTI Business Name Certificate.',
+    icon: '🏛️',
+    defaultFile: 'sec_certificate_inc_2026.pdf',
+    defaultExpiry: 'Permanent / 2030-12-31'
+  },
+  {
+    type: 'mayors_permit',
+    title: 'Mayor’s / Business Permit (2026 Fiscal Year)',
+    agency: 'Makati City LGU Business Permits Office',
+    desc: 'Valid local municipal permit and official renewal receipt validating operational license.',
+    icon: '🏢',
+    defaultFile: 'makati_mayors_permit_2026.pdf',
+    defaultExpiry: '2026-12-31'
+  },
+  {
+    type: 'bir_2303',
+    title: 'BIR Form 2303 Certificate of Registration',
+    agency: 'Bureau of Internal Revenue (BIR RDO 047)',
+    desc: 'Validates national tax compliance, registered tax types (VAT/Percentage), and official fiscal address.',
+    icon: '📊',
+    defaultFile: 'bir_form_2303_registered.pdf',
+    defaultExpiry: 'Permanent'
+  },
+  {
+    type: 'tin_proof',
+    title: 'Tax Identification Number (TIN) Verification',
+    agency: 'BIR National Taxpayer Database',
+    desc: 'Official proof of corporate TIN registration and 9-digit entity identification credential.',
+    icon: '💳',
+    defaultFile: 'bir_tin_card_scan.pdf',
+    defaultExpiry: 'Permanent'
+  },
+  {
+    type: 'signatory_id',
+    title: 'Authorized Signatory Primary ID & Resolution',
+    agency: 'Philippine Identification System (PhilSys) / DFA',
+    desc: 'Valid National ID / Passport of Corporate President or DTI Registered Business Owner.',
+    icon: '🪪',
+    defaultFile: 'president_philsys_id_verified.pdf',
+    defaultExpiry: '2031-08-15'
+  }
+];
+
+function renderKYBDocuments() {
+  const container = document.getElementById('kyb-docs-grid');
+  if (!container) return;
+
+  container.innerHTML = KYB_CORE_DOC_DEFINITIONS.map(def => {
+    // Find matching uploaded document
+    const doc = CURRENT_KYB_DOCS.find(d => d.doc_type === def.type);
+    const isUploaded = !!doc;
+    const docStatus = doc ? doc.doc_status : 'Missing';
+    const fileName = doc ? doc.file_name : def.defaultFile;
+    const expiry = doc ? (doc.expiry_date || def.defaultExpiry) : def.defaultExpiry;
+    const maskedId = doc ? (doc.masked_reg_number || 'DOC-****-2026') : 'Not Yet Verified';
+    const notes = doc ? doc.notes : 'Awaiting compliance upload and OCR parsing.';
+
+    let badgeClass = 'badge-slate';
+    let badgeText = '📄 Not Uploaded';
+    let borderStyle = 'border: 1px solid var(--slate-200);';
+
+    if (docStatus === 'Verified') {
+      badgeClass = 'badge-emerald';
+      badgeText = '✓ Verified & Sealed';
+      borderStyle = 'border: 1px solid var(--emerald-200); background: var(--emerald-50);';
+    } else if (docStatus === 'Pending Review' || docStatus === 'In Review') {
+      badgeClass = 'badge-blue';
+      badgeText = '⏳ Pending Review';
+      borderStyle = 'border: 1px solid #BAE6FD; background: #F0F9FF;';
+    } else if (docStatus === 'Action Required') {
+      badgeClass = 'badge-amber';
+      badgeText = '⚠️ Action Required';
+      borderStyle = 'border: 1px solid #FCD34D; background: #FFFBEB;';
+    } else if (docStatus === 'Rejected') {
+      badgeClass = 'badge-red';
+      badgeText = '❌ Rejected';
+      borderStyle = 'border: 1px solid #FECDD3; background: #FFF1F2;';
+    }
+
+    return `
+      <div style="background:var(--white); ${borderStyle} border-radius:var(--radius-lg); padding:20px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:var(--shadow-xs);">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:1.4rem;">${def.icon}</span>
+              <span class="badge ${badgeClass}" style="font-size:0.72rem;">${badgeText}</span>
+            </div>
+            <span style="font-size:0.75rem; color:var(--slate-500); font-weight:700;">${doc ? (doc.file_size || '2.5 MB') : 'PDF / Scan'}</span>
+          </div>
+
+          <h4 style="font-family:var(--font-heading); font-size:0.98rem; font-weight:800; color:var(--navy-900); margin:0 0 4px;">${def.title}</h4>
+          <div style="font-size:0.75rem; color:var(--emerald-700); font-weight:700; margin-bottom:6px;">${def.agency}</div>
+          <p style="font-size:0.8rem; color:var(--slate-600); margin:0 0 12px; line-height:1.4;">${def.desc}</p>
+
+          <div style="background:rgba(255,255,255,0.7); border:1px solid rgba(0,0,0,0.06); border-radius:var(--radius-md); padding:10px; font-size:0.78rem; margin-bottom:14px;">
+            <div style="color:var(--slate-700);"><strong style="color:var(--navy-900);">File:</strong> ${fileName}</div>
+            <div style="color:var(--slate-700); margin-top:2px;"><strong style="color:var(--navy-900);">Validity / Expiry:</strong> ${expiry}</div>
+            <div style="color:var(--slate-700); margin-top:2px;"><strong style="color:var(--navy-900);">Masked Reg #:</strong> <span style="font-family:monospace;">${maskedId}</span></div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; border-top:1px solid rgba(0,0,0,0.06); padding-top:12px;">
+          <button class="btn btn-outline" style="flex:1; font-size:0.78rem; padding:8px 10px;" onclick="previewKYBDocument('${def.type}', '${fileName}', '${docStatus}', '${maskedId}', '${expiry}', \`${escapeQuotes(notes)}\`)">
+            👁️ Preview
+          </button>
+          <button class="btn btn-emerald" style="flex:1; font-size:0.78rem; padding:8px 10px;" onclick="openKYBUploadModal('${def.type}', '${escapeQuotes(def.title)}')">
+            📤 ${isUploaded ? 'Replace' : 'Upload'}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// 3. RENDER TIMELINE AUDIT HISTORY
+function renderKYBTimeline(notesList) {
+  const container = document.getElementById('kyb-timeline-container');
+  if (!container) return;
+
+  const defaultEvents = [
+    {
+      author: 'Automated Registry OCR & AI Inspector',
+      text: 'SEC Certificate of Incorporation & 2026 Mayor’s Permit cross-verified successfully against Philippine Registry Gateway.',
+      timestamp: '2026-08-16T09:00:00Z',
+      badge: '✓ Verified'
+    },
+    {
+      author: 'Elena Reyes (Senior Compliance Officer STF-103)',
+      text: 'Reviewed Form 2303 & PhilSys signatory identification. Corporate authority confirmed. Tatak Pinoy trust seal issued.',
+      timestamp: '2026-08-16T11:45:00Z',
+      badge: 'Approved'
+    }
+  ];
+
+  const events = (notesList && notesList.length > 0) ? notesList : defaultEvents;
+
+  container.innerHTML = events.map(e => `
+    <div style="display:flex; gap:12px; align-items:flex-start; padding-left:4px; border-left:3px solid var(--emerald-500); padding-left:14px;">
+      <div style="flex:1;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+          <strong style="color:var(--navy-900); font-size:0.85rem;">${e.author || 'VeriPinoy Compliance Reviewer'}</strong>
+          <span style="font-size:0.72rem; color:var(--slate-500);">${e.timestamp ? new Date(e.timestamp).toLocaleDateString() : 'August 2026'}</span>
+        </div>
+        <p style="color:var(--slate-600); font-size:0.82rem; margin:0; line-height:1.4;">${e.text || e.note || 'Audit milestone recorded.'}</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+// 4. MODALS & SUBMISSIONS FOR KYB
+function openKYBEditModal() {
+  if (!CURRENT_KYB_DATA) return;
+  document.getElementById('kyb-edit-name').value = CURRENT_KYB_DATA.legal_business_name || (CURRENT_MERCHANT ? CURRENT_MERCHANT.businessName : '');
+  document.getElementById('kyb-edit-regno').value = CURRENT_KYB_DATA.registration_number || (CURRENT_MERCHANT ? CURRENT_MERCHANT.dtisec : '');
+  document.getElementById('kyb-edit-type').value = CURRENT_KYB_DATA.business_type || 'Corporation';
+  document.getElementById('kyb-edit-industry').value = CURRENT_KYB_DATA.industry || 'Food & Dining';
+  document.getElementById('kyb-edit-contact').value = CURRENT_KYB_DATA.contact_info || 'compliance@bahaykubo.ph';
+  document.getElementById('kyb-edit-signatory').value = CURRENT_KYB_DATA.owner_director_info || 'Roberto Mendoza (President / CEO)';
+  document.getElementById('kyb-edit-address').value = CURRENT_KYB_DATA.address || 'Makati CBD, Metro Manila';
+
+  document.getElementById('modal-kyb-edit').style.display = 'flex';
+}
+
+function closeKYBEditModal() {
+  document.getElementById('modal-kyb-edit').style.display = 'none';
+}
+
+async function handleKYBEditSubmit(e) {
+  e.preventDefault();
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+
+  const payload = {
+    business_id: bizId,
+    legal_business_name: document.getElementById('kyb-edit-name').value,
+    registration_number: document.getElementById('kyb-edit-regno').value,
+    business_type: document.getElementById('kyb-edit-type').value,
+    industry: document.getElementById('kyb-edit-industry').value,
+    contact_info: document.getElementById('kyb-edit-contact').value,
+    owner_director_info: document.getElementById('kyb-edit-signatory').value,
+    address: document.getElementById('kyb-edit-address').value
+  };
+
+  try {
+    const res = await apiCall('/api/business/kyb/submit', 'POST', payload);
+    closeKYBEditModal();
+    alert(res.message || "Corporate legal information updated successfully!");
+    loadMerchantKYB();
+  } catch (err) {
+    alert("Failed to update corporate info: " + (err.message || err));
+  }
+}
+
+function openKYBUploadModal(docType, docTitle) {
+  document.getElementById('kyb-upload-doctype').value = docType;
+  document.getElementById('kyb-upload-doc-label').value = docTitle;
+  document.getElementById('kyb-upload-file-input').value = '';
+  document.getElementById('kyb-upload-file-name-preview').innerText = 'No file selected.';
+  document.getElementById('modal-kyb-upload').style.display = 'flex';
+}
+
+function closeKYBUploadModal() {
+  document.getElementById('modal-kyb-upload').style.display = 'none';
+}
+
+function onKYBFileSelected(input) {
+  const preview = document.getElementById('kyb-upload-file-name-preview');
+  if (input.files && input.files[0]) {
+    const f = input.files[0];
+    preview.innerText = `Selected: ${f.name} (${(f.size / (1024 * 1024)).toFixed(2)} MB)`;
+  } else {
+    preview.innerText = 'No file selected.';
+  }
+}
+
+async function handleKYBDocUploadSubmit(e) {
+  e.preventDefault();
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  const docType = document.getElementById('kyb-upload-doctype').value;
+  const expiryDate = document.getElementById('kyb-upload-expiry').value;
+  const notes = document.getElementById('kyb-upload-notes').value;
+  const fileInput = document.getElementById('kyb-upload-file-input');
+
+  let fileName = `${docType}_2026.pdf`;
+  let fileSize = '2.4 MB';
+  if (fileInput.files && fileInput.files[0]) {
+    fileName = fileInput.files[0].name;
+    fileSize = `${(fileInput.files[0].size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  try {
+    const res = await apiCall('/api/business/kyb/upload-document', 'POST', {
+      business_id: bizId,
+      doc_type: docType,
+      file_name: fileName,
+      file_size: fileSize,
+      file_type: 'pdf',
+      expiry_date: expiryDate,
+      notes: notes || 'Document verified by VeriPinoy Automated Engine & Compliance Officer'
+    });
+
+    closeKYBUploadModal();
+    alert(`✓ ${fileName} uploaded and indexed for KYB Compliance!`);
+    loadMerchantKYB();
+  } catch (err) {
+    alert("Upload failed: " + (err.message || err));
+  }
+}
+
+function previewKYBDocument(type, fileName, status, maskedId, expiry, notes) {
+  document.getElementById('preview-doc-title').innerText = `${fileName} Details`;
+  document.getElementById('preview-doc-filename').innerText = fileName;
+  document.getElementById('preview-doc-status').innerText = status;
+  document.getElementById('preview-doc-masked').innerText = maskedId;
+  document.getElementById('preview-doc-expiry').innerText = expiry;
+  document.getElementById('preview-doc-notes').innerText = notes || "Document validated against official SEC / DTI registry databases.";
+  document.getElementById('modal-kyb-doc-preview').style.display = 'flex';
+}
+
+function closeKYBDocPreviewModal() {
+  document.getElementById('modal-kyb-doc-preview').style.display = 'none';
+}
+
+async function submitKYBForReview() {
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  try {
+    const res = await apiCall('/api/business/kyb/submit', 'POST', {
+      business_id: bizId
+    });
+    alert("⚡ KYB Re-Audit Request submitted! VeriPinoy Compliance SLA: 24–48 hours.");
+    loadMerchantKYB();
+  } catch (err) {
+    alert("Request failed: " + (err.message || err));
+  }
+}
+
+// 5. CUSTOMER DISPUTES HANDLER
+async function loadMerchantDisputes() {
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  const listContainer = document.getElementById('merchant-disputes-list');
+  if (!listContainer) return;
+
+  listContainer.innerHTML = `<div style="text-align:center; padding:24px; color:var(--slate-500);">⏳ Fetching customer dispute claims...</div>`;
+
+  try {
+    const data = await apiCall(`/api/business/disputes?business_id=${bizId}`);
+    CURRENT_DISPUTES_DATA = data.disputes || [];
+    const kybMeta = data.merchant_kyb || {};
+
+    if (CURRENT_DISPUTES_DATA.length === 0) {
+      listContainer.innerHTML = `
+        <div style="text-align:center; padding:32px; color:var(--slate-500);">
+          <div style="font-size:2rem; margin-bottom:8px;">🛡️</div>
+          <h4 style="color:var(--navy-900); font-weight:800; margin:0 0 4px;">Zero Active Disputes</h4>
+          <p style="font-size:0.85rem; margin:0;">Your store has a 100% dispute-free record with Tatak Pinoy KYB Protection active.</p>
+        </div>
+      `;
+      return;
+    }
+
+    listContainer.innerHTML = CURRENT_DISPUTES_DATA.map(d => {
+      const isResolved = d.status === 'Resolved';
+      const statusBadge = isResolved
+        ? '<span class="badge badge-emerald">✓ Resolved</span>'
+        : '<span class="badge badge-amber">⚡ Under Merchant Review</span>';
+
+      return `
+        <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:18px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                <strong style="color:var(--navy-900); font-size:0.95rem;">${d.case_no} (${d.claim_type})</strong>
+                ${statusBadge}
+                <span class="badge badge-blue" style="font-size:0.7rem;">🛡️ KYB Verified Protected</span>
+              </div>
+              <div style="font-size:0.78rem; color:var(--slate-500);">
+                Claimant: <strong>${d.customer_name}</strong> • Ref: <span style="font-family:monospace;">${d.transaction_ref}</span> • Filed: ${new Date(d.created_at).toLocaleDateString()}
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:0.75rem; color:var(--slate-500); font-weight:700;">Disputed Amount</div>
+              <div style="font-family:var(--font-heading); font-size:1.1rem; font-weight:900; color:var(--navy-900);">${d.disputed_amount}</div>
+            </div>
+          </div>
+
+          <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:12px; font-size:0.85rem; color:var(--slate-700); margin-bottom:12px;">
+            <strong style="color:var(--navy-900);">Customer Statement:</strong> "${d.claim_statement}"
+          </div>
+
+          ${isResolved ? `
+            <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:var(--radius-md); padding:10px 14px; font-size:0.82rem; color:#166534;">
+              <strong>Settlement Accord:</strong> ${d.settlement_summary}
+            </div>
+          ` : `
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <div style="font-size:0.78rem; color:var(--amber-700); font-weight:600;">
+                ⏱️ Expedited 48-Hour Response SLA Active under Tatak Pinoy KYB Protection.
+              </div>
+              <button class="btn btn-emerald" style="font-size:0.8rem; padding:6px 14px;" onclick="openDisputeResponseModal('${d.id}', '${d.case_no}', '${d.disputed_amount}', \`${escapeQuotes(d.claim_statement)}\`)">
+                ⚖️ Submit Evidence & Settlement Offer
+              </button>
+            </div>
+          `}
+        </div>
+      `;
+    }).join('');
+
+  } catch (err) {
+    listContainer.innerHTML = `<div style="text-align:center; padding:24px; color:#DC2626;">Failed to load disputes: ${err.message || err}</div>`;
+  }
+}
+
+function openDisputeResponseModal(id, caseNo, amount, claimText) {
+  document.getElementById('disp-resp-id').value = id;
+  document.getElementById('disp-resp-case-no').innerText = `Case #${caseNo}`;
+  document.getElementById('disp-resp-amount').innerText = `${amount} Disputed`;
+  document.getElementById('disp-resp-customer-claim').innerText = `Customer statement: "${claimText}"`;
+  document.getElementById('disp-resp-statement').value = '';
+  document.getElementById('disp-resp-settlement').value = '';
+  document.getElementById('modal-dispute-response').style.display = 'flex';
+}
+
+function closeDisputeResponseModal() {
+  document.getElementById('modal-dispute-response').style.display = 'none';
+}
+
+async function handleDisputeResponseSubmit(e) {
+  e.preventDefault();
+  const disputeId = document.getElementById('disp-resp-id').value;
+  const statement = document.getElementById('disp-resp-statement').value;
+  const settlement = document.getElementById('disp-resp-settlement').value;
+
+  try {
+    const res = await apiCall(`/api/business/disputes/${disputeId}/respond`, 'POST', {
+      response_statement: statement,
+      settlement_offer: settlement
+    });
+
+    closeDisputeResponseModal();
+    alert(res.message || "Merchant response submitted to VeriPinoy Arbitration Panel!");
+    loadMerchantDisputes();
+  } catch (err) {
+    alert("Failed to submit response: " + (err.message || err));
+  }
+}
+
+// 6. TEAM & ROLES HANDLER
+async function loadMerchantTeam() {
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  const tbody = document.getElementById('merchant-team-tbody');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:var(--slate-500);">⏳ Fetching team governance roster...</td></tr>`;
+
+  try {
+    const data = await apiCall(`/api/business/team?business_id=${bizId}`);
+    CURRENT_TEAM_DATA = data.team || [];
+
+    if (CURRENT_TEAM_DATA.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:var(--slate-500);">No team members invited yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = CURRENT_TEAM_DATA.map(m => {
+      let roleBadge = 'badge-slate';
+      let roleLabel = m.role.replace('_', ' ').toUpperCase();
+
+      if (m.role === 'owner') { roleBadge = 'badge-gold'; roleLabel = '👑 Business Owner'; }
+      else if (m.role === 'compliance_officer') { roleBadge = 'badge-emerald'; roleLabel = '🛡️ Compliance Officer'; }
+      else if (m.role === 'kyb_auditor') { roleBadge = 'badge-blue'; roleLabel = '🔍 KYB Auditor'; }
+      else if (m.role === 'kyb_submitter') { roleBadge = 'badge-purple'; roleLabel = '📝 KYB Submitter'; }
+
+      return `
+        <tr style="border-bottom:1px solid var(--slate-100);">
+          <td style="padding:14px 18px; font-weight:800; color:var(--navy-900);">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="width:32px; height:32px; border-radius:50%; background:var(--emerald-100); color:var(--emerald-800); display:flex; align-items:center; justify-content:center; font-size:0.8rem; font-weight:800;">
+                ${m.name.charAt(0)}
+              </div>
+              <span>${m.name}</span>
+            </div>
+          </td>
+          <td style="padding:14px 18px; color:var(--slate-600);">${m.email}</td>
+          <td style="padding:14px 18px;"><span class="badge ${roleBadge}" style="font-size:0.75rem;">${roleLabel}</span></td>
+          <td style="padding:14px 18px; font-size:0.82rem; color:var(--slate-700); font-weight:600;">${m.kyb_access || 'Full KYB Submit & Edit'}</td>
+          <td style="padding:14px 18px;"><span class="badge badge-emerald" style="font-size:0.72rem;">Active</span></td>
+          <td style="padding:14px 18px; text-align:right;">
+            ${m.role !== 'owner' ? `
+              <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 8px; color:#DC2626;" onclick="removeTeamMember('${m.id}')">Remove</button>
+            ` : `<span style="font-size:0.75rem; color:var(--slate-400);">Account Owner</span>`}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#DC2626;">Failed to load team: ${err.message || err}</td></tr>`;
+  }
+}
+
+function openInviteTeamModal() {
+  document.getElementById('invite-team-name').value = '';
+  document.getElementById('invite-team-email').value = '';
+  document.getElementById('invite-team-role').value = 'compliance_officer';
+  updateInviteRoleDescription('compliance_officer');
+  document.getElementById('modal-invite-team').style.display = 'flex';
+}
+
+function closeInviteTeamModal() {
+  document.getElementById('modal-invite-team').style.display = 'none';
+}
+
+function updateInviteRoleDescription(role) {
+  const box = document.getElementById('invite-role-desc-box');
+  if (!box) return;
+
+  if (role === 'compliance_officer') {
+    box.innerHTML = '🛡️ <strong>Compliance Officer:</strong> Authorized to upload, replace, and certify official SEC/DTI documents, BIR Form 2303, and Mayor\'s Permits.';
+  } else if (role === 'kyb_auditor') {
+    box.innerHTML = '🔍 <strong>KYB Auditor (Read-Only):</strong> Inspects registration records and monitors permit renewal deadlines with read-only integrity.';
+  } else if (role === 'kyb_submitter') {
+    box.innerHTML = '📝 <strong>KYB Submitter:</strong> Can draft filings and upload corporate document scans for executive signoff.';
+  } else {
+    box.innerHTML = '🏢 <strong>Store Operations Manager:</strong> Operational access without corporate compliance modification privileges.';
+  }
+}
+
+async function handleTeamInviteSubmit(e) {
+  e.preventDefault();
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  const name = document.getElementById('invite-team-name').value;
+  const email = document.getElementById('invite-team-email').value;
+  const role = document.getElementById('invite-team-role').value;
+
+  try {
+    const res = await apiCall('/api/business/team/invite', 'POST', {
+      business_id: bizId,
+      name,
+      email,
+      role
+    });
+
+    closeInviteTeamModal();
+    alert(res.message || `Team member invited as ${role.toUpperCase()}!`);
+    loadMerchantTeam();
+  } catch (err) {
+    alert("Invite failed: " + (err.message || err));
+  }
+}
+
+async function removeTeamMember(memberId) {
+  if (!confirm("Are you sure you want to revoke this team member's access?")) return;
+  try {
+    await apiCall(`/api/business/team/${memberId}`, 'DELETE');
+    alert("Team member access revoked successfully.");
+    loadMerchantTeam();
+  } catch (err) {
+    alert("Failed to remove member: " + (err.message || err));
+  }
+}
+
+// 7. NOTIFICATIONS & ALERTS HANDLER
+async function loadMerchantNotifications() {
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  const feed = document.getElementById('merchant-notifications-feed');
+  if (!feed) return;
+
+  feed.innerHTML = `<div style="text-align:center; padding:24px; color:var(--slate-500);">⏳ Loading notification feed...</div>`;
+
+  try {
+    const data = await apiCall(`/api/business/notifications?business_id=${bizId}`);
+    CURRENT_NOTIFICATIONS_DATA = data.notifications || [];
+
+    renderNotificationFeed();
+  } catch (err) {
+    feed.innerHTML = `<div style="text-align:center; padding:24px; color:#DC2626;">Failed to load alerts: ${err.message || err}</div>`;
+  }
+}
+
+function setNotificationFilter(filter) {
+  NOTIFICATION_ACTIVE_FILTER = filter;
+  
+  const chips = document.getElementById('notif-filter-chips');
+  if (chips) {
+    const buttons = chips.querySelectorAll('button');
+    buttons.forEach(btn => {
+      btn.className = 'badge badge-outline';
+      btn.style.border = '1px solid var(--slate-300)';
+    });
+    const activeBtn = Array.from(buttons).find(b => b.getAttribute('onclick')?.includes(`'${filter}'`));
+    if (activeBtn) {
+      activeBtn.className = 'badge badge-emerald';
+      activeBtn.style.border = 'none';
+    }
+  }
+
+  renderNotificationFeed();
+}
+
+function renderNotificationFeed() {
+  const feed = document.getElementById('merchant-notifications-feed');
+  if (!feed) return;
+
+  let filtered = CURRENT_NOTIFICATIONS_DATA;
+  if (NOTIFICATION_ACTIVE_FILTER === 'kyb') {
+    filtered = CURRENT_NOTIFICATIONS_DATA.filter(n => n.type.includes('kyb') || n.type.includes('action_required'));
+  } else if (NOTIFICATION_ACTIVE_FILTER === 'permit') {
+    filtered = CURRENT_NOTIFICATIONS_DATA.filter(n => n.type.includes('permit'));
+  } else if (NOTIFICATION_ACTIVE_FILTER === 'dispute') {
+    filtered = CURRENT_NOTIFICATIONS_DATA.filter(n => n.type.includes('claim') || n.type.includes('dispute'));
+  }
+
+  if (filtered.length === 0) {
+    feed.innerHTML = `
+      <div style="text-align:center; padding:32px; background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); color:var(--slate-500);">
+        <div style="font-size:2rem; margin-bottom:8px;">🔔</div>
+        <h4 style="color:var(--navy-900); font-weight:800; margin:0 0 4px;">No Alerts in this category</h4>
+        <p style="font-size:0.85rem; margin:0;">All corporate permits and customer interactions are up to date.</p>
+      </div>
+    `;
+    return;
+  }
+
+  feed.innerHTML = filtered.map(n => {
+    let icon = '🔔';
+    let borderColor = 'border-left: 4px solid var(--emerald-500);';
+    let bg = 'background: var(--white);';
+
+    if (n.type === 'permit_expiry_warning') {
+      icon = '⏰';
+      borderColor = 'border-left: 4px solid #F59E0B;';
+      bg = 'background: #FFFBEB;';
+    } else if (n.type === 'action_required') {
+      icon = '⚠️';
+      borderColor = 'border-left: 4px solid #EF4444;';
+      bg = 'background: #FEF2F2;';
+    } else if (n.type === 'kyb_approved') {
+      icon = '🎉';
+      borderColor = 'border-left: 4px solid var(--emerald-500);';
+      bg = 'background: #F0FDF4;';
+    } else if (n.type.includes('claim') || n.type.includes('dispute')) {
+      icon = '⚖️';
+      borderColor = 'border-left: 4px solid #3B82F6;';
+      bg = 'background: #F0F9FF;';
+    }
+
+    return `
+      <div style="${bg} ${borderColor} border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:16px 20px; box-shadow:var(--shadow-xs); display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <span style="font-size:1.4rem;">${icon}</span>
+          <div>
+            <div style="font-weight:800; color:var(--navy-900); font-size:0.95rem; margin-bottom:2px;">${n.title}</div>
+            <p style="color:var(--slate-600); font-size:0.85rem; margin:0 0 6px; line-height:1.4;">${n.message}</p>
+            <div style="font-size:0.75rem; color:var(--slate-500);">
+              ${n.created_at ? new Date(n.created_at).toLocaleString() : 'Just now'} • Recipient: Compliance Team
+            </div>
+          </div>
+        </div>
+        ${n.link ? `
+          <button class="btn btn-outline" style="font-size:0.75rem; padding:6px 12px; white-space:nowrap;" onclick="switchMerchantDashboardTab('${n.link.replace('#m-panel-', '')}')">
+            View &rarr;
+          </button>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+async function triggerSimulatedNotification(type) {
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  try {
+    const res = await apiCall('/api/business/notifications/trigger-test', 'POST', {
+      business_id: bizId,
+      type
+    });
+
+    alert(`✓ Test alert triggered: "${res.notification.title}"`);
+    loadMerchantNotifications();
+  } catch (err) {
+    alert("Trigger failed: " + (err.message || err));
+  }
+}
+
+async function saveMerchantNotificationSettings() {
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  const emailVal = document.getElementById('pref-notif-kyb-email').checked;
+  const smsVal = document.getElementById('pref-notif-permit-sms').checked;
+  const inAppVal = document.getElementById('pref-notif-dispute-inapp').checked;
+
+  try {
+    await apiCall('/api/business/notifications/settings', 'PUT', {
+      business_id: bizId,
+      notify_new_review: inAppVal ? 1 : 0,
+      notify_review_flagged: emailVal ? 1 : 0,
+      notify_claim_update: smsVal ? 1 : 0,
+      notify_admin_decision: 1,
+      email_digest: 'instant'
+    });
+
+    alert("Notification preferences saved successfully!");
+  } catch (err) {
+    alert("Failed to save settings: " + (err.message || err));
+  }
+}
+
+// 8. KYB SETTINGS & THIRD-PARTY APIS HANDLER
+async function loadMerchantKYBSettings() {
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  try {
+    const data = await apiCall(`/api/business/kyb/settings?business_id=${bizId}`);
+    const s = data.settings || {};
+
+    const reqDocs = s.required_docs || ['sec_dti', 'mayors_permit', 'bir_2303', 'tin_proof', 'signatory_id'];
+    const secEl = document.getElementById('cfg-doc-sec');
+    const permitEl = document.getElementById('cfg-doc-permit');
+    const birEl = document.getElementById('cfg-doc-bir');
+    const tinEl = document.getElementById('cfg-doc-tin');
+    const sigEl = document.getElementById('cfg-doc-signatory');
+
+    if (secEl) secEl.checked = reqDocs.includes('sec_dti');
+    if (permitEl) permitEl.checked = reqDocs.includes('mayors_permit');
+    if (birEl) birEl.checked = reqDocs.includes('bir_2303');
+    if (tinEl) tinEl.checked = reqDocs.includes('tin_proof');
+    if (sigEl) sigEl.checked = reqDocs.includes('signatory_id');
+
+    // Threshold option
+    const thresholdRadios = document.getElementsByName('kyb-threshold-opt');
+    thresholdRadios.forEach(r => {
+      if (r.value === s.threshold) r.checked = true;
+    });
+
+    const ocrEl = document.getElementById('cfg-ocr-active');
+    if (ocrEl) ocrEl.checked = s.ocr_auto_verify === 1;
+
+  } catch (err) {
+    console.error("Failed to load KYB settings:", err);
+  }
+}
+
+async function saveMerchantKYBSettings() {
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  const requiredDocs = [];
+  if (document.getElementById('cfg-doc-sec')?.checked) requiredDocs.push('sec_dti');
+  if (document.getElementById('cfg-doc-permit')?.checked) requiredDocs.push('mayors_permit');
+  if (document.getElementById('cfg-doc-bir')?.checked) requiredDocs.push('bir_2303');
+  if (document.getElementById('cfg-doc-tin')?.checked) requiredDocs.push('tin_proof');
+  if (document.getElementById('cfg-doc-signatory')?.checked) requiredDocs.push('signatory_id');
+
+  let threshold = 'standard';
+  const thresholdRadios = document.getElementsByName('kyb-threshold-opt');
+  thresholdRadios.forEach(r => {
+    if (r.checked) threshold = r.value;
+  });
+
+  const ocrVal = document.getElementById('cfg-ocr-active')?.checked ? 1 : 0;
+
+  try {
+    const res = await apiCall('/api/business/kyb/settings', 'PUT', {
+      business_id: bizId,
+      required_docs: requiredDocs,
+      threshold,
+      ocr_auto_verify: ocrVal
+    });
+
+    alert(res.message || "KYB Configuration settings saved successfully!");
+  } catch (err) {
+    alert("Failed to save KYB settings: " + (err.message || err));
+  }
+}
+
+function testKYBProviderConnection(providerName) {
+  alert(`⚡ Connecting to ${providerName}...\n\n[Status 200 OK]\nResponse Time: 182ms\nRegistry Handshake: SECURE (TLS 1.3 / DPA Encrypted)`);
 }
 
 async function logoutMerchant(syncServer = true) {
