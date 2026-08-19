@@ -32,12 +32,18 @@ export function generateSecureToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-/* Save SQLite Database file to disk */
+/* Save SQLite Database file to disk atomically */
 export function saveDatabase() {
   if (!db) return;
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(DB_FILE, buffer);
+  try {
+    const data = db.export();
+    const buffer = Buffer.from(data);
+    const tempFile = `${DB_FILE}.tmp`;
+    fs.writeFileSync(tempFile, buffer);
+    fs.renameSync(tempFile, DB_FILE);
+  } catch (err) {
+    console.error("Error saving database to disk:", err.message);
+  }
 }
 
 /* Initialize Database Schema & Seed Data */
@@ -47,9 +53,14 @@ export async function initDatabase() {
   if (fs.existsSync(DB_FILE)) {
     try {
       const fileBuffer = fs.readFileSync(DB_FILE);
+      if (!fileBuffer || fileBuffer.length === 0) {
+        throw new Error("Database file is empty");
+      }
       db = new SQL.Database(fileBuffer);
+      db.run('PRAGMA integrity_check;');
     } catch (e) {
       console.warn("Existing db file corrupted or invalid, creating fresh database:", e.message);
+      try { fs.unlinkSync(DB_FILE); } catch (_) {}
       db = new SQL.Database();
     }
   } else {

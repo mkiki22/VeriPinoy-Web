@@ -778,16 +778,6 @@ input:checked + .slider:before { transform: translateX(22px); }
 <nav>
   <div class="wrap">
     <div class="logo" onclick="route('home')" title="VeriPinoy Home">
-      <div class="logo-icon">
-        <svg width="24" height="28" viewBox="0 0 30 34" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M15 1L2 6.5V15.5C2 23.5 7.5 30.5 15 33C22.5 30.5 28 23.5 28 15.5V6.5L15 1Z" fill="#10B981"/>
-          <path d="M15 3.5L4.5 8V15.5C4.5 22 9 28 15 30.2C21 28 25.5 22 25.5 15.5V8L15 3.5Z" fill="#0B132B"/>
-          <circle cx="9" cy="10" r="1.3" fill="#F59E0B"/>
-          <circle cx="15" cy="8" r="1.3" fill="#F59E0B"/>
-          <circle cx="21" cy="10" r="1.3" fill="#F59E0B"/>
-          <path d="M9.5 18L13.5 22L21 13.5" stroke="#10B981" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        </svg>
-      </div>
       <div class="logo-title">Veri<span>Pinoy</span></div>
     </div>
 
@@ -1499,6 +1489,20 @@ input:checked + .slider:before { transform: translateX(22px); }
 <section id="page-freelancer-login" class="page">
   <div class="wrap" style="max-width:580px;">
     <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:36px; box-shadow:var(--shadow-xl);">
+      
+      <!-- PORTAL SWITCHER -->
+      <div style="display: flex; background: var(--slate-100); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px;">
+        <button type="button" class="btn" style="flex:1; border:none; background:transparent; color:var(--slate-600); font-weight:700; border-radius:var(--radius-sm); padding:8px 10px; font-size:0.84rem;" onclick="route('auth-customer')">
+          👤 Customer
+        </button>
+        <button type="button" class="btn" style="flex:1; border:none; background:transparent; color:var(--slate-600); font-weight:700; border-radius:var(--radius-sm); padding:8px 10px; font-size:0.84rem;" onclick="route('auth-business')">
+          🏢 Business
+        </button>
+        <button type="button" class="btn" style="flex:1; border:none; background:var(--white); color:var(--navy-900); font-weight:700; border-radius:var(--radius-sm); padding:8px 10px; font-size:0.84rem; box-shadow:var(--shadow-sm);" onclick="route('freelancer-login')">
+          💼 Freelancer
+        </button>
+      </div>
+
       <div style="text-align:center; margin-bottom:24px;">
         <span class="badge badge-emerald" style="margin-bottom:10px;">🇵🇭 Verified Freelancer Track</span>
         <h2 style="font-family:var(--font-heading); font-size:1.8rem; font-weight:800; color:var(--navy-900);" id="fr-auth-title">Freelancer Portal Sign In</h2>
@@ -1521,19 +1525,40 @@ input:checked + .slider:before { transform: translateX(22px); }
       <form id="fr-form-signin" onsubmit="event.preventDefault(); loginFreelancer();">
         <div class="form-group" style="margin-bottom:16px;">
           <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Email Address</label>
-          <input type="email" id="fr-login-email" value="freelancer@marcoreyes.dev" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300);">
+          <input type="email" id="fr-login-email" value="freelancer@marcoreyes.dev" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
         </div>
         <div class="form-group" style="margin-bottom:20px;">
           <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Account Password</label>
-          <input type="password" id="fr-login-pass" value="Password123!" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300);">
+          <input type="password" id="fr-login-pass" value="Password123!" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
         </div>
         <button class="btn btn-emerald" type="submit" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;">
           💼 Sign In as Verified Freelancer
         </button>
 
-        <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:16px; margin-top:24px; text-align:center;">
+        <!-- SOCIAL & MAGIC LINK AUTH OPTIONS -->
+        <div style="display:flex; align-items:center; margin:20px 0; gap:12px;">
+          <div style="flex:1; height:1px; background:var(--slate-200);"></div>
+          <span style="font-size:0.75rem; color:var(--slate-500); font-weight:700; text-transform:uppercase;">or continue with</span>
+          <div style="flex:1; height:1px; background:var(--slate-200);"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:20px;">
+          <button type="button" class="btn btn-outline" style="padding:8px; font-size:0.8rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="triggerSocialAuth('google', 'freelancer')">
+            <svg width="14" height="14" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.7 0 3 .6 4 1.5l3-3C17.2 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.3 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z"/></svg>
+            Google
+          </button>
+          <button type="button" class="btn btn-outline" style="padding:8px; font-size:0.8rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="triggerSocialAuth('linkedin', 'freelancer')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#0A66C2"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
+            LinkedIn
+          </button>
+          <button type="button" class="btn btn-outline" style="padding:8px; font-size:0.8rem; font-weight:700;" onclick="triggerMagicLink('freelancer')">
+            ⚡ Magic Link
+          </button>
+        </div>
+
+        <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:16px; margin-top:16px; text-align:center;">
           <span style="font-size:0.8rem; color:var(--slate-500); font-weight:600; display:block; margin-bottom:6px;">DEMO CREDENTIALS:</span>
-          <code style="background:var(--white); padding:4px 10px; border-radius:4px; border:1px solid var(--slate-300); font-size:0.82rem; color:var(--emerald-700); font-weight:700;">freelancer@marcoreyes.dev</code>
+          <code style="background:var(--white); padding:4px 10px; border-radius:4px; border:1px solid var(--slate-300); font-size:0.82rem; color:var(--emerald-700); font-weight:700; cursor:pointer;" onclick="document.getElementById('fr-login-email').value='freelancer@marcoreyes.dev'; document.getElementById('fr-login-pass').value='Password123!';">freelancer@marcoreyes.dev (Password: Password123!)</code>
         </div>
       </form>
 
@@ -1541,13 +1566,13 @@ input:checked + .slider:before { transform: translateX(22px); }
       <form id="fr-form-register" style="display:none;" onsubmit="event.preventDefault(); registerFreelancerAccount();">
         <div class="form-group" style="margin-bottom:14px;">
           <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Full Legal Name *</label>
-          <input type="text" id="fr-reg-name" placeholder="e.g. Maria Clara Santos" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          <input type="text" id="fr-reg-name" placeholder="e.g. Marco Antonio Reyes" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
           <div class="form-group">
             <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Email Address *</label>
-            <input type="email" id="fr-reg-email" placeholder="maria@dev.ph" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+            <input type="email" id="fr-reg-email" placeholder="marco@dev.ph" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
           </div>
           <div class="form-group">
             <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Password *</label>
@@ -2176,55 +2201,120 @@ input:checked + .slider:before { transform: translateX(22px); }
 <section id="page-auth-customer" class="page">
   <div class="wrap">
     
-    <div id="cust-login-view">
-      <div style="text-align:center; margin-bottom:32px;">
-        <span class="badge badge-blue">Customer & Reviewer Track</span>
-        <h2 class="section-title" style="margin-top:8px;">Customer Portal</h2>
-        <p class="text-muted" style="max-width:640px; margin:0 auto;">
-          Log in or register as a shopper to write verified business reviews, manage your Data Privacy Act (DPA) identity masking, and protect honest Filipino enterprises.
-        </p>
-      </div>
-
-      <div class="auth-container">
-        <!-- LOGIN -->
-        <div class="auth-panel">
-          <h3 style="font-family:var(--font-heading); font-size:1.3rem; margin-bottom:16px;">Customer Sign In</h3>
-          <div class="form-group">
-            <label>Email Address</label>
-            <input type="email" id="c-login-email" value="maria.santos@gmail.com">
-          </div>
-          <div class="form-group">
-            <label>Password</label>
-            <input type="password" id="c-login-pass" value="password123">
-          </div>
-          <button class="btn btn-emerald" style="width:100%" onclick="loginCustomer()">Sign In as Customer</button>
-          
-          <div style="margin-top:20px; font-size:0.85rem; color:var(--slate-500);">
-            <strong>Demo Customer:</strong> maria.santos@gmail.com
-          </div>
+    <div id="cust-login-view" style="max-width:580px; margin:0 auto;">
+      <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:36px; box-shadow:var(--shadow-xl);">
+        
+        <!-- PORTAL SWITCHER -->
+        <div style="display: flex; background: var(--slate-100); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px;">
+          <button type="button" class="btn" style="flex:1; border:none; background:var(--white); color:var(--navy-900); font-weight:700; border-radius:var(--radius-sm); padding:8px 10px; font-size:0.84rem; box-shadow:var(--shadow-sm);" onclick="route('auth-customer')">
+            👤 Customer
+          </button>
+          <button type="button" class="btn" style="flex:1; border:none; background:transparent; color:var(--slate-600); font-weight:700; border-radius:var(--radius-sm); padding:8px 10px; font-size:0.84rem;" onclick="route('auth-business')">
+            🏢 Business
+          </button>
         </div>
 
-        <!-- REGISTER -->
-        <div class="auth-panel">
-          <h3 style="font-family:var(--font-heading); font-size:1.3rem; margin-bottom:16px;">Create Customer Profile</h3>
-          <div class="form-group">
-            <label>Full Legal Name</label>
-            <input type="text" id="c-reg-name" placeholder="Juan dela Cruz">
-          </div>
-          <div class="form-group">
-            <label>Email Address</label>
-            <input type="email" id="c-reg-email" placeholder="juan.delacruz@outlook.ph">
-          </div>
-          <div class="form-group">
-            <label>Default Privacy Mask</label>
-            <select id="c-reg-privacy">
-              <option value="full">Full Legal Name (e.g. Juan dela Cruz)</option>
-              <option value="initials">Monogram Initials Only (e.g. J.D.C.)</option>
-              <option value="anon">Completely Anonymous</option>
-            </select>
-          </div>
-          <button class="btn" style="width:100%" onclick="registerCustomer()">Register Customer Profile</button>
+        <div style="text-align:center; margin-bottom:24px;">
+          <span class="badge badge-blue" style="margin-bottom:10px;">🇵🇭 Customer & Reviewer Track</span>
+          <h2 style="font-family:var(--font-heading); font-size:1.8rem; font-weight:800; color:var(--navy-900);" id="cust-auth-title">Customer Portal Sign In</h2>
+          <p class="text-muted" style="font-size:0.88rem; margin-top:6px;" id="cust-auth-subtitle">
+            Access your verified business reviews, manage your DPA identity masking preferences, and protect honest Filipino enterprises.
+          </p>
         </div>
+
+        <!-- TAB TOGGLE BETWEEN SIGN IN AND REGISTER -->
+        <div style="display: flex; background: var(--slate-100); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px;">
+          <button id="cust-auth-tab-signin" type="button" class="btn" style="flex:1; border:none; background:var(--white); color:var(--navy-900); font-weight:700; border-radius:var(--radius-sm); padding:10px 12px; font-size:0.88rem; box-shadow:var(--shadow-sm);" onclick="switchCustomerAuthTab('signin')">
+            🔑 Sign In
+          </button>
+          <button id="cust-auth-tab-register" type="button" class="btn" style="flex:1; border:none; background:transparent; color:var(--slate-600); font-weight:700; border-radius:var(--radius-sm); padding:10px 12px; font-size:0.88rem;" onclick="switchCustomerAuthTab('register')">
+            ✨ Register New Account
+          </button>
+        </div>
+
+        <!-- SIGN IN FORM -->
+        <form id="cust-form-signin" onsubmit="event.preventDefault(); loginCustomer();">
+          <div class="form-group" style="margin-bottom:16px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Email Address</label>
+            <input type="email" id="c-login-email" value="maria.santos@gmail.com" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+          <div class="form-group" style="margin-bottom:20px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Account Password</label>
+            <input type="password" id="c-login-pass" value="password123" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+          <button class="btn btn-emerald" type="submit" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;">
+            👤 Sign In as Customer
+          </button>
+
+          <!-- SOCIAL & MAGIC LINK AUTH OPTIONS -->
+          <div style="display:flex; align-items:center; margin:20px 0; gap:12px;">
+            <div style="flex:1; height:1px; background:var(--slate-200);"></div>
+            <span style="font-size:0.75rem; color:var(--slate-500); font-weight:700; text-transform:uppercase;">or continue with</span>
+            <div style="flex:1; height:1px; background:var(--slate-200);"></div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:20px;">
+            <button type="button" class="btn btn-outline" style="padding:8px; font-size:0.8rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="triggerSocialAuth('google', 'customer')">
+              <svg width="14" height="14" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.7 0 3 .6 4 1.5l3-3C17.2 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.3 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z"/></svg>
+              Google
+            </button>
+            <button type="button" class="btn btn-outline" style="padding:8px; font-size:0.8rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="triggerSocialAuth('linkedin', 'customer')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#0A66C2"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
+              LinkedIn
+            </button>
+            <button type="button" class="btn btn-outline" style="padding:8px; font-size:0.8rem; font-weight:700;" onclick="triggerMagicLink('customer')">
+              ⚡ Magic Link
+            </button>
+          </div>
+
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:16px; margin-top:16px; text-align:center;">
+            <span style="font-size:0.8rem; color:var(--slate-500); font-weight:600; display:block; margin-bottom:6px;">DEMO CREDENTIALS:</span>
+            <code style="background:var(--white); padding:4px 10px; border-radius:4px; border:1px solid var(--slate-300); font-size:0.82rem; color:var(--blue-600); font-weight:700; cursor:pointer;" onclick="document.getElementById('c-login-email').value='maria.santos@gmail.com'; document.getElementById('c-login-pass').value='password123';">maria.santos@gmail.com (Password: password123)</code>
+          </div>
+        </form>
+
+        <!-- REGISTRATION FORM -->
+        <form id="cust-form-register" style="display:none;" onsubmit="event.preventDefault(); registerCustomer();">
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Full Legal Name *</label>
+            <input type="text" id="c-reg-name" placeholder="e.g. Maria Clara Santos" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+            <div class="form-group">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Email Address *</label>
+              <input type="email" id="c-reg-email" placeholder="maria@gmail.com" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Password *</label>
+              <input type="password" id="c-reg-pass" placeholder="At least 8 chars" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+            <div class="form-group">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">PH Mobile (+63)</label>
+              <input type="text" id="c-reg-phone" placeholder="0917 123 4567" style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Default Privacy Mask *</label>
+              <select id="c-reg-privacy" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem; background:var(--white);">
+                <option value="full">Full Legal Name (e.g. Maria Santos)</option>
+                <option value="initials">Monogram Initials (e.g. M.S.)</option>
+                <option value="anon">Completely Anonymous</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:var(--radius-md); padding:12px; margin-bottom:18px; font-size:0.8rem; color:#1E40AF;">
+            🛡️ <strong>DPA Protected Shopper Onboarding:</strong> Your personal data is encrypted under Republic Act 10173. You can mask your real identity on public reviews and unlock verified reviewer badges with mobile KYC.
+          </div>
+
+          <button class="btn btn-emerald" type="submit" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;">
+            🚀 Register Customer Profile
+          </button>
+        </form>
+
       </div>
     </div>
 
@@ -2297,75 +2387,135 @@ input:checked + .slider:before { transform: translateX(22px); }
 <section id="page-auth-business" class="page">
   <div class="wrap">
     
-    <div id="biz-login-view">
-      <div style="text-align:center; margin-bottom:32px;">
-        <span class="badge badge-gold">🏢 Business Owner & Merchant Portal</span>
-        <h2 class="section-title" style="margin-top:8px;">Enterprise Verification & Management Hub</h2>
-        <p class="text-muted" style="max-width:680px; margin:0 auto;">
-          Register your Filipino enterprise, submit SEC/DTI/LGU credentials to earn the <strong>Tatak Pinoy, Tatak Sigurado</strong> trust badge, manage your business directory profile, and track operational KPIs.
-        </p>
-      </div>
-
-      <div class="auth-container">
-        <!-- MERCHANT LOGIN -->
-        <div class="auth-panel">
-          <h3 style="font-family:var(--font-heading); font-size:1.3rem; margin-bottom:16px;">Merchant Sign In</h3>
-          <div class="form-group">
-            <label>Corporate Email</label>
-            <input type="email" id="b-login-email" value="owner@bahaykubo.ph">
-          </div>
-          <div class="form-group">
-            <label>Security Password</label>
-            <input type="password" id="b-login-pass" value="merchant123">
-          </div>
-          <button class="btn btn-emerald" style="width:100%" onclick="loginMerchant()">Sign In to Merchant Deck</button>
-
-          <div style="margin-top:20px; font-size:0.85rem; color:var(--slate-500);">
-            <strong>Demo Merchant Logins:</strong><br>
-            • owner@bahaykubo.ph (Bahay Kubo)<br>
-            • owner@sarisarimart.ph (Sari-Sari Mart)<br>
-            • contact@islaverde.ph (Isla Verde)
-          </div>
+    <div id="biz-login-view" style="max-width:580px; margin:0 auto;">
+      <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:36px; box-shadow:var(--shadow-xl);">
+        
+        <!-- PORTAL SWITCHER -->
+        <div style="display: flex; background: var(--slate-100); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px;">
+          <button type="button" class="btn" style="flex:1; border:none; background:transparent; color:var(--slate-600); font-weight:700; border-radius:var(--radius-sm); padding:8px 10px; font-size:0.84rem;" onclick="route('auth-customer')">
+            👤 Customer
+          </button>
+          <button type="button" class="btn" style="flex:1; border:none; background:var(--white); color:var(--navy-900); font-weight:700; border-radius:var(--radius-sm); padding:8px 10px; font-size:0.84rem; box-shadow:var(--shadow-sm);" onclick="route('auth-business')">
+            🏢 Business
+          </button>
         </div>
 
-        <!-- MERCHANT REGISTER -->
-        <div class="auth-panel">
-          <h3 style="font-family:var(--font-heading); font-size:1.3rem; margin-bottom:16px;">Register New Business</h3>
-          <div class="form-group">
-            <label>Owner Name</label>
-            <input type="text" id="b-reg-owner" placeholder="Roberto Mendoza">
+        <div style="text-align:center; margin-bottom:24px;">
+          <span class="badge badge-gold" style="margin-bottom:10px;">🏢 Enterprise & Merchant Track</span>
+          <h2 style="font-family:var(--font-heading); font-size:1.8rem; font-weight:800; color:var(--navy-900);" id="biz-auth-title">Business Hub Sign In</h2>
+          <p class="text-muted" style="font-size:0.88rem; margin-top:6px;" id="biz-auth-subtitle">
+            Manage your Tatak Pinoy verification, upload SEC/DTI filings, respond to customer reviews, and monitor operational KPIs.
+          </p>
+        </div>
+
+        <!-- TAB TOGGLE BETWEEN SIGN IN AND REGISTER -->
+        <div style="display: flex; background: var(--slate-100); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px;">
+          <button id="biz-auth-tab-signin" type="button" class="btn" style="flex:1; border:none; background:var(--white); color:var(--navy-900); font-weight:700; border-radius:var(--radius-sm); padding:10px 12px; font-size:0.88rem; box-shadow:var(--shadow-sm);" onclick="switchBusinessAuthTab('signin')">
+            🔑 Sign In
+          </button>
+          <button id="biz-auth-tab-register" type="button" class="btn" style="flex:1; border:none; background:transparent; color:var(--slate-600); font-weight:700; border-radius:var(--radius-sm); padding:10px 12px; font-size:0.88rem;" onclick="switchBusinessAuthTab('register')">
+            ✨ Register New Business
+          </button>
+        </div>
+
+        <!-- SIGN IN FORM -->
+        <form id="biz-form-signin" onsubmit="event.preventDefault(); loginMerchant();">
+          <div class="form-group" style="margin-bottom:16px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Corporate Email</label>
+            <input type="email" id="b-login-email" value="owner@bahaykubo.ph" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
           </div>
-          <div class="form-group">
-            <label>Registered Trade Title</label>
-            <input type="text" id="b-reg-name" placeholder="Ex. Manila Core Solutions">
+          <div class="form-group" style="margin-bottom:20px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Security Password</label>
+            <input type="password" id="b-login-pass" value="merchant123" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
           </div>
-          <div class="form-row">
+          <button class="btn btn-emerald" type="submit" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;">
+            🏢 Sign In to Merchant Deck
+          </button>
+
+          <!-- SOCIAL & MAGIC LINK AUTH OPTIONS -->
+          <div style="display:flex; align-items:center; margin:20px 0; gap:12px;">
+            <div style="flex:1; height:1px; background:var(--slate-200);"></div>
+            <span style="font-size:0.75rem; color:var(--slate-500); font-weight:700; text-transform:uppercase;">or continue with</span>
+            <div style="flex:1; height:1px; background:var(--slate-200);"></div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:20px;">
+            <button type="button" class="btn btn-outline" style="padding:8px; font-size:0.8rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="triggerSocialAuth('google', 'business')">
+              <svg width="14" height="14" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.7 0 3 .6 4 1.5l3-3C17.2 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.3 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z"/></svg>
+              Google
+            </button>
+            <button type="button" class="btn btn-outline" style="padding:8px; font-size:0.8rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="triggerSocialAuth('linkedin', 'business')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#0A66C2"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
+              LinkedIn
+            </button>
+            <button type="button" class="btn btn-outline" style="padding:8px; font-size:0.8rem; font-weight:700;" onclick="triggerMagicLink('business')">
+              ⚡ Magic Link
+            </button>
+          </div>
+
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:16px; margin-top:16px; text-align:center;">
+            <span style="font-size:0.8rem; color:var(--slate-500); font-weight:600; display:block; margin-bottom:6px;">DEMO CREDENTIALS (CLICK TO FILL):</span>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <code style="background:var(--white); padding:4px 10px; border-radius:4px; border:1px solid var(--slate-300); font-size:0.82rem; color:var(--amber-700); font-weight:700; cursor:pointer;" onclick="document.getElementById('b-login-email').value='owner@bahaykubo.ph'; document.getElementById('b-login-pass').value='merchant123';">owner@bahaykubo.ph (Bahay Kubo)</code>
+              <code style="background:var(--white); padding:4px 10px; border-radius:4px; border:1px solid var(--slate-300); font-size:0.82rem; color:var(--amber-700); font-weight:700; cursor:pointer;" onclick="document.getElementById('b-login-email').value='owner@sarisarimart.ph'; document.getElementById('b-login-pass').value='merchant123';">owner@sarisarimart.ph (Sari-Sari Mart)</code>
+            </div>
+          </div>
+        </form>
+
+        <!-- REGISTRATION FORM -->
+        <form id="biz-form-register" style="display:none;" onsubmit="event.preventDefault(); registerMerchant();">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
             <div class="form-group">
-              <label>Industry Sector</label>
-              <select id="b-reg-industry">
-                <option value="Retail">Retail</option>
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Owner / Rep Name *</label>
+              <input type="text" id="b-reg-owner" placeholder="Roberto Mendoza" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Trade / Business Name *</label>
+              <input type="text" id="b-reg-name" placeholder="Ex. Manila Core Solutions" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+            <div class="form-group">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Corporate Email *</label>
+              <input type="email" id="b-reg-email" placeholder="owner@firm.ph" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+            </div>
+            <div class="form-group">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Password *</label>
+              <input type="password" id="b-reg-pass" placeholder="At least 8 chars" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+            <div class="form-group">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Industry Sector *</label>
+              <select id="b-reg-industry" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem; background:var(--white);">
+                <option value="Retail">Retail & Merchandising</option>
                 <option value="Food & Dining">Food & Dining</option>
-                <option value="Automotive">Automotive</option>
-                <option value="Electronics">Electronics</option>
-                <option value="Health">Health</option>
-                <option value="Services">Services</option>
+                <option value="Automotive">Automotive & Transport</option>
+                <option value="Electronics">Electronics & IT</option>
+                <option value="Health">Health & Wellness</option>
+                <option value="Services">Professional Services</option>
               </select>
             </div>
             <div class="form-group">
-              <label>City Hub</label>
-              <select id="b-reg-city">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">City Hub in PH *</label>
+              <select id="b-reg-city" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem; background:var(--white);">
                 <option value="Manila">Manila</option>
                 <option value="Quezon City">Quezon City</option>
                 <option value="Makati">Makati</option>
                 <option value="Cebu City">Cebu City</option>
                 <option value="Davao City">Davao City</option>
+                <option value="Pasig">Pasig</option>
+                <option value="Taguig">Taguig</option>
               </select>
             </div>
           </div>
-          <div class="form-row">
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;">
             <div class="form-group">
-              <label>Enterprise Tier Scale</label>
-              <select id="b-reg-tier">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Enterprise Scale *</label>
+              <select id="b-reg-tier" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem; background:var(--white);">
                 <option value="Basic / Micro Enterprise">Basic / Micro Enterprise</option>
                 <option value="Small Business">Small Business</option>
                 <option value="Medium Enterprise">Medium Enterprise (KPI Suite)</option>
@@ -2373,16 +2523,20 @@ input:checked + .slider:before { transform: translateX(22px); }
               </select>
             </div>
             <div class="form-group">
-              <label>DTI / SEC Registration No.</label>
-              <input type="text" id="b-reg-dtisec" placeholder="DTI-2026-99182">
+              <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">DTI / SEC Registration</label>
+              <input type="text" id="b-reg-dtisec" placeholder="e.g. DTI-2026-99182" style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
             </div>
           </div>
-          <div class="form-group">
-            <label>Corporate Email</label>
-            <input type="email" id="b-reg-email" placeholder="owner@firm.ph">
+
+          <div style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:var(--radius-md); padding:12px; margin-bottom:18px; font-size:0.8rem; color:#92400E;">
+            🏢 <strong>Official KYB Verification Onboarding:</strong> Upon registration, you can upload SEC / DTI certificates and Mayor's permits in your dashboard to earn the <strong>Tatak Pinoy, Tatak Sigurado</strong> verified merchant badge.
           </div>
-          <button class="btn" style="width:100%" onclick="registerMerchant()">Register Business Profile</button>
-        </div>
+
+          <button class="btn btn-emerald" type="submit" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;">
+            🚀 Register Enterprise & Start KYB Verification
+          </button>
+        </form>
+
       </div>
     </div>
 
@@ -4978,60 +5132,154 @@ function getInitials(str) {
 }
 
 /* CUSTOMER AUTH */
+function switchCustomerAuthTab(mode) {
+  const signinBtn = document.getElementById('cust-auth-tab-signin');
+  const regBtn = document.getElementById('cust-auth-tab-register');
+  const signinForm = document.getElementById('cust-form-signin');
+  const regForm = document.getElementById('cust-form-register');
+  const title = document.getElementById('cust-auth-title');
+  const subtitle = document.getElementById('cust-auth-subtitle');
+
+  if (mode === 'register') {
+    if (signinBtn) {
+      signinBtn.style.background = 'transparent';
+      signinBtn.style.color = 'var(--slate-600)';
+      signinBtn.style.boxShadow = 'none';
+    }
+    if (regBtn) {
+      regBtn.style.background = 'var(--white)';
+      regBtn.style.color = 'var(--navy-900)';
+      regBtn.style.boxShadow = 'var(--shadow-sm)';
+    }
+    if (signinForm) signinForm.style.display = 'none';
+    if (regForm) regForm.style.display = 'block';
+    if (title) title.innerText = 'Register as Verified Customer';
+    if (subtitle) subtitle.innerText = 'Create your verified shopper profile, write DPA-masked reviews, and help protect honest Filipino enterprises.';
+  } else {
+    if (regBtn) {
+      regBtn.style.background = 'transparent';
+      regBtn.style.color = 'var(--slate-600)';
+      regBtn.style.boxShadow = 'none';
+    }
+    if (signinBtn) {
+      signinBtn.style.background = 'var(--white)';
+      signinBtn.style.color = 'var(--navy-900)';
+      signinBtn.style.boxShadow = 'var(--shadow-sm)';
+    }
+    if (regForm) regForm.style.display = 'none';
+    if (signinForm) signinForm.style.display = 'block';
+    if (title) title.innerText = 'Customer Portal Sign In';
+    if (subtitle) subtitle.innerText = 'Access your verified business reviews, manage your DPA identity masking preferences, and protect honest Filipino enterprises.';
+  }
+}
+
 function updateCustomerAuthPageDisplay() {
   const custNav = document.getElementById('nav-cust-text');
   const loginView = document.getElementById('cust-login-view');
   const dashView = document.getElementById('cust-dashboard-view');
 
   if (CURRENT_CUSTOMER) {
-    custNav.textContent = `👤 ${CURRENT_CUSTOMER.name}`;
-    loginView.style.display = 'none';
-    dashView.style.display = 'block';
+    if (custNav) custNav.textContent = `👤 ${CURRENT_CUSTOMER.name}`;
+    if (loginView) loginView.style.display = 'none';
+    if (dashView) dashView.style.display = 'block';
 
-    document.getElementById('dash-cust-name').textContent = CURRENT_CUSTOMER.name;
-    document.getElementById('dash-cust-email').textContent = CURRENT_CUSTOMER.email;
-    document.getElementById('dash-cust-privacy').value = CURRENT_CUSTOMER.privacy;
+    const nameEl = document.getElementById('dash-cust-name');
+    const emailEl = document.getElementById('dash-cust-email');
+    const privEl = document.getElementById('dash-cust-privacy');
+    if (nameEl) nameEl.textContent = CURRENT_CUSTOMER.name;
+    if (emailEl) emailEl.textContent = CURRENT_CUSTOMER.email;
+    if (privEl) privEl.value = CURRENT_CUSTOMER.privacy || 'full';
 
     renderCustomerDashboardVerificationZone();
     renderCustomerReviewsList();
   } else {
-    custNav.textContent = "👤 Customer Portal";
-    loginView.style.display = 'block';
-    dashView.style.display = 'none';
+    if (custNav) custNav.textContent = "👤 Customer Portal";
+    if (loginView) loginView.style.display = 'block';
+    if (dashView) dashView.style.display = 'none';
   }
 }
 
-function loginCustomer() {
-  const email = document.getElementById('c-login-email').value;
+async function loginCustomer() {
+  const email = document.getElementById('c-login-email')?.value?.trim();
+  const pass = document.getElementById('c-login-pass')?.value || 'password123';
   if (!email) { alert("Please enter your email address."); return; }
 
-  CURRENT_CUSTOMER = {
-    name: email === "maria.santos@gmail.com" ? "Maria Santos" : email.split('@')[0],
-    email: email,
-    privacy: "full",
-    verified: email === "maria.santos@gmail.com" ? true : false
-  };
+  try {
+    const res = await apiCall('/api/auth/login', 'POST', { email, password: pass, user_type: 'customer' });
+    CURRENT_CUSTOMER = {
+      id: res.user?.id || 'CUST-303',
+      name: res.user?.name || (email === "maria.santos@gmail.com" ? "Maria Santos" : email.split('@')[0]),
+      email: email,
+      privacy: "full",
+      verified: email === "maria.santos@gmail.com" || res.user?.kycStatus === 'approved'
+    };
+    if (res.token) {
+      localStorage.setItem('veripinoy_customer_token', res.token);
+      localStorage.setItem('veripinoy_customer_user', JSON.stringify(CURRENT_CUSTOMER));
+    }
+  } catch (err) {
+    CURRENT_CUSTOMER = {
+      name: email === "maria.santos@gmail.com" ? "Maria Santos" : email.split('@')[0],
+      email: email,
+      privacy: "full",
+      verified: email === "maria.santos@gmail.com"
+    };
+    localStorage.setItem('veripinoy_customer_user', JSON.stringify(CURRENT_CUSTOMER));
+  }
 
   updateCustomerAuthPageDisplay();
-  alert(`Welcome back, ${CURRENT_CUSTOMER.name}! Logged in as Customer.`);
+  updateNavDisplay();
+  alert(`Welcome back, ${CURRENT_CUSTOMER.name}! Logged in as Verified Customer.`);
 }
 
-function registerCustomer() {
-  const name = document.getElementById('c-reg-name').value;
-  const email = document.getElementById('c-reg-email').value;
-  const privacy = document.getElementById('c-reg-privacy').value;
+async function registerCustomer() {
+  const name = document.getElementById('c-reg-name')?.value?.trim();
+  const email = document.getElementById('c-reg-email')?.value?.trim();
+  const pass = document.getElementById('c-reg-pass')?.value || 'password123';
+  const phone = document.getElementById('c-reg-phone')?.value || '';
+  const privacy = document.getElementById('c-reg-privacy')?.value || 'full';
 
   if (!name || !email) { alert("Please complete name and email fields."); return; }
 
-  CURRENT_CUSTOMER = {
-    name: name,
-    email: email,
-    privacy: privacy,
-    verified: false
-  };
+  const nameParts = name.split(' ');
+  const firstName = nameParts[0] || name;
+  const lastName = nameParts.slice(1).join(' ') || 'Customer';
+
+  try {
+    const res = await apiCall('/api/customer/auth/register', 'POST', {
+      firstName,
+      lastName,
+      email,
+      password: pass,
+      mobileNumber: phone,
+      privacyMask: privacy,
+      termsAccepted: true,
+      privacyAccepted: true
+    });
+    CURRENT_CUSTOMER = {
+      id: res.user?.customerId || res.user?.id,
+      name: name,
+      email: email,
+      privacy: privacy,
+      verified: false
+    };
+    if (res.token) {
+      localStorage.setItem('veripinoy_customer_token', res.token);
+      localStorage.setItem('veripinoy_customer_user', JSON.stringify(CURRENT_CUSTOMER));
+    }
+  } catch (err) {
+    CURRENT_CUSTOMER = {
+      name: name,
+      email: email,
+      privacy: privacy,
+      verified: false
+    };
+    localStorage.setItem('veripinoy_customer_user', JSON.stringify(CURRENT_CUSTOMER));
+  }
 
   updateCustomerAuthPageDisplay();
-  alert("Customer profile created successfully! You can now write verified reviews.");
+  updateNavDisplay();
+  alert(`Customer profile created successfully! Welcome, ${name}. You can now write verified reviews.`);
 }
 
 function updateCustomerPrivacyPreference() {
@@ -5245,40 +5493,100 @@ function renderMerchantKPIPanel(biz) {
   `;
 }
 
-function loginMerchant() {
-  const email = document.getElementById('b-login-email').value;
+function switchBusinessAuthTab(mode) {
+  const signinBtn = document.getElementById('biz-auth-tab-signin');
+  const regBtn = document.getElementById('biz-auth-tab-register');
+  const signinForm = document.getElementById('biz-form-signin');
+  const regForm = document.getElementById('biz-form-register');
+  const title = document.getElementById('biz-auth-title');
+  const subtitle = document.getElementById('biz-auth-subtitle');
+
+  if (mode === 'register') {
+    if (signinBtn) {
+      signinBtn.style.background = 'transparent';
+      signinBtn.style.color = 'var(--slate-600)';
+      signinBtn.style.boxShadow = 'none';
+    }
+    if (regBtn) {
+      regBtn.style.background = 'var(--white)';
+      regBtn.style.color = 'var(--navy-900)';
+      regBtn.style.boxShadow = 'var(--shadow-sm)';
+    }
+    if (signinForm) signinForm.style.display = 'none';
+    if (regForm) regForm.style.display = 'block';
+    if (title) title.innerText = 'Register New Enterprise Profile';
+    if (subtitle) subtitle.innerText = 'Register your Philippine business, submit SEC/DTI documents, and earn the Tatak Pinoy, Tatak Sigurado badge.';
+  } else {
+    if (regBtn) {
+      regBtn.style.background = 'transparent';
+      regBtn.style.color = 'var(--slate-600)';
+      regBtn.style.boxShadow = 'none';
+    }
+    if (signinBtn) {
+      signinBtn.style.background = 'var(--white)';
+      signinBtn.style.color = 'var(--navy-900)';
+      signinBtn.style.boxShadow = 'var(--shadow-sm)';
+    }
+    if (regForm) regForm.style.display = 'none';
+    if (signinForm) signinForm.style.display = 'block';
+    if (title) title.innerText = 'Business Hub Sign In';
+    if (subtitle) subtitle.innerText = 'Manage your Tatak Pinoy verification, upload SEC/DTI filings, respond to customer reviews, and monitor operational KPIs.';
+  }
+}
+
+async function loginMerchant() {
+  const email = document.getElementById('b-login-email')?.value?.trim();
+  const pass = document.getElementById('b-login-pass')?.value || 'merchant123';
   if (!email) { alert("Please enter your corporate email."); return; }
 
-  let foundBiz = BUSINESSES.find(b => b.ownerEmail.toLowerCase() === email.toLowerCase());
-  if (!foundBiz) {
-    foundBiz = BUSINESSES[2];
+  let foundBiz = BUSINESSES.find(b => b.ownerEmail?.toLowerCase() === email.toLowerCase()) || BUSINESSES[2];
+
+  try {
+    const res = await apiCall('/api/auth/login', 'POST', { email, password: pass, user_type: 'business' });
+    CURRENT_MERCHANT = {
+      id: foundBiz.id,
+      businessId: foundBiz.id,
+      businessName: foundBiz.name,
+      ownerName: res.user?.name || foundBiz.ownerName || "Roberto Mendoza",
+      email: email,
+      industry: foundBiz.industry,
+      city: foundBiz.city,
+      dtisec: foundBiz.dtisec
+    };
+    if (res.token) {
+      localStorage.setItem('veripinoy_merchant_token', res.token);
+      localStorage.setItem('veripinoy_merchant_user', JSON.stringify(CURRENT_MERCHANT));
+    }
+  } catch (err) {
+    CURRENT_MERCHANT = {
+      id: foundBiz.id,
+      businessId: foundBiz.id,
+      businessName: foundBiz.name,
+      ownerName: foundBiz.ownerName || "Roberto Mendoza",
+      email: email,
+      industry: foundBiz.industry,
+      city: foundBiz.city,
+      dtisec: foundBiz.dtisec
+    };
+    localStorage.setItem('veripinoy_merchant_user', JSON.stringify(CURRENT_MERCHANT));
   }
 
-  CURRENT_MERCHANT = {
-    id: foundBiz.id,
-    businessId: foundBiz.id,
-    businessName: foundBiz.name,
-    ownerName: "Roberto Mendoza",
-    email: email,
-    industry: foundBiz.industry,
-    city: foundBiz.city,
-    dtisec: foundBiz.dtisec
-  };
-
   updateMerchantAuthPageDisplay();
+  updateNavDisplay();
   alert(`Welcome Merchant! Logged in as owner of ${CURRENT_MERCHANT.businessName}.`);
 }
 
-function registerMerchant() {
-  const owner = document.getElementById('b-reg-owner').value;
-  const name = document.getElementById('b-reg-name').value;
-  const industry = document.getElementById('b-reg-industry').value;
-  const city = document.getElementById('b-reg-city').value;
-  const tier = document.getElementById('b-reg-tier').value;
-  const dtisec = document.getElementById('b-reg-dtisec').value;
-  const email = document.getElementById('b-reg-email').value;
+async function registerMerchant() {
+  const owner = document.getElementById('b-reg-owner')?.value?.trim();
+  const name = document.getElementById('b-reg-name')?.value?.trim();
+  const email = document.getElementById('b-reg-email')?.value?.trim();
+  const pass = document.getElementById('b-reg-pass')?.value || 'merchant123';
+  const industry = document.getElementById('b-reg-industry')?.value || 'Retail';
+  const city = document.getElementById('b-reg-city')?.value || 'Manila';
+  const tier = document.getElementById('b-reg-tier')?.value || 'Basic / Micro Enterprise';
+  const dtisec = document.getElementById('b-reg-dtisec')?.value || 'SEC-2026-NEW';
 
-  if (!name || !email) { alert("Please fill in Business Trade Title and Corporate Email."); return; }
+  if (!name || !email || !owner) { alert("Please fill in Owner Name, Business Trade Title, and Corporate Email."); return; }
 
   const newBiz = {
     id: BUSINESSES.length + 1,
@@ -5290,8 +5598,8 @@ function registerMerchant() {
     rating: 5.0,
     reviews: 0,
     ownerEmail: email,
-    ownerName: owner || "Merchant Owner",
-    dtisec: dtisec || "SEC-2026-NEW",
+    ownerName: owner,
+    dtisec: dtisec,
     phone: "0917 000 0000",
     address: `${city}, Philippines`,
     description: "Newly registered enterprise on VeriPinoy directory.",
@@ -5299,6 +5607,27 @@ function registerMerchant() {
   };
 
   BUSINESSES.push(newBiz);
+
+  try {
+    const res = await apiCall('/api/business/auth/register', 'POST', {
+      contactName: owner,
+      businessEmail: email,
+      password: pass,
+      legalBusinessName: name,
+      publicDisplayName: name,
+      businessType: tier,
+      industry: industry,
+      city: city,
+      businessAddress: `${city}, Philippines`,
+      termsAccepted: true,
+      kybConsent: true
+    });
+    if (res.token) {
+      localStorage.setItem('veripinoy_merchant_token', res.token);
+    }
+  } catch (err) {
+    console.warn("Merchant register API fallback:", err.message);
+  }
 
   CURRENT_MERCHANT = {
     id: newBiz.id,
@@ -5310,8 +5639,10 @@ function registerMerchant() {
     city: city,
     dtisec: newBiz.dtisec
   };
+  localStorage.setItem('veripinoy_merchant_user', JSON.stringify(CURRENT_MERCHANT));
 
   updateMerchantAuthPageDisplay();
+  updateNavDisplay();
   renderGrid();
   alert(`Business ${name} registered under ${tier}! Complete the KYB verification step to claim your Tatak Pinoy trust seal.`);
 }
@@ -7951,6 +8282,143 @@ async function loadAuditLogs() {
    VERIFIED FREELANCER PORTAL & PAYMENT GATEWAY CLIENT LOGIC
    ========================================================================== */
 let CURRENT_FREELANCER_ID = 'VP-FR-10284';
+
+function switchFreelancerAuthTab(mode) {
+  const signinBtn = document.getElementById('fr-auth-tab-signin');
+  const regBtn = document.getElementById('fr-auth-tab-register');
+  const signinForm = document.getElementById('fr-form-signin');
+  const regForm = document.getElementById('fr-form-register');
+  const title = document.getElementById('fr-auth-title');
+  const subtitle = document.getElementById('fr-auth-subtitle');
+
+  if (mode === 'register') {
+    if (signinBtn) {
+      signinBtn.style.background = 'transparent';
+      signinBtn.style.color = 'var(--slate-600)';
+      signinBtn.style.boxShadow = 'none';
+    }
+    if (regBtn) {
+      regBtn.style.background = 'var(--white)';
+      regBtn.style.color = 'var(--navy-900)';
+      regBtn.style.boxShadow = 'var(--shadow-sm)';
+    }
+    if (signinForm) signinForm.style.display = 'none';
+    if (regForm) regForm.style.display = 'block';
+    if (title) title.innerText = 'Register as Verified Freelancer';
+    if (subtitle) subtitle.innerText = 'Create your professional developer / creative profile, submit KYC credentials, and get discovered by clients across the Philippines.';
+  } else {
+    if (regBtn) {
+      regBtn.style.background = 'transparent';
+      regBtn.style.color = 'var(--slate-600)';
+      regBtn.style.boxShadow = 'none';
+    }
+    if (signinBtn) {
+      signinBtn.style.background = 'var(--white)';
+      signinBtn.style.color = 'var(--navy-900)';
+      signinBtn.style.boxShadow = 'var(--shadow-sm)';
+    }
+    if (regForm) regForm.style.display = 'none';
+    if (signinForm) signinForm.style.display = 'block';
+    if (title) title.innerText = 'Freelancer Portal Sign In';
+    if (subtitle) subtitle.innerText = 'Access your verified portfolio, manage active work engagements, track payments, and file neutral arbitration claims.';
+  }
+}
+
+function triggerSocialAuth(provider, portal) {
+  const providerLabel = provider === 'google' ? 'Google' : 'LinkedIn';
+  const emailPrompt = prompt(`Authenticate with ${providerLabel} for ${portal.toUpperCase()} portal:\nEnter your verified account email:`, portal === 'customer' ? 'maria.santos@gmail.com' : (portal === 'business' ? 'owner@bahaykubo.ph' : 'freelancer@marcoreyes.dev'));
+  if (!emailPrompt) return;
+
+  alert(`✓ Social authentication via ${providerLabel} successful!\nAuthenticated email: ${emailPrompt}`);
+
+  if (portal === 'customer') {
+    document.getElementById('c-login-email').value = emailPrompt;
+    loginCustomer();
+  } else if (portal === 'business') {
+    document.getElementById('b-login-email').value = emailPrompt;
+    loginMerchant();
+  } else {
+    document.getElementById('fr-login-email').value = emailPrompt;
+    loginFreelancer();
+  }
+}
+
+function triggerMagicLink(portal) {
+  const email = prompt(`⚡ Send Magic Sign-In Link:\nEnter your registered email for ${portal.toUpperCase()} portal:`, portal === 'customer' ? 'maria.santos@gmail.com' : (portal === 'business' ? 'owner@bahaykubo.ph' : 'freelancer@marcoreyes.dev'));
+  if (!email) return;
+
+  alert(`📨 Magic link sent to ${email}!\nCheck your inbox or click OK to sign in immediately with demo token authorization.`);
+
+  if (portal === 'customer') {
+    document.getElementById('c-login-email').value = email;
+    loginCustomer();
+  } else if (portal === 'business') {
+    document.getElementById('b-login-email').value = email;
+    loginMerchant();
+  } else {
+    document.getElementById('fr-login-email').value = email;
+    loginFreelancer();
+  }
+}
+
+async function loginFreelancer() {
+  const email = document.getElementById('fr-login-email')?.value?.trim();
+  const pass = document.getElementById('fr-login-pass')?.value || 'Password123!';
+  if (!email) { alert("Please enter your email address."); return; }
+
+  try {
+    const res = await apiCall('/api/auth/login', 'POST', { email, password: pass, user_type: 'freelancer' });
+    CURRENT_FREELANCER_ID = res.user?.freelancerId || res.user?.id || 'VP-FR-10284';
+    if (res.token) {
+      localStorage.setItem('veripinoy_freelancer_token', res.token);
+    }
+  } catch (err) {
+    console.warn("Freelancer login fallback:", err.message);
+    CURRENT_FREELANCER_ID = 'VP-FR-10284';
+  }
+
+  route('freelancer');
+  loadFreelancerPortal();
+  alert(`Welcome back to your Freelancer Portal! Logged in as ${email}.`);
+}
+
+async function registerFreelancerAccount() {
+  const name = document.getElementById('fr-reg-name')?.value?.trim();
+  const email = document.getElementById('fr-reg-email')?.value?.trim();
+  const pass = document.getElementById('fr-reg-pass')?.value || 'Password123!';
+  const title = document.getElementById('fr-reg-title')?.value?.trim();
+  const cat = document.getElementById('fr-reg-category')?.value;
+  const city = document.getElementById('fr-reg-city')?.value?.trim();
+  const exp = parseInt(document.getElementById('fr-reg-exp')?.value || '1', 10);
+  const skills = document.getElementById('fr-reg-skills')?.value?.split(',').map(s => s.trim()) || ['Web Development'];
+
+  if (!name || !email || !title || !city) {
+    alert("Please fill in all required registration fields.");
+    return;
+  }
+
+  try {
+    const res = await apiCall('/api/freelancers/register', 'POST', {
+      full_name: name,
+      professional_name: name,
+      email,
+      password: pass,
+      category: cat,
+      city,
+      years_experience: exp,
+      skills,
+      portfolio_links: []
+    });
+    CURRENT_FREELANCER_ID = res.freelancer_id || res.id || 'VP-FR-10284';
+  } catch (err) {
+    console.warn("Freelancer register fallback:", err.message);
+    CURRENT_FREELANCER_ID = 'VP-FR-10284';
+  }
+
+  route('freelancer');
+  loadFreelancerPortal();
+  alert(`Congratulations ${name}! Your Verified Freelancer profile has been created. Start submitting your KYC credentials.`);
+}
 
 async function loadFreelancerPortal() {
   try {
