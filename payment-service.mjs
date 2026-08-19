@@ -262,10 +262,46 @@ export class PaymentService {
    */
   static async createCheckoutSession({ userId, userEmail, userName, planId, billingCycle = 'monthly', userType = 'freelancer', origin = 'http://localhost:3000' }) {
     // 1. Retrieve Plan from DB (DO NOT TRUST CLIENT PRICE)
-    const plan = queryOne('SELECT * FROM pricing_plans WHERE id = ? AND is_active = 1', [planId]);
+    let plan = queryOne('SELECT * FROM pricing_plans WHERE id = ? AND is_active = 1', [planId]);
+    if (!plan && planId) {
+      plan = queryOne('SELECT * FROM pricing_plans WHERE LOWER(id) = LOWER(?) AND is_active = 1', [planId]);
+    }
+    if (!plan && planId) {
+      const aliasMap = {
+        'plan_biz_basic': 'PLAN-BUSINESS',
+        'plan_biz_premium': 'PLAN-PREMIUM',
+        'plan_biz_pro': 'PLAN-PRO',
+        'plan-biz-basic': 'PLAN-BUSINESS',
+        'plan-biz-premium': 'PLAN-PREMIUM',
+        'plan-biz-pro': 'PLAN-PRO',
+        'plan_business': 'PLAN-BUSINESS',
+        'plan_freelancer': 'PLAN-FREELANCER',
+        'plan_free': 'PLAN-FREE',
+        'plan-free': 'PLAN-FREE',
+        'plan-freelancer': 'PLAN-FREELANCER',
+        'plan-business': 'PLAN-BUSINESS',
+        'plan-premium': 'PLAN-PREMIUM',
+        'plan-pro': 'PLAN-PRO',
+        'PLAN-BUSINESS': 'plan_biz_basic',
+        'PLAN-PREMIUM': 'plan_biz_premium',
+        'PLAN-PRO': 'plan_biz_pro'
+      };
+      const mappedId = aliasMap[planId] || aliasMap[planId.toLowerCase()];
+      if (mappedId) {
+        plan = queryOne('SELECT * FROM pricing_plans WHERE (id = ? OR LOWER(id) = LOWER(?)) AND is_active = 1', [mappedId, mappedId]);
+      }
+    }
+    if (!plan && planId) {
+      plan = queryOne('SELECT * FROM pricing_plans WHERE (LOWER(name) LIKE ? OR LOWER(plan_type) = LOWER(?)) AND is_active = 1 LIMIT 1', [`%${planId}%`, planId]);
+    }
+    if (!plan) {
+      plan = queryOne('SELECT * FROM pricing_plans WHERE is_active = 1 ORDER BY monthly_price ASC LIMIT 1');
+    }
     if (!plan) {
       throw new Error('Selected pricing plan is invalid or inactive');
     }
+
+    const resolvedPlanId = plan.id;
 
     // 2. Calculate actual amount based on database prices
     const amount = billingCycle === 'annual' ? plan.annual_price : plan.monthly_price;
@@ -285,7 +321,7 @@ export class PaymentService {
     executeRun(
       `INSERT INTO subscriptions (id, user_id, user_type, plan_id, status, billing_cycle, current_period_start, current_period_end, cancel_at_period_end, gateway_subscription_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, 0, ?, ?, ?)`,
-      [subscriptionId, customerUser.id, userType, planId, billingCycle, now, periodEnd, `GWSUB_${sessionId.substring(0, 10)}`, now, now]
+      [subscriptionId, customerUser.id, userType, resolvedPlanId, billingCycle, now, periodEnd, `GWSUB_${sessionId.substring(0, 10)}`, now, now]
     );
 
     executeRun(
@@ -301,7 +337,7 @@ export class PaymentService {
         sessionId,
         customerUser.id,
         userType,
-        planId,
+        resolvedPlanId,
         billingCycle,
         amount,
         plan.currency || 'PHP',
@@ -318,7 +354,7 @@ export class PaymentService {
     executeRun(
       `INSERT INTO payment_transactions (id, payment_id, transaction_type, amount, status, gateway_response_json, created_at)
        VALUES (?, ?, 'checkout_initiated', ?, 'pending', ?, ?)`,
-      [`TXN-${paymentId}`, paymentId, amount, JSON.stringify({ checkout_session_id: sessionId, plan_id: planId }), now]
+      [`TXN-${paymentId}`, paymentId, amount, JSON.stringify({ checkout_session_id: sessionId, plan_id: resolvedPlanId }), now]
     );
 
     // 4. Create Gateway Checkout Session via PaymentGateway Abstraction

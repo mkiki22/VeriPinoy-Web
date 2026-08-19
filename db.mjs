@@ -1113,7 +1113,120 @@ export async function initDatabase() {
     );
   `);
 
+  /* ==========================================================================
+     1C. DATA PROTECTION, SENSITIVE VAULT & ANTI-FRAUD TABLES (DPA 2012 & OWASP)
+     ========================================================================== */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS active_sessions (
+      id TEXT PRIMARY KEY,
+      session_token_hash TEXT UNIQUE NOT NULL,
+      user_id TEXT NOT NULL,
+      user_type TEXT NOT NULL,
+      email TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      device_name TEXT,
+      location TEXT DEFAULT 'Manila, Philippines',
+      is_revoked INTEGER DEFAULT 0,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      last_active_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_mfa_settings (
+      id TEXT PRIMARY KEY,
+      user_id TEXT UNIQUE NOT NULL,
+      user_type TEXT NOT NULL,
+      mfa_enabled INTEGER DEFAULT 0,
+      mfa_type TEXT DEFAULT 'totp',
+      secret TEXT,
+      backup_codes_json TEXT,
+      phone_number TEXT,
+      is_enforced INTEGER DEFAULT 0,
+      last_verified_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS vault_documents (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      document_type TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      storage_path TEXT,
+      encryption_algorithm TEXT DEFAULT 'AES-256-GCM',
+      access_policy TEXT DEFAULT 'role_restricted',
+      file_size INTEGER DEFAULT 0,
+      mime_type TEXT DEFAULT 'application/pdf',
+      uploaded_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS vault_access_logs (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_type TEXT NOT NULL,
+      ip_address TEXT,
+      access_type TEXT NOT NULL,
+      granted INTEGER DEFAULT 1,
+      denial_reason TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS duplicate_check_registry (
+      id TEXT PRIMARY KEY,
+      field_type TEXT NOT NULL,
+      field_value_hash TEXT NOT NULL,
+      masked_value TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS fraud_risk_profiles (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      risk_score INTEGER DEFAULT 10,
+      risk_level TEXT DEFAULT 'LOW',
+      risk_factors_json TEXT,
+      duplicate_flags_json TEXT,
+      last_assessed_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS security_alerts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_type TEXT NOT NULL,
+      alert_type TEXT NOT NULL,
+      severity TEXT DEFAULT 'warning',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      metadata_json TEXT,
+      is_read INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+  `);
+
   /* CREATE INDEXES FOR PERFORMANCE */
+  db.run(`CREATE INDEX IF NOT EXISTS idx_active_sessions_hash ON active_sessions(session_token_hash);`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_active_sessions_user ON active_sessions(user_id);`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_sec_alerts_user ON security_alerts(user_id);`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_vault_docs_entity ON vault_documents(entity_id);`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_dup_registry_hash ON duplicate_check_registry(field_value_hash);`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users(email);`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_kyc_apps_status ON kyc_applications(verification_status);`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_kyb_apps_status ON kyb_applications(verification_status);`);
@@ -1162,6 +1275,10 @@ function seedDatabaseIfEmpty() {
   const freelancerCheck = queryOne('SELECT COUNT(*) as count FROM freelancer_profiles');
 
   const now = new Date().toISOString();
+
+  // Always ensure all pricing plans and aliases are seeded/updated
+  seedPricingPlans(now);
+  seedSecurityData(now);
 
   if (!freelancerCheck || freelancerCheck.count === 0) {
     seedFreelancerData(now);
@@ -1702,9 +1819,61 @@ function seedDatabaseIfEmpty() {
      VALUES ('LOG-9001', 'STF-101', 'Maria Santos', 'Super Admin', 'SYSTEM_INITIALIZED', 'DATABASE', 'veripinoy.db', 'VeriPinoy Production Relational Database initialized with complete schema.', 1, ?)`,
     [now]
   );
+}
 
+function seedPricingPlans(now = new Date().toISOString()) {
   /* PRICING PLANS SEED DATA */
   const plans = [
+    {
+      id: 'plan_biz_basic',
+      name: 'Verified Business',
+      description: 'Essential DTI / SEC verification for growing local shops and micro-merchants.',
+      plan_type: 'business',
+      monthly_price: 499,
+      annual_price: 499,
+      currency: 'PHP',
+      features: [
+        'Standard DTI or SEC Registration Check',
+        'Verified Business Badge on Directory',
+        'Store Phone, Location & Description Page',
+        'Basic Customer Review Monitoring',
+        'Standard Search Indexing'
+      ]
+    },
+    {
+      id: 'plan_biz_premium',
+      name: 'Premium Verification',
+      description: 'Full 3-step KYB audit for established businesses seeking maximum buyer trust.',
+      plan_type: 'business',
+      monthly_price: 999,
+      annual_price: 999,
+      currency: 'PHP',
+      features: [
+        'Full KYB Audit (DTI/SEC + Mayor\'s Permit + BIR 2303)',
+        'Tatak Pinoy, Tatak Sigurado Gold Badge',
+        'Official Merchant Response Portal',
+        'Review Response Speed KPI Tracker',
+        'Customer Sentiment Matrix & Rating Alerts',
+        'Priority City Hub Search Placement'
+      ]
+    },
+    {
+      id: 'plan_biz_pro',
+      name: 'Business Pro',
+      description: 'Complete enterprise suite for medium & large multi-branch operations.',
+      plan_type: 'business',
+      monthly_price: 2499,
+      annual_price: 2499,
+      currency: 'PHP',
+      features: [
+        'All Premium Verification features',
+        '1 Free Featured Listing Slot Included (₱1,000 value)',
+        'Full KPI Suite & Performance Dashboard',
+        'Customer Satisfaction Index (CSI) Analytics',
+        'Multi-branch SLA Response Management',
+        'Dedicated Compliance Manager Support'
+      ]
+    },
     {
       id: 'PLAN-FREE',
       name: 'Free Starter Plan',
@@ -1743,8 +1912,8 @@ function seedDatabaseIfEmpty() {
       name: 'Verified Business',
       description: 'Official Tatak Pinoy KYB Business Badge, business verification page, customer review & claim management.',
       plan_type: 'business',
-      monthly_price: 1499,
-      annual_price: 14990,
+      monthly_price: 499,
+      annual_price: 499,
       currency: 'PHP',
       features: [
         'VeriPinoy Official KYB Verified Business badge',
@@ -1757,32 +1926,50 @@ function seedDatabaseIfEmpty() {
     },
     {
       id: 'PLAN-PREMIUM',
-      name: 'Premium Pro / Enterprise',
-      description: 'All-inclusive enterprise verification, priority dispute arbitration SLA (<24 hrs), and dedicated compliance executive.',
-      plan_type: 'general',
-      monthly_price: 2999,
-      annual_price: 29990,
+      name: 'Premium Verification',
+      description: 'Full 3-step KYB audit for established businesses seeking maximum buyer trust.',
+      plan_type: 'business',
+      monthly_price: 999,
+      annual_price: 999,
       currency: 'PHP',
       features: [
-        'All Verified Freelancer & Business features included',
-        'Priority dispute arbitration SLA (< 24 hours turnaround)',
-        'Dedicated compliance executive',
-        'Custom API & Webhook integration for automated billing',
-        'Unlimited contract & evidence vault storage'
+        'Full KYB Audit (DTI/SEC + Mayor\'s Permit + BIR 2303)',
+        'Tatak Pinoy, Tatak Sigurado Gold Badge',
+        'Official Merchant Response Portal',
+        'Review Response Speed KPI Tracker',
+        'Customer Sentiment Matrix & Rating Alerts',
+        'Priority City Hub Search Placement'
+      ]
+    },
+    {
+      id: 'PLAN-PRO',
+      name: 'Business Pro',
+      description: 'Complete enterprise suite for medium & large multi-branch operations.',
+      plan_type: 'business',
+      monthly_price: 2499,
+      annual_price: 2499,
+      currency: 'PHP',
+      features: [
+        'All Premium Verification features',
+        '1 Free Featured Listing Slot Included (₱1,000 value)',
+        'Full KPI Suite & Performance Dashboard',
+        'Customer Satisfaction Index (CSI) Analytics',
+        'Multi-branch SLA Response Management',
+        'Dedicated Compliance Manager Support'
       ]
     }
   ];
 
   for (const p of plans) {
     executeRun(
-      `INSERT INTO pricing_plans (id, name, description, plan_type, monthly_price, annual_price, currency, is_active, created_at, updated_at)
+      `INSERT OR REPLACE INTO pricing_plans (id, name, description, plan_type, monthly_price, annual_price, currency, is_active, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       [p.id, p.name, p.description, p.plan_type, p.monthly_price, p.annual_price, p.currency, now, now]
     );
 
     p.features.forEach((feat, idx) => {
       executeRun(
-        `INSERT INTO pricing_plan_features (id, plan_id, feature_text, display_order)
+        `INSERT OR REPLACE INTO pricing_plan_features (id, plan_id, feature_text, display_order)
          VALUES (?, ?, ?, ?)`,
         [`feat_${p.id}_${idx}`, p.id, feat, idx + 1]
       );
@@ -2465,4 +2652,208 @@ function seedDiscoveryMasterData(now = new Date().toISOString()) {
       [`LOC_${b.id}`, b.id, b.city_id, b.business_address]
     );
   }
+}
+
+function seedSecurityData(now = new Date().toISOString()) {
+  // 1. Seed Vault Documents (KYB, KYC & Evidence)
+  const vaultDocs = [
+    {
+      id: 'DOC-KYB-SEC-01',
+      entity_type: 'kyb',
+      entity_id: 'BIZ-3001',
+      document_type: 'sec_registration',
+      filename: 'SEC_Certificate_BahayKubo_2026.pdf',
+      storage_path: 'vault/kyb/BIZ-3001/sec_reg_2026_aes256.enc',
+      encryption_algorithm: 'AES-256-GCM',
+      access_policy: 'role_restricted',
+      file_size: 2458000,
+      mime_type: 'application/pdf',
+      uploaded_by: 'USR-BIZ-2001'
+    },
+    {
+      id: 'DOC-KYB-BIR-02',
+      entity_type: 'kyb',
+      entity_id: 'BIZ-3001',
+      document_type: 'bir_2303',
+      filename: 'BIR_Form_2303_Certificate_Registration.pdf',
+      storage_path: 'vault/kyb/BIZ-3001/bir_2303_aes256.enc',
+      encryption_algorithm: 'AES-256-GCM',
+      access_policy: 'role_restricted',
+      file_size: 1820000,
+      mime_type: 'application/pdf',
+      uploaded_by: 'USR-BIZ-2001'
+    },
+    {
+      id: 'DOC-KYB-MAYOR-03',
+      entity_type: 'kyb',
+      entity_id: 'BIZ-3001',
+      document_type: 'mayors_permit',
+      filename: 'Makati_Mayors_Business_Permit_2026.pdf',
+      storage_path: 'vault/kyb/BIZ-3001/mayors_permit_2026_aes256.enc',
+      encryption_algorithm: 'AES-256-GCM',
+      access_policy: 'role_restricted',
+      file_size: 3100000,
+      mime_type: 'application/pdf',
+      uploaded_by: 'USR-BIZ-2001'
+    },
+    {
+      id: 'DOC-KYC-PASSPORT-01',
+      entity_type: 'kyc',
+      entity_id: 'USER-FR-10284',
+      document_type: 'gov_id',
+      filename: 'PH_Passport_Marco_Reyes_Redacted.pdf',
+      storage_path: 'vault/kyc/USER-FR-10284/passport_aes256.enc',
+      encryption_algorithm: 'AES-256-GCM',
+      access_policy: 'role_restricted',
+      file_size: 4200000,
+      mime_type: 'application/pdf',
+      uploaded_by: 'USER-FR-10284'
+    }
+  ];
+
+  for (const doc of vaultDocs) {
+    executeRun(
+      `INSERT OR REPLACE INTO vault_documents (id, entity_type, entity_id, document_type, filename, storage_path, encryption_algorithm, access_policy, file_size, mime_type, uploaded_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [doc.id, doc.entity_type, doc.entity_id, doc.document_type, doc.filename, doc.storage_path, doc.encryption_algorithm, doc.access_policy, doc.file_size, doc.mime_type, doc.uploaded_by, now]
+    );
+  }
+
+  // 2. Seed Duplicate Registry Hashes
+  const dupEntries = [
+    { type: 'tin', raw: '239-812-441-000', entityType: 'business', entityId: 'BIZ-3001' },
+    { type: 'dtisec', raw: 'SEC-2026-0812-MNL', entityType: 'business', entityId: 'BIZ-3001' },
+    { type: 'bank_account', raw: '1288-0099-2341', entityType: 'business', entityId: 'BIZ-3001' },
+    { type: 'tin', raw: '102-394-881-000', entityType: 'business', entityId: 'BIZ-3006' },
+    { type: 'phone', raw: '09189876543', entityType: 'business', entityId: 'BIZ-3001' },
+    { type: 'phone', raw: '09191112233', entityType: 'freelancer', entityId: 'VP-FR-10284' }
+  ];
+
+  for (const item of dupEntries) {
+    const valHash = crypto.createHash('sha256').update(item.raw.trim().toUpperCase()).digest('hex');
+    let masked = item.raw;
+    if (item.type === 'tin') masked = '239-***-***-000';
+    if (item.type === 'bank_account') masked = '******2341';
+    if (item.type === 'phone') masked = '0918-***-6543';
+
+    executeRun(
+      `INSERT OR REPLACE INTO duplicate_check_registry (id, field_type, field_value_hash, masked_value, entity_type, entity_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [`DUP_${item.type}_${valHash.substring(0, 16)}`, item.type, valHash, masked, item.entityType, item.entityId, now]
+    );
+  }
+
+  // 3. Seed Fraud Risk Profiles
+  const riskProfiles = [
+    {
+      id: 'FRISK_business_BIZ-3001',
+      entity_type: 'business',
+      entity_id: 'BIZ-3001',
+      risk_score: 12,
+      risk_level: 'LOW',
+      risk_factors: [{ factor: 'Tatak Pinoy KYB Verified Badge Granted', weight: '-10' }, { factor: 'Active Bank & DTI Clean History', weight: '0' }],
+      duplicate_flags: { duplicatesFound: 0 }
+    },
+    {
+      id: 'FRISK_business_BIZ-3008',
+      entity_type: 'business',
+      entity_id: 'BIZ-3008',
+      risk_score: 68,
+      risk_level: 'MEDIUM',
+      risk_factors: [{ factor: 'Unverified Account Credentials', weight: '+25' }, { factor: 'Missing Mayor\'s Business Permit', weight: '+20' }],
+      duplicate_flags: { duplicatesFound: 0 }
+    },
+    {
+      id: 'FRISK_freelancer_VP-FR-10284',
+      entity_type: 'freelancer',
+      entity_id: 'VP-FR-10284',
+      risk_score: 8,
+      risk_level: 'LOW',
+      risk_factors: [{ factor: 'Verified Senior Freelancer ID', weight: '-10' }, { factor: 'Safe External Link Audit Passed', weight: '0' }],
+      duplicate_flags: { duplicatesFound: 0 }
+    }
+  ];
+
+  for (const rp of riskProfiles) {
+    executeRun(
+      `INSERT OR REPLACE INTO fraud_risk_profiles (id, entity_type, entity_id, risk_score, risk_level, risk_factors_json, duplicate_flags_json, last_assessed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [rp.id, rp.entity_type, rp.entity_id, rp.risk_score, rp.risk_level, JSON.stringify(rp.risk_factors), JSON.stringify(rp.duplicate_flags), now]
+    );
+  }
+
+  // 4. Seed Active Sessions
+  const sampleSessions = [
+    {
+      id: 'SES-INIT-01',
+      tokenHash: crypto.createHash('sha256').update('DEMO_SESSION_SUPERADMIN').digest('hex'),
+      userId: 'ADM-SUPER-1',
+      userType: 'admin',
+      email: 'admin@veripinoy.ph',
+      ip: '122.54.108.45',
+      agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+      device: 'Apple Mac Desktop (Chrome 128)',
+      location: 'Makati City, Metro Manila',
+      expires: new Date(Date.now() + 24 * 3600 * 1000).toISOString()
+    },
+    {
+      id: 'SES-INIT-02',
+      tokenHash: crypto.createHash('sha256').update('DEMO_SESSION_BUSINESS').digest('hex'),
+      userId: 'USR-BIZ-2001',
+      userType: 'business',
+      email: 'owner@manilabakery.ph',
+      ip: '112.198.110.12',
+      agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+      device: 'Windows PC (Chrome 127)',
+      location: 'Quezon City, Metro Manila',
+      expires: new Date(Date.now() + 24 * 3600 * 1000).toISOString()
+    }
+  ];
+
+  for (const s of sampleSessions) {
+    executeRun(
+      `INSERT OR REPLACE INTO active_sessions (id, session_token_hash, user_id, user_type, email, ip_address, user_agent, device_name, location, is_revoked, expires_at, created_at, last_active_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+      [s.id, s.tokenHash, s.userId, s.userType, s.email, s.ip, s.agent, s.device, s.location, s.expires, now, now]
+    );
+  }
+
+  // 5. Seed Security Alerts
+  const secAlerts = [
+    {
+      id: 'SEC-ALT-01',
+      userId: 'ADM-SUPER-1',
+      userType: 'admin',
+      alertType: 'NEW_DEVICE_LOGIN',
+      severity: 'info',
+      title: 'New Admin Session Established',
+      message: 'Logged in from Apple Mac Desktop (IP: 122.54.108.45 - Makati City). TLS 1.3 encrypted.',
+      meta: { ip: '122.54.108.45', device: 'Apple Mac Desktop' }
+    },
+    {
+      id: 'SEC-ALT-02',
+      userId: 'USR-BIZ-2001',
+      userType: 'business',
+      alertType: 'DPA_COMPLIANCE_STATUS',
+      severity: 'info',
+      title: 'DPA 2012 Data Privacy Vault Active',
+      message: 'All KYB documents (BIR 2303, Mayor\'s Permit) are encrypted with AES-256-GCM and stored in the restricted vault.',
+      meta: { dpaStatus: 'Compliant' }
+    }
+  ];
+
+  for (const sa of secAlerts) {
+    executeRun(
+      `INSERT OR REPLACE INTO security_alerts (id, user_id, user_type, alert_type, severity, title, message, metadata_json, is_read, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      [sa.id, sa.userId, sa.userType, sa.alertType, sa.severity, sa.title, sa.message, JSON.stringify(sa.meta), now]
+    );
+  }
+
+  // 6. Seed MFA Settings
+  executeRun(
+    `INSERT OR REPLACE INTO user_mfa_settings (id, user_id, user_type, mfa_enabled, mfa_type, secret, backup_codes_json, is_enforced, updated_at)
+     VALUES ('MFA-ADM-1', 'ADM-SUPER-1', 'admin', 1, 'totp', 'JBSWY3DPEHPK3PXP', ?, 1, ?)`,
+    [JSON.stringify(['8A2F-9C1E', '3D4B-7F0A', '5E6C-1B2A', '9F0E-4C3D']), now]
+  );
 }

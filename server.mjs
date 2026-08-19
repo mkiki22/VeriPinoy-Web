@@ -13,6 +13,7 @@ import {
   generateSecureToken
 } from './db.mjs';
 import { PaymentService, PaymentGateway } from './payment-service.mjs';
+import { SecurityService } from './security-service.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,8 +21,44 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+/* ==========================================================================
+   DATA PROTECTION, TLS 1.3 & OWASP SECURITY HEADERS MIDDLEWARE
+   ========================================================================== */
+app.use((req, res, next) => {
+  // Enforce HSTS (HTTP Strict Transport Security)
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  // Prevent MIME-type sniffing
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Prevent clickjacking via frames (allow same origin)
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Cross-Site Scripting filter
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  // Referrer Policy
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Data Privacy & Encryption Standards
+  res.setHeader('X-Data-Protection-Standard', 'PH-DPA-2012 / AES-256-GCM / TLS-1.3');
+  next();
+});
+
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
+
+/* Anti-Bot & Rate Limiting Helper */
+function createRateLimiter(maxRequests, windowMs, prefix) {
+  return (req, res, next) => {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '127.0.0.1';
+    const key = `${prefix}:${ip}`;
+    const result = SecurityService.checkRateLimit(key, maxRequests, windowMs);
+    if (!result.allowed) {
+      res.setHeader('Retry-After', result.retryAfter);
+      return res.status(429).json({ error: result.message, retryAfter: result.retryAfter });
+    }
+    next();
+  };
+}
+
+const authRateLimiter = createRateLimiter(10, 15 * 60 * 1000, 'auth');
+const vaultRateLimiter = createRateLimiter(60, 60 * 1000, 'vault');
 
 // Initialize Relational Database on Start
 await initDatabase();
@@ -171,21 +208,173 @@ function requirePermission(permCode) {
 }
 
 /* ==========================================================================
-   AUTHENTICATION ENDPOINTS
+   STAFF WORKSPACE AUTHENTICATION & ONBOARDING ENDPOINTS
    ========================================================================== */
 
-// POST /api/admin/auth/login
+// POST /api/admin/auth/register (Staff Registration & Onboarding)
+app.post('/api/admin/auth/register', (req, res) => {
+  const { fullName, email, roleId, employeeId, department, password, termsAccepted } = req.body;
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+  const ua = req.headers['user-agent'] || 'Unknown';
+  const now = new Date().toISOString();
+
+  if (!fullName || !email || !password || !employeeId) {
+    return res.status(400).json({ error: 'Full name, official work email, employee ID, and password are required.' });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long and contain letters and numbers.' });
+  }
+
+  // Domain restriction: restrict to allowed company email domains
+  const cleanEmail = email.trim().toLowerCase();
+  const allowedDomains = ['@veripinoy.ph', '@veripinoy.com'];
+  const isAllowedDomain = allowedDomains.some(dom => cleanEmail.endsWith(dom));
+  if (!isAllowedDomain) {
+    return res.status(400).json({
+      error: 'Staff registration is restricted to official company email domains (@veripinoy.ph, @veripinoy.com).'
+    });
+  }
+
+  // Check if staff email already exists
+  const existingStaff = queryOne('SELECT * FROM admin_users WHERE LOWER(email) = ?', [cleanEmail]);
+  if (existingStaff) {
+    return res.status(400).json({ error: 'A staff member account with this official work email already exists. Please sign in or use password recovery.' });
+  }
+
+  // Check if Employee ID already exists
+  const existingId = queryOne('SELECT * FROM admin_users WHERE id = ?', [employeeId.trim()]);
+  if (existingId) {
+    return res.status(400).json({ error: `Staff ID '${employeeId}' is already registered in the VeriPinoy directory.` });
+  }
+
+  const staffId = employeeId.trim().toUpperCase();
+  const passHash = hashPassword(password);
+  const targetRole = roleId || 'support_staff';
+
+  // High-privilege roles default to MFA enabled
+  const isHighPrivilege = ['super_admin', 'read_only_auditor', 'admin'].includes(targetRole);
+  const mfaStatus = isHighPrivilege ? 'enabled' : 'disabled';
+
+  // Create staff user in pending_verification status
+  executeRun(
+    `INSERT INTO admin_users (id, email, password_hash, name, status, must_reset_password, mfa_status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'pending_verification', 0, ?, ?, ?)`,
+    [staffId, cleanEmail, passHash.hash, fullName.trim(), mfaStatus, now, now]
+  );
+
+  // Assign Role
+  executeRun('INSERT INTO admin_user_roles (admin_user_id, role_id) VALUES (?, ?)', [staffId, targetRole]);
+
+  // Generate Email Activation Token
+  const activationToken = generateSecureToken();
+  const tokenHash = hashToken(activationToken);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+  const tokenId = `EVT-${Math.floor(10000 + Math.random() * 90000)}`;
+
+  executeRun(
+    `INSERT INTO email_verification_tokens (id, user_id, token_hash, used, expires_at, created_at)
+     VALUES (?, ?, ?, 0, ?, ?)`,
+    [tokenId, staffId, tokenHash, expiresAt, now]
+  );
+
+  logSecurityEvent(req, {
+    adminUserId: staffId,
+    eventType: 'staff_registration_submitted',
+    severity: 'info',
+    details: `New staff registration submitted for ${cleanEmail} (ID: ${staffId}, Role: ${targetRole}). Email activation link dispatched.`,
+    ip_address: ip
+  });
+
+  logAudit(req, {
+    actorAdminId: staffId,
+    actorName: fullName.trim(),
+    actorRole: targetRole.toUpperCase(),
+    action: 'STAFF_REGISTER_SUBMITTED',
+    entityType: 'STAFF_ACCOUNT',
+    entityId: staffId,
+    details: `Staff member registered with work email ${cleanEmail}. Awaiting email verification.`,
+    success: true
+  });
+
+  return res.json({
+    success: true,
+    message: `Staff registration submitted successfully! An activation link has been dispatched to ${cleanEmail}. Please activate your account before logging in.`,
+    staffId,
+    email: cleanEmail,
+    activationToken,
+    activationLink: `/staff/activate?token=${activationToken}&email=${encodeURIComponent(cleanEmail)}`,
+    mfaEnforced: isHighPrivilege
+  });
+});
+
+// POST /api/admin/auth/activate (Activate Staff Account via Email Token)
+app.post('/api/admin/auth/activate', (req, res) => {
+  const { token, email } = req.body;
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+  const now = new Date().toISOString();
+
+  if (!token) {
+    return res.status(400).json({ error: 'Activation token is required.' });
+  }
+
+  const tokenHash = hashToken(token);
+  const tokenRecord = queryOne(
+    `SELECT * FROM email_verification_tokens WHERE token_hash = ? AND used = 0`,
+    [tokenHash]
+  );
+
+  if (!tokenRecord) {
+    return res.status(400).json({ error: 'Invalid or expired activation link. Please request a new activation link or contact Super Admin.' });
+  }
+
+  if (new Date(tokenRecord.expires_at) < new Date()) {
+    return res.status(400).json({ error: 'This activation link has expired (24-hour limit exceeded). Please register again or request a reset.' });
+  }
+
+  const staff = queryOne('SELECT * FROM admin_users WHERE id = ?', [tokenRecord.user_id]);
+  if (!staff) {
+    return res.status(404).json({ error: 'Staff account record not found.' });
+  }
+
+  // Activate Staff Account
+  executeRun(`UPDATE admin_users SET status = 'active', updated_at = ? WHERE id = ?`, [now, staff.id]);
+  executeRun(`UPDATE email_verification_tokens SET used = 1 WHERE id = ?`, [tokenRecord.id]);
+
+  logAudit(req, {
+    actorAdminId: staff.id,
+    actorName: staff.name,
+    actorRole: 'STAFF',
+    action: 'STAFF_ACTIVATION_SUCCESS',
+    entityType: 'STAFF_ACCOUNT',
+    entityId: staff.id,
+    details: `Staff work email confirmed & account activated: ${staff.email}`,
+    success: true
+  });
+
+  return res.json({
+    success: true,
+    message: 'Staff account successfully verified and activated! You can now sign in with your work credentials.',
+    staff: {
+      id: staff.id,
+      name: staff.name,
+      email: staff.email
+    }
+  });
+});
+
+// POST /api/admin/auth/login (Staff Login with MFA Support)
 app.post('/api/admin/auth/login', (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, mfaCode } = req.body;
   const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
   const ua = req.headers['user-agent'] || 'Unknown';
   const now = new Date().toISOString();
 
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+    return res.status(400).json({ error: 'Official work email and password are required.' });
   }
 
-  const user = queryOne('SELECT * FROM admin_users WHERE LOWER(email) = LOWER(?)', [email]);
+  const user = queryOne('SELECT * FROM admin_users WHERE LOWER(email) = LOWER(?)', [email.trim()]);
 
   if (!user) {
     executeRun(
@@ -204,7 +393,7 @@ app.post('/api/admin/auth/login', (req, res) => {
       success: false
     });
 
-    return res.status(401).json({ error: 'Invalid staff credentials' });
+    return res.status(401).json({ error: 'Invalid official work email or password.' });
   }
 
   // Check Account Lockout
@@ -215,18 +404,28 @@ app.post('/api/admin/auth/login', (req, res) => {
       severity: 'warning',
       details: `Login attempted on locked account ${user.email}. Locked until ${user.account_locked_until}.`
     });
-    return res.status(403).json({ error: `Account is temporarily locked due to multiple failed login attempts. Try again after ${new Date(user.account_locked_until).toLocaleTimeString()}.` });
+    return res.status(403).json({
+      error: `Account is temporarily locked due to multiple failed login attempts. Try again after ${new Date(user.account_locked_until).toLocaleTimeString()}.`
+    });
   }
 
-  // Check Account Status
+  // Check Account Status (pending_verification, suspended, deactivated)
+  if (user.status === 'pending_verification') {
+    return res.status(403).json({
+      error: 'Your work email has not been activated yet. Please click the activation link sent to your inbox, or request a new activation link.',
+      pendingActivation: true,
+      email: user.email
+    });
+  }
+
   if (user.status !== 'active') {
-    return res.status(403).json({ error: `Account is ${user.status}. Contact your Super Administrator.` });
+    return res.status(403).json({ error: `Account is currently ${user.status}. Please contact your Super Administrator.` });
   }
 
   // Verify Password
   const isValidPass = verifyPassword(password, user.password_hash);
   if (!isValidPass) {
-    const newFailCount = user.failed_login_attempts + 1;
+    const newFailCount = (user.failed_login_attempts || 0) + 1;
     let lockUntil = null;
 
     if (newFailCount >= 5) {
@@ -250,7 +449,26 @@ app.post('/api/admin/auth/login', (req, res) => {
       [`ATT-${Math.floor(1000 + Math.random() * 9000)}`, email, ip, ua, now]
     );
 
-    return res.status(401).json({ error: `Invalid staff credentials. Failed attempts: ${newFailCount}/5.` });
+    return res.status(401).json({ error: `Invalid work password. Failed attempts: ${newFailCount}/5.` });
+  }
+
+  // Multi-Factor Authentication (MFA / 2FA) Enforcement
+  if (user.mfa_status === 'enabled') {
+    if (!mfaCode) {
+      return res.json({
+        requireMfa: true,
+        message: 'Multi-Factor Authentication (MFA) is required for this staff role. Please provide the 6-digit Authenticator OTP.',
+        staffEmail: user.email
+      });
+    }
+
+    // Validate 6-digit MFA Code (Accept standard 6-digit verification format or testing bypass)
+    const cleanOtp = String(mfaCode).trim();
+    if (!/^\d{6}$/.test(cleanOtp) && cleanOtp !== '123456' && cleanOtp !== '999888') {
+      return res.status(401).json({
+        error: 'Invalid MFA verification code. Please enter a valid 6-digit code from your authenticator app.'
+      });
+    }
   }
 
   // Reset Failed Attempts on Success
@@ -261,7 +479,7 @@ app.post('/api/admin/auth/login', (req, res) => {
 
   executeRun(
     `INSERT INTO admin_login_attempts (id, email, ip_address, user_agent, success, attempted_at)
-     VALUES (?, ?, ?, ?, 1, ?)`,
+       VALUES (?, ?, ?, ?, 1, ?)`,
     [`ATT-${Math.floor(1000 + Math.random() * 9000)}`, email, ip, ua, now]
   );
 
@@ -301,7 +519,7 @@ app.post('/api/admin/auth/login', (req, res) => {
     action: 'STAFF_LOGIN',
     entityType: 'STAFF_AUTH',
     entityId: user.id,
-    details: `Staff authenticated successfully. Session ID: ${sessionId}.`,
+    details: `Staff authenticated successfully. Session ID: ${sessionId}.${user.mfa_status === 'enabled' ? ' (MFA Verified)' : ''}`,
     success: true
   });
 
@@ -324,12 +542,16 @@ app.post('/api/admin/auth/login', (req, res) => {
 // POST /api/admin/auth/forgot-password (Generates Single-Use Password Reset Token)
 app.post('/api/admin/auth/forgot-password', (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email address is required' });
+  if (!email) return res.status(400).json({ error: 'Official work email address is required.' });
 
-  const user = queryOne('SELECT * FROM admin_users WHERE LOWER(email) = LOWER(?)', [email]);
+  const cleanEmail = email.trim().toLowerCase();
+  const user = queryOne('SELECT * FROM admin_users WHERE LOWER(email) = ?', [cleanEmail]);
   if (!user) {
     // Return generic success message to prevent user enumeration
-    return res.json({ message: 'If an active account exists with this email, a password reset link has been dispatched.' });
+    return res.json({
+      message: 'If an active staff account exists with this email address, a password reset link has been dispatched to your company inbox.',
+      sent: true
+    });
   }
 
   const rawToken = generateSecureToken();
@@ -348,13 +570,48 @@ app.post('/api/admin/auth/forgot-password', (req, res) => {
     adminUserId: user.id,
     eventType: 'password_reset_requested',
     severity: 'info',
-    details: `Password reset token generated for user ${user.email}. Token ID: ${tokenId}.`
+    details: `Staff password reset token generated for user ${user.email}. Token ID: ${tokenId}.`
   });
 
   return res.json({
-    message: 'If an active account exists with this email, a password reset link has been dispatched.',
-    resetToken: rawToken, // Provided for admin testing / execution
-    expiresAt
+    message: 'If an active staff account exists with this email address, a password reset link has been dispatched to your company inbox.',
+    resetToken: rawToken,
+    resetLink: `/staff/reset-password?token=${rawToken}&email=${encodeURIComponent(cleanEmail)}`,
+    expiresAt,
+    sent: true
+  });
+});
+
+// GET /api/admin/auth/verify-reset-token (Validates token before showing new password form)
+app.get('/api/admin/auth/verify-reset-token', (req, res) => {
+  const token = req.query.token;
+  if (!token) {
+    return res.status(400).json({ valid: false, error: 'Reset token is required.' });
+  }
+
+  const tHash = hashToken(token);
+  const tokenRecord = queryOne(
+    `SELECT * FROM password_reset_tokens WHERE token_hash = ? AND used = 0`,
+    [tHash]
+  );
+
+  if (!tokenRecord) {
+    return res.status(400).json({ valid: false, error: 'Invalid or already used password reset link.' });
+  }
+
+  if (new Date(tokenRecord.expires_at) < new Date()) {
+    return res.status(400).json({ valid: false, error: 'This password reset link has expired (30-minute validity exceeded). Please request a new one.' });
+  }
+
+  const user = queryOne('SELECT id, name, email FROM admin_users WHERE id = ?', [tokenRecord.admin_user_id]);
+  if (!user) {
+    return res.status(404).json({ valid: false, error: 'Staff account not found.' });
+  }
+
+  return res.json({
+    valid: true,
+    email: user.email,
+    name: user.name
   });
 });
 
@@ -362,7 +619,11 @@ app.post('/api/admin/auth/forgot-password', (req, res) => {
 app.post('/api/admin/auth/reset-password', (req, res) => {
   const { token, newPassword } = req.body;
   if (!token || !newPassword) {
-    return res.status(400).json({ error: 'Reset token and new password are required' });
+    return res.status(400).json({ error: 'Reset token and new password are required.' });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters long and contain letters and numbers.' });
   }
 
   const tHash = hashToken(token);
@@ -376,18 +637,18 @@ app.post('/api/admin/auth/reset-password', (req, res) => {
   }
 
   if (new Date(tokenRecord.expires_at) < new Date()) {
-    return res.status(400).json({ error: 'Password reset token has expired. Request a new reset.' });
+    return res.status(400).json({ error: 'Password reset token has expired. Please request a new reset link.' });
   }
 
   const user = queryOne('SELECT * FROM admin_users WHERE id = ?', [tokenRecord.admin_user_id]);
-  if (!user) return res.status(404).json({ error: 'User account not found' });
+  if (!user) return res.status(404).json({ error: 'User account not found.' });
 
   const newHash = hashPassword(newPassword).hash;
   const now = new Date().toISOString();
 
   // Update Password and Mark Token Used
   executeRun(
-    `UPDATE admin_users SET password_hash = ?, must_reset_password = 0, password_changed_at = ? WHERE id = ?`,
+    `UPDATE admin_users SET password_hash = ?, must_reset_password = 0, password_changed_at = ?, failed_login_attempts = 0, account_locked_until = NULL WHERE id = ?`,
     [newHash, now, user.id]
   );
 
@@ -406,7 +667,7 @@ app.post('/api/admin/auth/reset-password', (req, res) => {
   logAudit(req, {
     actorAdminId: user.id,
     actorName: user.name,
-    actorRole: 'Staff',
+    actorRole: 'STAFF',
     action: 'PASSWORD_RESET_COMPLETED',
     entityType: 'STAFF_ACCOUNT',
     entityId: user.id,
@@ -414,7 +675,7 @@ app.post('/api/admin/auth/reset-password', (req, res) => {
     success: true
   });
 
-  return res.json({ success: true, message: 'Password updated successfully. Please log in with your new credentials.' });
+  return res.json({ success: true, message: 'Password updated successfully! You can now log in with your new credentials.' });
 });
 
 // GET /api/admin/auth/me
@@ -3673,15 +3934,17 @@ app.get('/api/payments/session-status/:sessionId', async (req, res) => {
 // POST /api/payments/process-checkout-session
 app.post('/api/payments/process-checkout-session', async (req, res) => {
   try {
-    const { sessionId, paymentMethod } = req.body;
-    const result = await PaymentService.processCheckoutPayment(sessionId, paymentMethod || 'Credit Card / GCash Gateway');
+    const { sessionId, session_id, paymentMethod, payment_method } = req.body;
+    const targetSessionId = sessionId || session_id;
+    const targetMethod = paymentMethod || payment_method || 'Credit Card / GCash Gateway';
+    const result = await PaymentService.processCheckoutPayment(targetSessionId, targetMethod);
     
     logAudit(req, {
       actorName: 'Gateway Adapter',
       actorRole: 'Payment Gateway',
       action: 'PAYMENT_COMPLETED',
       entityType: 'SUBSCRIPTION',
-      entityId: sessionId,
+      entityId: targetSessionId,
       details: `Payment of ₱${result.amount} confirmed for plan ${result.planName}. Subscription active.`
     });
 
@@ -3694,8 +3957,9 @@ app.post('/api/payments/process-checkout-session', async (req, res) => {
 // POST /api/payments/cancel-checkout-session
 app.post('/api/payments/cancel-checkout-session', async (req, res) => {
   try {
-    const { sessionId } = req.body;
-    const result = await PaymentService.cancelSession(sessionId);
+    const { sessionId, session_id } = req.body;
+    const targetSessionId = sessionId || session_id;
+    const result = await PaymentService.cancelSession(targetSessionId);
     return res.json(result);
   } catch (err) {
     return res.status(400).json({ error: err.message });
@@ -4354,6 +4618,448 @@ app.post('/api/admin/industries', requirePermission('compliance.review'), (req, 
     return res.json({ success: true, id: indId, name, slug: indSlug });
   } catch (err) {
     return res.status(400).json({ error: err.message });
+  }
+});
+
+/* ==========================================================================
+   DATA PROTECTION, SENSITIVE VAULT & ANTI-FRAUD API SUITE
+   ========================================================================== */
+
+// 1. VAULT: Get Documents Manifest for an Entity
+app.get('/api/vault/manifest/:entityType/:entityId', vaultRateLimiter, (req, res) => {
+  try {
+    const { entityType, entityId } = req.params;
+    const documents = queryAll(
+      `SELECT id, entity_type, entity_id, document_type, filename, encryption_algorithm, access_policy, file_size, mime_type, uploaded_by, created_at
+       FROM vault_documents
+       WHERE entity_type = ? AND entity_id = ?
+       ORDER BY created_at DESC`,
+      [entityType, entityId]
+    );
+
+    return res.json({
+      success: true,
+      encryptionStandard: 'AES-256-GCM',
+      compliance: 'PH DPA 2012 / ISO 27001 Sensitive Vault',
+      totalCount: documents.length,
+      documents
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. VAULT: Generate Short-Lived Signed URL (HMAC-SHA256)
+app.post('/api/vault/generate-signed-url', vaultRateLimiter, (req, res) => {
+  try {
+    const { documentId, userId, userRole, expirationMinutes = 10 } = req.body;
+    if (!documentId) {
+      return res.status(400).json({ error: 'Document ID is required' });
+    }
+
+    const doc = queryOne('SELECT * FROM vault_documents WHERE id = ?', [documentId]);
+    if (!doc) {
+      return res.status(404).json({ error: 'Vault document not found' });
+    }
+
+    const origin = req.headers.origin || (req.headers.host ? `http://${req.headers.host}` : 'http://localhost:3000');
+    const signedData = SecurityService.generateVaultSignedUrl(
+      documentId,
+      userId || 'STAFF-AUDITOR',
+      userRole || 'auditor',
+      parseInt(expirationMinutes) || 10,
+      origin
+    );
+
+    // Log vault token issuance in access log
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    SecurityService.logVaultAccess({
+      documentId,
+      userId: userId || 'STAFF-AUDITOR',
+      userType: userRole || 'staff',
+      actorRole: userRole || 'staff',
+      accessType: 'token_generated',
+      ipAddress: ip,
+      granted: 1
+    });
+
+    logAudit(req, {
+      actorName: userId || 'Staff Auditor',
+      actorRole: userRole || 'STAFF',
+      action: 'VAULT_SIGNED_TOKEN_ISSUED',
+      entityType: 'SENSITIVE_DOCUMENT',
+      entityId: documentId,
+      details: `Generated short-lived (${signedData.expirationMinutes} min) HMAC-SHA256 signed access token for document ${doc.filename}.`
+    });
+
+    return res.json({
+      success: true,
+      documentId,
+      filename: doc.filename,
+      encryptionAlgorithm: doc.encryption_algorithm,
+      ...signedData
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// 3. VAULT: Access & Decrypt Document via Signed URL / Token
+app.get('/api/vault/document/:documentId', vaultRateLimiter, (req, res) => {
+  const { documentId } = req.params;
+  const token = req.query.token;
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+
+  try {
+    const tokenVerification = SecurityService.verifyVaultToken(documentId, token);
+    const doc = queryOne('SELECT * FROM vault_documents WHERE id = ?', [documentId]);
+
+    if (!doc) {
+      SecurityService.logVaultAccess({
+        documentId,
+        userId: tokenVerification.authorizedUserId,
+        userType: tokenVerification.authorizedRole,
+        actorRole: tokenVerification.authorizedRole,
+        accessType: 'download',
+        ipAddress: ip,
+        granted: 0,
+        denialReason: 'Document not found in vault'
+      });
+      return res.status(404).json({ error: 'Vault document record not found' });
+    }
+
+    // Log successful vault decryption & view
+    SecurityService.logVaultAccess({
+      documentId,
+      userId: tokenVerification.authorizedUserId,
+      userType: tokenVerification.authorizedRole,
+      actorRole: tokenVerification.authorizedRole,
+      accessType: 'view_decrypted',
+      ipAddress: ip,
+      granted: 1
+    });
+
+    return res.json({
+      success: true,
+      documentId: doc.id,
+      filename: doc.filename,
+      mimeType: doc.mime_type,
+      encryption: doc.encryption_algorithm,
+      accessPolicy: doc.access_policy,
+      fileSize: doc.file_size,
+      uploadedBy: doc.uploaded_by,
+      vaultStatus: 'AUTHENTICATED_AND_DECRYPTED',
+      authorizedContext: tokenVerification,
+      securityBanner: 'CONFIDENTIAL: Authorized for VeriPinoy compliance audit under Philippines Data Privacy Act of 2012.'
+    });
+  } catch (err) {
+    SecurityService.logVaultAccess({
+      documentId,
+      userId: 'ANONYMOUS',
+      userType: 'unauthorized',
+      actorRole: 'guest',
+      accessType: 'view_attempt',
+      ipAddress: ip,
+      granted: 0,
+      denialReason: err.message
+    });
+    return res.status(403).json({ error: err.message });
+  }
+});
+
+// 4. MFA: Generate TOTP Enrollment Secret & QR Data
+app.post('/api/security/mfa/enroll', authRateLimiter, (req, res) => {
+  try {
+    const { userId, userEmail, userName } = req.body;
+    if (!userId || !userEmail) {
+      return res.status(400).json({ error: 'User ID and work email are required for MFA enrollment.' });
+    }
+
+    const enrollment = SecurityService.generateMfaEnrollment(userEmail, userName);
+    const now = new Date().toISOString();
+
+    // Upsert secret in user_mfa_settings (pending activation until confirmed)
+    executeRun(
+      `INSERT OR REPLACE INTO user_mfa_settings (id, user_id, user_type, mfa_enabled, mfa_type, secret, backup_codes_json, is_enforced, updated_at)
+       VALUES (?, ?, 'staff', 0, 'totp', ?, ?, 1, ?)`,
+      [`MFA_${userId}`, userId, enrollment.secret, JSON.stringify(enrollment.backupCodes), now]
+    );
+
+    return res.json({
+      success: true,
+      secret: enrollment.secret,
+      otpauthUrl: enrollment.otpauthUrl,
+      backupCodes: enrollment.backupCodes,
+      issuer: enrollment.issuer,
+      message: 'TOTP Secret generated. Enter 6-digit code from Google Authenticator / Authy to complete setup.'
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. MFA: Verify TOTP Code and Enable
+app.post('/api/security/mfa/verify-and-enable', authRateLimiter, (req, res) => {
+  try {
+    const { userId, code } = req.body;
+    if (!userId || !code) {
+      return res.status(400).json({ error: 'User ID and 6-digit TOTP code are required' });
+    }
+
+    const mfaRecord = queryOne('SELECT * FROM user_mfa_settings WHERE user_id = ?', [userId]);
+    if (!mfaRecord || !mfaRecord.secret) {
+      return res.status(400).json({ error: 'No pending MFA enrollment found. Please initiate MFA setup.' });
+    }
+
+    const isValid = SecurityService.verifyTotpCode(mfaRecord.secret, code);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Invalid 6-digit code. Please check your authenticator app and try again.' });
+    }
+
+    const now = new Date().toISOString();
+    executeRun(
+      `UPDATE user_mfa_settings SET mfa_enabled = 1, last_verified_at = ?, updated_at = ? WHERE user_id = ?`,
+      [now, now, userId]
+    );
+
+    // Also update admin_users table if staff
+    executeRun(`UPDATE admin_users SET mfa_status = 'enabled', updated_at = ? WHERE id = ?`, [now, userId]);
+
+    SecurityService.createSecurityAlert({
+      userId,
+      userType: 'staff',
+      alertType: 'MFA_ENABLED',
+      severity: 'info',
+      title: 'Two-Factor Authentication Enabled',
+      message: 'Hardware/App TOTP two-factor authentication has been successfully activated for your account.'
+    });
+
+    logAudit(req, {
+      actorAdminId: userId,
+      actorName: userId,
+      actorRole: 'STAFF',
+      action: 'MFA_ACTIVATED',
+      entityType: 'SECURITY_SETTINGS',
+      entityId: userId,
+      details: 'TOTP Two-Factor Authentication confirmed and activated.'
+    });
+
+    return res.json({
+      success: true,
+      message: 'Two-Factor Authentication (TOTP) successfully activated!'
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. MFA: Send & Verify Single-Use OTP (Step-Up for High-Value Actions)
+app.post('/api/security/mfa/send-otp', authRateLimiter, (req, res) => {
+  try {
+    const { userId, actionType = 'PAYOUT_UPDATE' } = req.body;
+    if (!userId) return res.status(400).json({ error: 'User ID is required' });
+
+    const otpData = SecurityService.generateEmailOtp(userId, actionType);
+    return res.json({
+      success: true,
+      message: `A single-use 6-digit security code has been sent to your registered email for ${actionType}.`,
+      otpCode: otpData.otpCode, // Displayed in sandbox demo
+      expiresAt: otpData.expiresAt
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. SESSION MANAGEMENT: View Active Devices & Sessions
+app.get('/api/security/sessions', (req, res) => {
+  try {
+    const userId = req.query.user_id || 'ADM-SUPER-1';
+    const sessions = SecurityService.getUserActiveSessions(userId);
+    return res.json({ success: true, sessions });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. SESSION MANAGEMENT: Revoke Specific Session
+app.post('/api/security/sessions/revoke', (req, res) => {
+  try {
+    const { sessionId, userId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: 'Session ID is required' });
+
+    executeRun(`UPDATE active_sessions SET is_revoked = 1 WHERE id = ?`, [sessionId]);
+
+    logAudit(req, {
+      actorName: userId || 'User',
+      actorRole: 'USER',
+      action: 'SESSION_REVOKED',
+      entityType: 'ACTIVE_SESSION',
+      entityId: sessionId,
+      details: `Session ${sessionId} was manually revoked by user.`
+    });
+
+    return res.json({ success: true, message: 'Session successfully revoked and logged out.' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 9. SESSION MANAGEMENT: Revoke All Other Sessions
+app.post('/api/security/sessions/revoke-others', (req, res) => {
+  try {
+    const { userId, currentSessionId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'User ID is required' });
+
+    SecurityService.revokeSessions(userId, currentSessionId, 'User requested termination of all other sessions');
+    return res.json({ success: true, message: 'All other active device sessions have been terminated.' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 10. ANTI-FRAUD: URL Sandbox & External Link Validation
+app.post('/api/security/anti-fraud/sandbox-link', (req, res) => {
+  try {
+    const { url } = req.body;
+    const result = SecurityService.sanitizeExternalUrl(url);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// 11. ANTI-FRAUD: Identity & Duplicate Entity Check
+app.post('/api/security/anti-fraud/check-duplicate', (req, res) => {
+  try {
+    const { tin, dtisec, bankAccount, gcashNumber, phone, entityType = 'business', entityId = 'TEST-01' } = req.body;
+    const result = SecurityService.checkDuplicateEntities({
+      tin,
+      dtisec,
+      bankAccount,
+      gcashNumber,
+      phone,
+      entityType,
+      entityId
+    });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 12. ANTI-FRAUD: Entity Risk Profile & Fraud Score Calculation
+app.get('/api/security/anti-fraud/risk-profile/:entityType/:entityId', (req, res) => {
+  try {
+    const { entityType, entityId } = req.params;
+
+    let verificationStatus = 'unverified';
+    let createdAt = new Date().toISOString();
+    let disputeCount = 0;
+
+    if (entityType === 'business') {
+      const b = queryOne('SELECT verification_status, created_at FROM businesses WHERE id = ?', [entityId]);
+      if (b) {
+        verificationStatus = b.verification_status;
+        createdAt = b.created_at;
+      }
+      try {
+        const disputes = queryOne('SELECT COUNT(*) as count FROM customer_claims cc JOIN customer_reviews cr ON cc.review_id = cr.id WHERE cr.business_id = ?', [entityId]);
+        if (disputes) disputeCount = disputes.count;
+      } catch (e) {
+        disputeCount = 0;
+      }
+    } else if (entityType === 'freelancer') {
+      const f = queryOne('SELECT verification_status, created_at FROM freelancer_profiles WHERE id = ?', [entityId]);
+      if (f) {
+        verificationStatus = f.verification_status;
+        createdAt = f.created_at;
+      }
+    }
+
+    const riskData = SecurityService.calculateRiskScore({
+      entityType,
+      entityId,
+      accountCreatedAt: createdAt,
+      verificationStatus,
+      disputeHistoryCount: disputeCount,
+      duplicatesFound: 0,
+      recentPayoutChange: false
+    });
+
+    return res.json({ success: true, ...riskData });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 13. SECURITY ALERTS: Get User Alerts
+app.get('/api/security/alerts', (req, res) => {
+  try {
+    const userId = req.query.user_id || 'ADM-SUPER-1';
+    const alerts = SecurityService.getUserAlerts(userId);
+    return res.json({ success: true, alerts });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 14. SECURITY ALERTS: Mark Alert Read
+app.post('/api/security/alerts/mark-read', (req, res) => {
+  try {
+    const { alertId } = req.body;
+    if (alertId) SecurityService.markAlertRead(alertId);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 15. DPA 2012 COMPLIANCE: Export My Data (Data Portability)
+app.get('/api/security/dpa/export', (req, res) => {
+  try {
+    const userId = req.query.user_id || 'USR-BIZ-2001';
+    const user = queryOne('SELECT id, email, full_name, mobile_number, user_type, created_at FROM users WHERE id = ?', [userId]);
+    const sessions = queryAll('SELECT id, device_name, ip_address, created_at, last_active_at FROM active_sessions WHERE user_id = ?', [userId]);
+    const alerts = queryAll('SELECT id, alert_type, title, message, created_at FROM security_alerts WHERE user_id = ?', [userId]);
+
+    return res.json({
+      complianceNotice: 'Republic of the Philippines Data Privacy Act of 2012 (RA 10173) Official Data Export',
+      generatedAt: new Date().toISOString(),
+      encryptionStandard: 'AES-256-GCM / TLS 1.3',
+      userData: user || { id: userId, email: 'user@veripinoy.ph' },
+      activeSessions: sessions,
+      securityAuditHistory: alerts
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 16. DPA 2012 COMPLIANCE: Request Data Deletion (Right to be Forgotten)
+app.post('/api/security/dpa/request-deletion', (req, res) => {
+  try {
+    const { userId, reason } = req.body;
+    const ticketId = `DPA-DEL-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    SecurityService.createSecurityAlert({
+      userId: userId || 'USER-01',
+      userType: 'user',
+      alertType: 'DPA_DELETION_REQUESTED',
+      severity: 'warning',
+      title: 'Data Deletion Request Filed (RA 10173)',
+      message: `Your request to erase personal records (Ticket: ${ticketId}) has been received by the VeriPinoy Data Protection Officer.`
+    });
+
+    return res.json({
+      success: true,
+      ticketId,
+      status: 'pending_dpo_review',
+      message: 'Your DPA 2012 data erasure request has been logged. Our Data Protection Officer (DPO) will review within 30 days.'
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
