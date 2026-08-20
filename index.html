@@ -4,6 +4,45 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VeriPinoy — Tatak Pinoy, Tatak Sigurado</title>
+<script>
+  /* Intercept and suppress external browser extension noise (e.g., MetaMask, Solana, Web3 in-page injection errors) */
+  window.addEventListener('unhandledrejection', function(event) {
+    if (event && event.reason) {
+      const reasonStr = (typeof event.reason === 'object' ? (event.reason.message || event.reason.stack || JSON.stringify(event.reason)) : String(event.reason));
+      if (reasonStr && (
+        reasonStr.toLowerCase().includes('metamask') ||
+        reasonStr.toLowerCase().includes('ethereum') ||
+        reasonStr.includes('chrome-extension://') ||
+        reasonStr.includes('moz-extension://') ||
+        reasonStr.includes('Failed to connect')
+      )) {
+        event.preventDefault();
+        event.stopPropagation();
+        console.warn('Suppressed third-party browser extension rejection:', reasonStr);
+        return false;
+      }
+    }
+  });
+
+  window.addEventListener('error', function(event) {
+    if (event) {
+      const msg = event.message || '';
+      const src = event.filename || '';
+      if (
+        msg.toLowerCase().includes('metamask') ||
+        msg.toLowerCase().includes('ethereum') ||
+        msg.includes('Failed to connect') ||
+        src.includes('chrome-extension://') ||
+        src.includes('moz-extension://')
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        console.warn('Suppressed external browser extension error:', msg);
+        return false;
+      }
+    }
+  });
+</script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1L2 6.5V15.5C2 23.5 7.5 30.5 15 33C22.5 30.5 28 23.5 28 15.5V6.5L15 1Z' fill='%230F172A'/%3E%3Cpath d='M15 3.5L4.5 8V15.5C4.5 22 9 28 15 30.2C21 28 25.5 22 25.5 15.5V8L15 3.5Z' fill='%231E293B'/%3E%3Ccircle cx='9' cy='10' r='1.3' fill='%23F59E0B'/%3E%3Ccircle cx='15' cy='8' r='1.3' fill='%23F59E0B'/%3E%3Ccircle cx='21' cy='10' r='1.3' fill='%23F59E0B'/%3E%3Cpath d='M9.5 18L13.5 22L21 13.5' stroke='%2310B981' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1528,7 +1567,10 @@ input:checked + .slider:before { transform: translateX(22px); }
           <input type="email" id="fr-login-email" value="freelancer@marcoreyes.dev" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
         </div>
         <div class="form-group" style="margin-bottom:20px;">
-          <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Account Password</label>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Account Password</label>
+            <a href="javascript:void(0)" onclick="openForgotPasswordModal('freelancer')" style="font-size:0.8rem; font-weight:700; color:var(--emerald-600); text-decoration:none;">Forgot Password?</a>
+          </div>
           <input type="password" id="fr-login-pass" value="Password123!" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
         </div>
         <button class="btn btn-emerald" type="submit" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;">
@@ -2196,8 +2238,6 @@ input:checked + .slider:before { transform: translateX(22px); }
   </div>
 </section>
 
-  </div>
-</section>
 <section id="page-auth-customer" class="page">
   <div class="wrap">
     
@@ -2223,7 +2263,7 @@ input:checked + .slider:before { transform: translateX(22px); }
         </div>
 
         <!-- TAB TOGGLE BETWEEN SIGN IN AND REGISTER -->
-        <div style="display: flex; background: var(--slate-100); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px;">
+        <div id="cust-auth-tab-bar" style="display: flex; background: var(--slate-100); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px;">
           <button id="cust-auth-tab-signin" type="button" class="btn" style="flex:1; border:none; background:var(--white); color:var(--navy-900); font-weight:700; border-radius:var(--radius-sm); padding:10px 12px; font-size:0.88rem; box-shadow:var(--shadow-sm);" onclick="switchCustomerAuthTab('signin')">
             🔑 Sign In
           </button>
@@ -2232,14 +2272,17 @@ input:checked + .slider:before { transform: translateX(22px); }
           </button>
         </div>
 
-        <!-- SIGN IN FORM -->
+        <!-- 1. SIGN IN FORM -->
         <form id="cust-form-signin" onsubmit="event.preventDefault(); loginCustomer();">
           <div class="form-group" style="margin-bottom:16px;">
             <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Email Address</label>
             <input type="email" id="c-login-email" value="maria.santos@gmail.com" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
           </div>
           <div class="form-group" style="margin-bottom:20px;">
-            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Account Password</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Account Password</label>
+              <a href="javascript:void(0)" onclick="switchCustomerAuthTab('forgot')" style="font-size:0.8rem; font-weight:700; color:var(--emerald-600); text-decoration:none;">Forgot Password?</a>
+            </div>
             <input type="password" id="c-login-pass" value="password123" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
           </div>
           <button class="btn btn-emerald" type="submit" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;">
@@ -2273,7 +2316,57 @@ input:checked + .slider:before { transform: translateX(22px); }
           </div>
         </form>
 
-        <!-- REGISTRATION FORM -->
+        <!-- 2. FORGOT PASSWORD FORM -->
+        <form id="cust-form-forgot" style="display:none;" onsubmit="handleCustomerForgotPasswordSubmit(event)">
+          <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:var(--radius-md); padding:14px; margin-bottom:20px; font-size:0.85rem; color:#1E40AF;">
+            🔑 <strong>Password Recovery:</strong> Enter your registered customer email address below. We'll generate an authenticated reset link and token to restore access.
+          </div>
+
+          <div class="form-group" style="margin-bottom:20px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Customer Email Address</label>
+            <input type="email" id="cust-forgot-email" placeholder="e.g. maria.santos@gmail.com" value="maria.santos@gmail.com" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+
+          <button type="submit" id="cust-forgot-btn" class="btn btn-emerald" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem; margin-bottom:12px;">
+            📨 Dispatch Customer Password Reset Link
+          </button>
+
+          <button type="button" class="btn btn-outline" style="width:100%; font-size:0.85rem;" onclick="switchCustomerAuthTab('signin')">
+            ← Return to Customer Sign In
+          </button>
+        </form>
+
+        <!-- 3. RESET PASSWORD FORM -->
+        <form id="cust-form-reset" style="display:none;" onsubmit="handleCustomerResetPasswordSubmit(event)">
+          <div style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:var(--radius-md); padding:12px; margin-bottom:18px; font-size:0.82rem; color:#92400E;">
+            🔑 <strong>Authorized Token Verification:</strong> Enter the reset code and choose your new password.
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Reset Security Token</label>
+            <input type="text" id="cust-reset-token-val" placeholder="Paste reset token here" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">New Password</label>
+            <input type="password" id="cust-reset-newpass" placeholder="Min. 6 characters" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+
+          <div class="form-group" style="margin-bottom:20px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Confirm New Password</label>
+            <input type="password" id="cust-reset-confirmpass" placeholder="Re-enter new password" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+
+          <button type="submit" id="cust-reset-btn" class="btn btn-emerald" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem; margin-bottom:12px;">
+            💾 Save New Password & Sign In
+          </button>
+
+          <button type="button" class="btn btn-outline" style="width:100%; font-size:0.85rem;" onclick="switchCustomerAuthTab('signin')">
+            Cancel / Back to Sign In
+          </button>
+        </form>
+
+        <!-- 4. REGISTRATION FORM -->
         <form id="cust-form-register" style="display:none;" onsubmit="event.preventDefault(); registerCustomer();">
           <div class="form-group" style="margin-bottom:14px;">
             <label style="font-weight:700; font-size:0.82rem; color:var(--navy-900);">Full Legal Name *</label>
@@ -2409,7 +2502,7 @@ input:checked + .slider:before { transform: translateX(22px); }
         </div>
 
         <!-- TAB TOGGLE BETWEEN SIGN IN AND REGISTER -->
-        <div style="display: flex; background: var(--slate-100); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px;">
+        <div id="biz-auth-tab-bar" style="display: flex; background: var(--slate-100); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px;">
           <button id="biz-auth-tab-signin" type="button" class="btn" style="flex:1; border:none; background:var(--white); color:var(--navy-900); font-weight:700; border-radius:var(--radius-sm); padding:10px 12px; font-size:0.88rem; box-shadow:var(--shadow-sm);" onclick="switchBusinessAuthTab('signin')">
             🔑 Sign In
           </button>
@@ -2418,14 +2511,17 @@ input:checked + .slider:before { transform: translateX(22px); }
           </button>
         </div>
 
-        <!-- SIGN IN FORM -->
+        <!-- 1. SIGN IN FORM -->
         <form id="biz-form-signin" onsubmit="event.preventDefault(); loginMerchant();">
           <div class="form-group" style="margin-bottom:16px;">
             <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Corporate Email</label>
             <input type="email" id="b-login-email" value="owner@bahaykubo.ph" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
           </div>
           <div class="form-group" style="margin-bottom:20px;">
-            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Security Password</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Security Password</label>
+              <a href="javascript:void(0)" onclick="switchBusinessAuthTab('forgot')" style="font-size:0.8rem; font-weight:700; color:var(--emerald-600); text-decoration:none;">Forgot Password?</a>
+            </div>
             <input type="password" id="b-login-pass" value="merchant123" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
           </div>
           <button class="btn btn-emerald" type="submit" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;">
@@ -2462,7 +2558,57 @@ input:checked + .slider:before { transform: translateX(22px); }
           </div>
         </form>
 
-        <!-- REGISTRATION FORM -->
+        <!-- 2. FORGOT PASSWORD FORM -->
+        <form id="biz-form-forgot" style="display:none;" onsubmit="handleBusinessForgotPasswordSubmit(event)">
+          <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:var(--radius-md); padding:14px; margin-bottom:20px; font-size:0.85rem; color:#92400E;">
+            🏢 <strong>Enterprise Password Recovery:</strong> Enter your registered corporate business email to dispatch an authenticated password reset link.
+          </div>
+
+          <div class="form-group" style="margin-bottom:20px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Corporate Business Email</label>
+            <input type="email" id="biz-forgot-email" placeholder="e.g. owner@bahaykubo.ph" value="owner@bahaykubo.ph" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+
+          <button type="submit" id="biz-forgot-btn" class="btn btn-emerald" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem; margin-bottom:12px;">
+            📨 Dispatch Business Password Reset Link
+          </button>
+
+          <button type="button" class="btn btn-outline" style="width:100%; font-size:0.85rem;" onclick="switchBusinessAuthTab('signin')">
+            ← Return to Business Sign In
+          </button>
+        </form>
+
+        <!-- 3. RESET PASSWORD FORM -->
+        <form id="biz-form-reset" style="display:none;" onsubmit="handleBusinessResetPasswordSubmit(event)">
+          <div style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:var(--radius-md); padding:12px; margin-bottom:18px; font-size:0.82rem; color:#92400E;">
+            🔑 <strong>Authorized Merchant Token Verification:</strong> Enter the reset code and establish your new security password.
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Reset Security Token</label>
+            <input type="text" id="biz-reset-token-val" placeholder="Paste reset token here" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">New Security Password</label>
+            <input type="password" id="biz-reset-newpass" placeholder="Min. 6 characters" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+
+          <div class="form-group" style="margin-bottom:20px;">
+            <label style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">Confirm New Security Password</label>
+            <input type="password" id="biz-reset-confirmpass" placeholder="Re-enter new password" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          </div>
+
+          <button type="submit" id="biz-reset-btn" class="btn btn-emerald" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem; margin-bottom:12px;">
+            💾 Update Security Password & Sign In
+          </button>
+
+          <button type="button" class="btn btn-outline" style="width:100%; font-size:0.85rem;" onclick="switchBusinessAuthTab('signin')">
+            Cancel / Back to Sign In
+          </button>
+        </form>
+
+        <!-- 4. REGISTRATION FORM -->
         <form id="biz-form-register" style="display:none;" onsubmit="event.preventDefault(); registerMerchant();">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
             <div class="form-group">
@@ -5119,6 +5265,160 @@ input:checked + .slider:before { transform: translateX(22px); }
   </div>
 </div>
 
+<!-- ==========================================================================
+     UNIVERSAL FORGOTTEN PASSWORD & OTP VERIFICATION MODAL COMPONENT
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-forgot-password" role="dialog" aria-modal="true" aria-labelledby="modal-fp-title" onclick="if(event.target === this) closeForgotPasswordModal()">
+  <div class="modal-content" style="max-width:540px; border-radius:var(--radius-xl); padding:32px; box-shadow:var(--shadow-2xl); position:relative;">
+    
+    <!-- Modal Header -->
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+      <div>
+        <span id="modal-fp-badge" class="badge badge-emerald" style="margin-bottom:8px; font-size:0.75rem;">
+          💼 Verified Freelancer Credential Recovery
+        </span>
+        <h3 id="modal-fp-title" style="font-family:var(--font-heading); font-size:1.4rem; font-weight:800; color:var(--navy-900); margin:0;">
+          Recover Your Password
+        </h3>
+        <p id="modal-fp-subtitle" class="text-muted" style="font-size:0.85rem; margin-top:4px; margin-bottom:0;">
+          Enter your registered email address to receive a secure 6-digit verification code.
+        </p>
+      </div>
+      <button class="btn btn-outline" style="padding:6px 12px; border:none; font-size:1.2rem; line-height:1; color:var(--slate-400); border-radius:var(--radius-md);" onclick="closeForgotPasswordModal()" aria-label="Close modal">✕</button>
+    </div>
+
+    <!-- Step Progress Indicator -->
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px; background:var(--slate-100); padding:6px 12px; border-radius:var(--radius-md);">
+      <div id="fp-step-indicator-1" style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:700; color:var(--emerald-700);">
+        <span id="fp-step-num-1" style="width:20px; height:20px; border-radius:50%; background:var(--emerald-600); color:white; display:flex; align-items:center; justify-content:center; font-size:0.72rem;">1</span>
+        <span>Email</span>
+      </div>
+      <div style="flex:1; height:2px; background:var(--slate-300);" id="fp-step-line-1"></div>
+      <div id="fp-step-indicator-2" style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:700; color:var(--slate-500);">
+        <span id="fp-step-num-2" style="width:20px; height:20px; border-radius:50%; background:var(--slate-300); color:var(--slate-600); display:flex; align-items:center; justify-content:center; font-size:0.72rem;">2</span>
+        <span>Verify Code & Reset</span>
+      </div>
+      <div style="flex:1; height:2px; background:var(--slate-300);" id="fp-step-line-2"></div>
+      <div id="fp-step-indicator-3" style="display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:700; color:var(--slate-500);">
+        <span id="fp-step-num-3" style="width:20px; height:20px; border-radius:50%; background:var(--slate-300); color:var(--slate-600); display:flex; align-items:center; justify-content:center; font-size:0.72rem;">3</span>
+        <span>Complete</span>
+      </div>
+    </div>
+
+    <!-- STEP 1: EMAIL INPUT FORM -->
+    <form id="modal-fp-form-step1" onsubmit="handleForgotPasswordRequestCode(event)">
+      <div class="form-group" style="margin-bottom:16px;">
+        <label for="modal-fp-email" style="font-weight:700; font-size:0.85rem; color:var(--navy-900); display:block; margin-bottom:6px;">
+          Registered Account Email *
+        </label>
+        <div style="position:relative;">
+          <input type="email" id="modal-fp-email" placeholder="e.g. freelancer@marcoreyes.dev" value="freelancer@marcoreyes.dev" required style="width:100%; padding:11px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.9rem;">
+        </div>
+        <p style="font-size:0.78rem; color:var(--slate-500); margin-top:6px; line-height:1.4;">
+          A secure 6-digit one-time passcode (OTP) verification code will be generated and dispatched.
+        </p>
+      </div>
+
+      <div id="modal-fp-quick-demos" style="background:var(--slate-50); border:1px dashed var(--slate-300); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:18px; font-size:0.8rem; color:var(--slate-600);">
+        <strong style="color:var(--navy-900);">💡 Quick Fill Demo Accounts:</strong>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
+          <button type="button" class="btn btn-outline" style="padding:4px 10px; font-size:0.75rem; border-radius:4px; font-weight:700;" onclick="selectFPDemoEmail('freelancer@marcoreyes.dev', 'freelancer')">💼 Freelancer</button>
+          <button type="button" class="btn btn-outline" style="padding:4px 10px; font-size:0.75rem; border-radius:4px; font-weight:700;" onclick="selectFPDemoEmail('customer@veripinoy.ph', 'customer')">👤 Customer</button>
+          <button type="button" class="btn btn-outline" style="padding:4px 10px; font-size:0.75rem; border-radius:4px; font-weight:700;" onclick="selectFPDemoEmail('owner@bahaykubo.ph', 'business')">🏢 Business</button>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; justify-content:flex-end;">
+        <button type="button" class="btn btn-outline" onclick="closeForgotPasswordModal()" style="font-size:0.88rem; padding:10px 18px;">
+          Cancel
+        </button>
+        <button type="submit" id="modal-fp-send-btn" class="btn btn-emerald" style="font-weight:700; font-size:0.9rem; padding:10px 22px;">
+          📨 Send Verification Code
+        </button>
+      </div>
+    </form>
+
+    <!-- STEP 2: VERIFY CODE & NEW PASSWORD FORM -->
+    <form id="modal-fp-form-step2" style="display:none;" onsubmit="handleForgotPasswordResetSubmit(event)">
+      <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:var(--radius-md); padding:12px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:0.72rem; color:#1E40AF; font-weight:700; text-transform:uppercase;">Code Dispatched To:</div>
+          <div id="modal-fp-target-email-display" style="font-size:0.88rem; font-weight:800; color:#1E3A8A;">freelancer@marcoreyes.dev</div>
+        </div>
+        <button type="button" class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem; background:white; color:#1E40AF; border-color:#93C5FD;" onclick="switchForgotPasswordStep(1)">
+          Edit Email
+        </button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <label for="modal-fp-code" style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">
+            6-Digit Verification Code *
+          </label>
+          <span id="modal-fp-demo-code-pill" style="font-size:0.75rem; color:var(--emerald-700); font-weight:700; background:#ECFDF5; padding:2px 8px; border-radius:4px; border:1px solid #A7F3D0; cursor:pointer;" onclick="autoFillDemoCode()" title="Click to auto-fill verification code">
+            ⚡ Quick-fill Code: <strong id="modal-fp-display-code-val">------</strong>
+          </span>
+        </div>
+        <input type="text" id="modal-fp-code" placeholder="Enter 6-digit code (e.g. 849201)" maxlength="60" required style="width:100%; padding:10px 14px; border-radius:8px; border:1px solid var(--slate-300); font-size:1rem; font-family:monospace; letter-spacing:2px; font-weight:700; color:var(--navy-900); background:var(--white);">
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <label for="modal-fp-newpass" style="font-weight:700; font-size:0.85rem; color:var(--navy-900);">
+            New Password * (Min. 6 characters)
+          </label>
+          <span id="modal-fp-pass-strength" style="font-size:0.72rem; color:var(--slate-500); font-weight:600;"></span>
+        </div>
+        <div style="position:relative;">
+          <input type="password" id="modal-fp-newpass" placeholder="Create strong new password" required minlength="6" oninput="checkFPPasswordStrength()" style="width:100%; padding:10px 14px; padding-right:40px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          <button type="button" onclick="toggleFPPasswordVisibility('modal-fp-newpass')" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--slate-400); cursor:pointer; font-size:0.85rem;" aria-label="Toggle password visibility">👁️</button>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label for="modal-fp-confirmpass" style="font-weight:700; font-size:0.85rem; color:var(--navy-900); display:block; margin-bottom:4px;">
+          Confirm New Password *
+        </label>
+        <div style="position:relative;">
+          <input type="password" id="modal-fp-confirmpass" placeholder="Re-enter new password" required minlength="6" style="width:100%; padding:10px 14px; padding-right:40px; border-radius:8px; border:1px solid var(--slate-300); font-size:0.88rem;">
+          <button type="button" onclick="toggleFPPasswordVisibility('modal-fp-confirmpass')" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--slate-400); cursor:pointer; font-size:0.85rem;" aria-label="Toggle confirm password visibility">👁️</button>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-outline" onclick="resendForgotPasswordCode()" id="modal-fp-resend-btn" style="font-size:0.82rem; padding:8px 14px;">
+          🔄 Resend Code
+        </button>
+        <div style="display:flex; gap:10px;">
+          <button type="button" class="btn btn-outline" onclick="closeForgotPasswordModal()" style="font-size:0.85rem; padding:10px 16px;">
+            Cancel
+          </button>
+          <button type="submit" id="modal-fp-reset-btn" class="btn btn-emerald" style="font-weight:700; font-size:0.9rem; padding:10px 20px;">
+            💾 Reset Password & Log In
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <!-- STEP 3: SUCCESS CONFIRMATION -->
+    <div id="modal-fp-step3-success" style="display:none; text-align:center; padding:16px 0;">
+      <div style="width:64px; height:64px; border-radius:50%; background:#ECFDF5; border:2px solid #10B981; color:#10B981; display:flex; align-items:center; justify-content:center; font-size:1.8rem; margin:0 auto 16px;">
+        ✓
+      </div>
+      <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin-bottom:6px;">
+        Password Reset Successful!
+      </h3>
+      <p style="font-size:0.88rem; color:var(--slate-600); margin-bottom:20px; line-height:1.5;">
+        Your password has been successfully updated. All previous active sessions have been securely revoked. You can now sign in with your new credentials.
+      </p>
+      <button type="button" class="btn btn-emerald" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;" onclick="completeForgotPasswordFlow()">
+        🚀 Proceed to Portal Sign In
+      </button>
+    </div>
+
+  </div>
+</div>
+
 <script>
 /* ========================================
    DATA MODELS & STATE
@@ -6017,10 +6317,19 @@ function getInitials(str) {
 function switchCustomerAuthTab(mode) {
   const signinBtn = document.getElementById('cust-auth-tab-signin');
   const regBtn = document.getElementById('cust-auth-tab-register');
+  const tabBar = document.getElementById('cust-auth-tab-bar');
   const signinForm = document.getElementById('cust-form-signin');
   const regForm = document.getElementById('cust-form-register');
+  const forgotForm = document.getElementById('cust-form-forgot');
+  const resetForm = document.getElementById('cust-form-reset');
   const title = document.getElementById('cust-auth-title');
   const subtitle = document.getElementById('cust-auth-subtitle');
+
+  if (signinForm) signinForm.style.display = 'none';
+  if (regForm) regForm.style.display = 'none';
+  if (forgotForm) forgotForm.style.display = 'none';
+  if (resetForm) resetForm.style.display = 'none';
+  if (tabBar) tabBar.style.display = (mode === 'forgot' || mode === 'reset') ? 'none' : 'flex';
 
   if (mode === 'register') {
     if (signinBtn) {
@@ -6033,10 +6342,17 @@ function switchCustomerAuthTab(mode) {
       regBtn.style.color = 'var(--navy-900)';
       regBtn.style.boxShadow = 'var(--shadow-sm)';
     }
-    if (signinForm) signinForm.style.display = 'none';
     if (regForm) regForm.style.display = 'block';
     if (title) title.innerText = 'Register as Verified Customer';
     if (subtitle) subtitle.innerText = 'Create your verified shopper profile, write DPA-masked reviews, and help protect honest Filipino enterprises.';
+  } else if (mode === 'forgot') {
+    if (forgotForm) forgotForm.style.display = 'block';
+    if (title) title.innerText = 'Reset Customer Password';
+    if (subtitle) subtitle.innerText = 'Enter your email address to initiate secure credential recovery and dispatch an authorized reset token.';
+  } else if (mode === 'reset') {
+    if (resetForm) resetForm.style.display = 'block';
+    if (title) title.innerText = 'Set New Customer Password';
+    if (subtitle) subtitle.innerText = 'Configure your new secure customer password using your verified recovery token.';
   } else {
     if (regBtn) {
       regBtn.style.background = 'transparent';
@@ -6048,10 +6364,78 @@ function switchCustomerAuthTab(mode) {
       signinBtn.style.color = 'var(--navy-900)';
       signinBtn.style.boxShadow = 'var(--shadow-sm)';
     }
-    if (regForm) regForm.style.display = 'none';
     if (signinForm) signinForm.style.display = 'block';
     if (title) title.innerText = 'Customer Portal Sign In';
     if (subtitle) subtitle.innerText = 'Access your verified business reviews, manage your DPA identity masking preferences, and protect honest Filipino enterprises.';
+  }
+}
+
+async function handleCustomerForgotPasswordSubmit(e) {
+  if (e) e.preventDefault();
+  const email = document.getElementById('cust-forgot-email')?.value?.trim();
+  const btn = document.getElementById('cust-forgot-btn');
+  if (!email) { alert("Please enter your registered customer email."); return; }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Dispatching Reset Link...';
+  }
+
+  try {
+    const res = await apiCall('/api/customer/auth/forgot-password', 'POST', { email });
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '📨 Dispatch Customer Password Reset Link';
+    }
+
+    const token = res.resetToken || `PRT-${Math.floor(10000 + Math.random() * 90000)}`;
+    alert(`${res.message || 'Password reset token generated!'}\n\n[SIMULATED DISPATCH FOR DEMO]\nReset Token: ${token}`);
+    
+    // Auto-advance to reset tab with token populated
+    switchCustomerAuthTab('reset');
+    const tokenInput = document.getElementById('cust-reset-token-val');
+    if (tokenInput) tokenInput.value = token;
+  } catch (err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '📨 Dispatch Customer Password Reset Link';
+    }
+    alert(err.message || 'Failed to dispatch reset link. Please try again.');
+  }
+}
+
+async function handleCustomerResetPasswordSubmit(e) {
+  if (e) e.preventDefault();
+  const token = document.getElementById('cust-reset-token-val')?.value?.trim();
+  const newPass = document.getElementById('cust-reset-newpass')?.value;
+  const confirmPass = document.getElementById('cust-reset-confirmpass')?.value;
+  const btn = document.getElementById('cust-reset-btn');
+
+  if (!token) { alert("Please enter the password reset token."); return; }
+  if (!newPass || newPass.length < 6) { alert("Password must be at least 6 characters long."); return; }
+  if (newPass !== confirmPass) { alert("Passwords do not match. Please re-enter."); return; }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Updating Password...';
+  }
+
+  try {
+    const res = await apiCall('/api/customer/auth/reset-password', 'POST', { token, newPassword: newPass });
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '💾 Save New Password & Sign In';
+    }
+    alert(res.message || "Password successfully reset! You can now log in with your new password.");
+    switchCustomerAuthTab('signin');
+    const passInput = document.getElementById('c-login-pass');
+    if (passInput) passInput.value = newPass;
+  } catch (err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '💾 Save New Password & Sign In';
+    }
+    alert(err.message || 'Failed to reset password. Token may be invalid or expired.');
   }
 }
 
@@ -6378,10 +6762,19 @@ function renderMerchantKPIPanel(biz) {
 function switchBusinessAuthTab(mode) {
   const signinBtn = document.getElementById('biz-auth-tab-signin');
   const regBtn = document.getElementById('biz-auth-tab-register');
+  const tabBar = document.getElementById('biz-auth-tab-bar');
   const signinForm = document.getElementById('biz-form-signin');
   const regForm = document.getElementById('biz-form-register');
+  const forgotForm = document.getElementById('biz-form-forgot');
+  const resetForm = document.getElementById('biz-form-reset');
   const title = document.getElementById('biz-auth-title');
   const subtitle = document.getElementById('biz-auth-subtitle');
+
+  if (signinForm) signinForm.style.display = 'none';
+  if (regForm) regForm.style.display = 'none';
+  if (forgotForm) forgotForm.style.display = 'none';
+  if (resetForm) resetForm.style.display = 'none';
+  if (tabBar) tabBar.style.display = (mode === 'forgot' || mode === 'reset') ? 'none' : 'flex';
 
   if (mode === 'register') {
     if (signinBtn) {
@@ -6394,10 +6787,17 @@ function switchBusinessAuthTab(mode) {
       regBtn.style.color = 'var(--navy-900)';
       regBtn.style.boxShadow = 'var(--shadow-sm)';
     }
-    if (signinForm) signinForm.style.display = 'none';
     if (regForm) regForm.style.display = 'block';
     if (title) title.innerText = 'Register New Enterprise Profile';
     if (subtitle) subtitle.innerText = 'Register your Philippine business, submit SEC/DTI documents, and earn the Tatak Pinoy, Tatak Sigurado badge.';
+  } else if (mode === 'forgot') {
+    if (forgotForm) forgotForm.style.display = 'block';
+    if (title) title.innerText = 'Reset Business Hub Password';
+    if (subtitle) subtitle.innerText = 'Enter your registered corporate email to dispatch an authenticated password reset link.';
+  } else if (mode === 'reset') {
+    if (resetForm) resetForm.style.display = 'block';
+    if (title) title.innerText = 'Set New Business Password';
+    if (subtitle) subtitle.innerText = 'Establish your new merchant password using your verified security token.';
   } else {
     if (regBtn) {
       regBtn.style.background = 'transparent';
@@ -6409,10 +6809,78 @@ function switchBusinessAuthTab(mode) {
       signinBtn.style.color = 'var(--navy-900)';
       signinBtn.style.boxShadow = 'var(--shadow-sm)';
     }
-    if (regForm) regForm.style.display = 'none';
     if (signinForm) signinForm.style.display = 'block';
     if (title) title.innerText = 'Business Hub Sign In';
     if (subtitle) subtitle.innerText = 'Manage your Tatak Pinoy verification, upload SEC/DTI filings, respond to customer reviews, and monitor operational KPIs.';
+  }
+}
+
+async function handleBusinessForgotPasswordSubmit(e) {
+  if (e) e.preventDefault();
+  const email = document.getElementById('biz-forgot-email')?.value?.trim();
+  const btn = document.getElementById('biz-forgot-btn');
+  if (!email) { alert("Please enter your registered corporate email."); return; }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Dispatching Reset Link...';
+  }
+
+  try {
+    const res = await apiCall('/api/business/auth/forgot-password', 'POST', { email });
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '📨 Dispatch Business Password Reset Link';
+    }
+
+    const token = res.resetToken || `PRT-${Math.floor(10000 + Math.random() * 90000)}`;
+    alert(`${res.message || 'Password reset token generated!'}\n\n[SIMULATED DISPATCH FOR DEMO]\nReset Token: ${token}`);
+    
+    // Auto-advance to reset tab with token populated
+    switchBusinessAuthTab('reset');
+    const tokenInput = document.getElementById('biz-reset-token-val');
+    if (tokenInput) tokenInput.value = token;
+  } catch (err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '📨 Dispatch Business Password Reset Link';
+    }
+    alert(err.message || 'Failed to dispatch reset link. Please try again.');
+  }
+}
+
+async function handleBusinessResetPasswordSubmit(e) {
+  if (e) e.preventDefault();
+  const token = document.getElementById('biz-reset-token-val')?.value?.trim();
+  const newPass = document.getElementById('biz-reset-newpass')?.value;
+  const confirmPass = document.getElementById('biz-reset-confirmpass')?.value;
+  const btn = document.getElementById('biz-reset-btn');
+
+  if (!token) { alert("Please enter the password reset token."); return; }
+  if (!newPass || newPass.length < 6) { alert("Password must be at least 6 characters long."); return; }
+  if (newPass !== confirmPass) { alert("Passwords do not match. Please re-enter."); return; }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Updating Password...';
+  }
+
+  try {
+    const res = await apiCall('/api/business/auth/reset-password', 'POST', { token, newPassword: newPass });
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '💾 Update Security Password & Sign In';
+    }
+    alert(res.message || "Password successfully reset! You can now log in with your new password.");
+    switchBusinessAuthTab('signin');
+    const passInput = document.getElementById('b-login-pass');
+    if (passInput) passInput.value = newPass;
+  } catch (err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '💾 Update Security Password & Sign In';
+    }
+    alert(err.message || 'Failed to reset password. Token may be invalid or expired.');
   }
 }
 
@@ -8464,6 +8932,372 @@ async function logoutAllFreelancerSessions() {
   logoutFreelancer(false);
 }
 
+/* ==========================================================================
+   FORGOTTEN PASSWORD & OTP VERIFICATION MODAL ENGINE
+   ========================================================================== */
+let FORGOT_PASSWORD_STATE = {
+  portalType: 'freelancer',
+  email: '',
+  verificationCode: '',
+  resetToken: '',
+  newPassword: '',
+  resendCountdown: 0,
+  resendInterval: null
+};
+
+function openForgotPasswordModal(portalType = 'freelancer', defaultEmail = '') {
+  FORGOT_PASSWORD_STATE.portalType = portalType;
+  
+  const modal = document.getElementById('modal-forgot-password');
+  const badgeEl = document.getElementById('modal-fp-badge');
+  const titleEl = document.getElementById('modal-fp-title');
+  const emailInput = document.getElementById('modal-fp-email');
+  
+  if (portalType === 'freelancer') {
+    if (badgeEl) {
+      badgeEl.className = 'badge badge-emerald';
+      badgeEl.textContent = '💼 Verified Freelancer Credential Recovery';
+    }
+    if (titleEl) titleEl.textContent = 'Freelancer Password Recovery';
+    if (!defaultEmail) {
+      const frEmail = document.getElementById('fr-login-email')?.value?.trim();
+      defaultEmail = frEmail || 'freelancer@marcoreyes.dev';
+    }
+  } else if (portalType === 'customer') {
+    if (badgeEl) {
+      badgeEl.className = 'badge badge-blue';
+      badgeEl.textContent = '👤 Verified Customer Credential Recovery';
+    }
+    if (titleEl) titleEl.textContent = 'Customer Password Recovery';
+    if (!defaultEmail) {
+      const custEmail = document.getElementById('c-login-email')?.value?.trim();
+      defaultEmail = custEmail || 'customer@veripinoy.ph';
+    }
+  } else if (portalType === 'business') {
+    if (badgeEl) {
+      badgeEl.className = 'badge badge-gold';
+      badgeEl.textContent = '🏢 Business Hub Credential Recovery';
+    }
+    if (titleEl) titleEl.textContent = 'Business Password Recovery';
+    if (!defaultEmail) {
+      const bizEmail = document.getElementById('b-login-email')?.value?.trim();
+      defaultEmail = bizEmail || 'owner@bahaykubo.ph';
+    }
+  }
+
+  if (emailInput && defaultEmail) {
+    emailInput.value = defaultEmail;
+  }
+
+  switchForgotPasswordStep(1);
+
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
+}
+
+function closeForgotPasswordModal() {
+  const modal = document.getElementById('modal-forgot-password');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  if (FORGOT_PASSWORD_STATE.resendInterval) {
+    clearInterval(FORGOT_PASSWORD_STATE.resendInterval);
+    FORGOT_PASSWORD_STATE.resendInterval = null;
+  }
+}
+
+function selectFPDemoEmail(email, portalType) {
+  const emailInput = document.getElementById('modal-fp-email');
+  if (emailInput) emailInput.value = email;
+  if (portalType) openForgotPasswordModal(portalType, email);
+}
+
+function switchForgotPasswordStep(step) {
+  const form1 = document.getElementById('modal-fp-form-step1');
+  const form2 = document.getElementById('modal-fp-form-step2');
+  const step3 = document.getElementById('modal-fp-step3-success');
+
+  const ind1 = document.getElementById('fp-step-indicator-1');
+  const num1 = document.getElementById('fp-step-num-1');
+  const line1 = document.getElementById('fp-step-line-1');
+
+  const ind2 = document.getElementById('fp-step-indicator-2');
+  const num2 = document.getElementById('fp-step-num-2');
+  const line2 = document.getElementById('fp-step-line-2');
+
+  const ind3 = document.getElementById('fp-step-indicator-3');
+  const num3 = document.getElementById('fp-step-num-3');
+
+  if (form1) form1.style.display = step === 1 ? 'block' : 'none';
+  if (form2) form2.style.display = step === 2 ? 'block' : 'none';
+  if (step3) step3.style.display = step === 3 ? 'block' : 'none';
+
+  if (step === 1) {
+    if (num1) { num1.style.background = 'var(--emerald-600)'; num1.style.color = 'white'; num1.textContent = '1'; }
+    if (ind1) ind1.style.color = 'var(--emerald-700)';
+    if (line1) line1.style.background = 'var(--slate-300)';
+
+    if (num2) { num2.style.background = 'var(--slate-300)'; num2.style.color = 'var(--slate-600)'; }
+    if (ind2) ind2.style.color = 'var(--slate-500)';
+    if (line2) line2.style.background = 'var(--slate-300)';
+
+    if (num3) { num3.style.background = 'var(--slate-300)'; num3.style.color = 'var(--slate-600)'; }
+    if (ind3) ind3.style.color = 'var(--slate-500)';
+  } else if (step === 2) {
+    if (num1) { num1.style.background = 'var(--emerald-600)'; num1.style.color = 'white'; num1.textContent = '✓'; }
+    if (ind1) ind1.style.color = 'var(--emerald-700)';
+    if (line1) line1.style.background = 'var(--emerald-600)';
+
+    if (num2) { num2.style.background = 'var(--emerald-600)'; num2.style.color = 'white'; num2.textContent = '2'; }
+    if (ind2) ind2.style.color = 'var(--emerald-700)';
+    if (line2) line2.style.background = 'var(--slate-300)';
+
+    if (num3) { num3.style.background = 'var(--slate-300)'; num3.style.color = 'var(--slate-600)'; }
+    if (ind3) ind3.style.color = 'var(--slate-500)';
+
+    const codeInput = document.getElementById('modal-fp-code');
+    if (codeInput) setTimeout(() => codeInput.focus(), 150);
+  } else if (step === 3) {
+    if (num1) { num1.style.background = 'var(--emerald-600)'; num1.style.color = 'white'; num1.textContent = '✓'; }
+    if (ind1) ind1.style.color = 'var(--emerald-700)';
+    if (line1) line1.style.background = 'var(--emerald-600)';
+
+    if (num2) { num2.style.background = 'var(--emerald-600)'; num2.style.color = 'white'; num2.textContent = '✓'; }
+    if (ind2) ind2.style.color = 'var(--emerald-700)';
+    if (line2) line2.style.background = 'var(--emerald-600)';
+
+    if (num3) { num3.style.background = 'var(--emerald-600)'; num3.style.color = 'white'; num3.textContent = '✓'; }
+    if (ind3) ind3.style.color = 'var(--emerald-700)';
+  }
+}
+
+async function handleForgotPasswordRequestCode(e) {
+  if (e) e.preventDefault();
+  const email = document.getElementById('modal-fp-email')?.value?.trim();
+  const sendBtn = document.getElementById('modal-fp-send-btn');
+  
+  if (!email) {
+    alert("Please enter a valid email address.");
+    return;
+  }
+
+  FORGOT_PASSWORD_STATE.email = email;
+
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '⏳ Generating Verification Code...';
+  }
+
+  try {
+    const res = await apiCall('/api/auth/forgot-password', 'POST', { email });
+    const code = res.verificationCode || Math.floor(100000 + Math.random() * 900000).toString();
+    const token = res.resetToken || `PRT-${Math.floor(10000 + Math.random() * 90000)}`;
+    
+    FORGOT_PASSWORD_STATE.verificationCode = code;
+    FORGOT_PASSWORD_STATE.resetToken = token;
+
+    const emailDisplay = document.getElementById('modal-fp-target-email-display');
+    if (emailDisplay) emailDisplay.textContent = email;
+
+    const codeDisplayVal = document.getElementById('modal-fp-display-code-val');
+    if (codeDisplayVal) codeDisplayVal.textContent = code;
+
+    // Reset code input and populate with code for convenience
+    const codeInput = document.getElementById('modal-fp-code');
+    if (codeInput) codeInput.value = code;
+
+    // Transition to Step 2
+    switchForgotPasswordStep(2);
+    startFPResendCountdown();
+
+    alert(`📨 Verification Code Dispatched!\n\nTo: ${email}\n6-Digit Verification Code: ${code}\n\n(We've auto-populated the verification code in the input for your convenience.)`);
+  } catch (err) {
+    alert(err.message || 'Failed to dispatch verification code. Please check your email.');
+  } finally {
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = '📨 Send Verification Code';
+    }
+  }
+}
+
+function autoFillDemoCode() {
+  const code = FORGOT_PASSWORD_STATE.verificationCode || '849201';
+  const codeInput = document.getElementById('modal-fp-code');
+  if (codeInput) {
+    codeInput.value = code;
+    codeInput.focus();
+  }
+}
+
+function startFPResendCountdown() {
+  FORGOT_PASSWORD_STATE.resendCountdown = 45;
+  const resendBtn = document.getElementById('modal-fp-resend-btn');
+  if (FORGOT_PASSWORD_STATE.resendInterval) clearInterval(FORGOT_PASSWORD_STATE.resendInterval);
+
+  if (resendBtn) {
+    resendBtn.disabled = true;
+    resendBtn.innerHTML = `🔄 Resend Code (${FORGOT_PASSWORD_STATE.resendCountdown}s)`;
+  }
+
+  FORGOT_PASSWORD_STATE.resendInterval = setInterval(() => {
+    FORGOT_PASSWORD_STATE.resendCountdown -= 1;
+    if (FORGOT_PASSWORD_STATE.resendCountdown <= 0) {
+      clearInterval(FORGOT_PASSWORD_STATE.resendInterval);
+      FORGOT_PASSWORD_STATE.resendInterval = null;
+      if (resendBtn) {
+        resendBtn.disabled = false;
+        resendBtn.innerHTML = '🔄 Resend Code';
+      }
+    } else {
+      if (resendBtn) {
+        resendBtn.innerHTML = `🔄 Resend Code (${FORGOT_PASSWORD_STATE.resendCountdown}s)`;
+      }
+    }
+  }, 1000);
+}
+
+async function resendForgotPasswordCode() {
+  if (FORGOT_PASSWORD_STATE.resendCountdown > 0) return;
+  const email = FORGOT_PASSWORD_STATE.email;
+  if (!email) {
+    switchForgotPasswordStep(1);
+    return;
+  }
+  const resendBtn = document.getElementById('modal-fp-resend-btn');
+  if (resendBtn) {
+    resendBtn.disabled = true;
+    resendBtn.innerHTML = '⏳ Resending...';
+  }
+  try {
+    const res = await apiCall('/api/auth/forgot-password', 'POST', { email });
+    const code = res.verificationCode || Math.floor(100000 + Math.random() * 900000).toString();
+    FORGOT_PASSWORD_STATE.verificationCode = code;
+    FORGOT_PASSWORD_STATE.resetToken = res.resetToken || `PRT-${Math.floor(10000 + Math.random() * 90000)}`;
+
+    const codeDisplayVal = document.getElementById('modal-fp-display-code-val');
+    if (codeDisplayVal) codeDisplayVal.textContent = code;
+
+    const codeInput = document.getElementById('modal-fp-code');
+    if (codeInput) codeInput.value = code;
+
+    startFPResendCountdown();
+    alert(`🔄 Fresh 6-Digit Verification Code Dispatched!\n\nNew Code: ${code}`);
+  } catch (err) {
+    alert(err.message || 'Failed to resend code.');
+    if (resendBtn) {
+      resendBtn.disabled = false;
+      resendBtn.innerHTML = '🔄 Resend Code';
+    }
+  }
+}
+
+function toggleFPPasswordVisibility(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function checkFPPasswordStrength() {
+  const val = document.getElementById('modal-fp-newpass')?.value || '';
+  const indicator = document.getElementById('modal-fp-pass-strength');
+  if (!indicator) return;
+
+  if (val.length === 0) {
+    indicator.textContent = '';
+    return;
+  }
+  if (val.length < 6) {
+    indicator.textContent = '⚠️ Too short (min. 6 chars)';
+    indicator.style.color = 'var(--rose-600)';
+  } else if (val.length >= 8 && /[0-9]/.test(val) && /[^A-Za-z0-9]/.test(val)) {
+    indicator.textContent = '🔒 Strong password';
+    indicator.style.color = 'var(--emerald-600)';
+  } else {
+    indicator.textContent = '✓ Good password';
+    indicator.style.color = 'var(--amber-600)';
+  }
+}
+
+async function handleForgotPasswordResetSubmit(e) {
+  if (e) e.preventDefault();
+  const codeVal = document.getElementById('modal-fp-code')?.value?.trim();
+  const newPass = document.getElementById('modal-fp-newpass')?.value;
+  const confirmPass = document.getElementById('modal-fp-confirmpass')?.value;
+  const resetBtn = document.getElementById('modal-fp-reset-btn');
+
+  if (!codeVal) {
+    alert("Please enter the 6-digit verification code or reset token.");
+    return;
+  }
+  if (!newPass || newPass.length < 6) {
+    alert("New password must be at least 6 characters long.");
+    return;
+  }
+  if (newPass !== confirmPass) {
+    alert("Passwords do not match. Please re-enter.");
+    return;
+  }
+
+  if (resetBtn) {
+    resetBtn.disabled = true;
+    resetBtn.innerHTML = '⏳ Verifying & Updating...';
+  }
+
+  try {
+    const res = await apiCall('/api/auth/reset-password', 'POST', {
+      code: codeVal,
+      token: codeVal,
+      newPassword: newPass
+    });
+
+    FORGOT_PASSWORD_STATE.newPassword = newPass;
+    switchForgotPasswordStep(3);
+  } catch (err) {
+    alert(err.message || 'Failed to reset password. The verification code may be invalid or expired.');
+  } finally {
+    if (resetBtn) {
+      resetBtn.disabled = false;
+      resetBtn.innerHTML = '💾 Reset Password & Log In';
+    }
+  }
+}
+
+function completeForgotPasswordFlow() {
+  closeForgotPasswordModal();
+  const portalType = FORGOT_PASSWORD_STATE.portalType;
+  const email = FORGOT_PASSWORD_STATE.email;
+  const newPass = FORGOT_PASSWORD_STATE.newPassword;
+
+  if (portalType === 'freelancer') {
+    route('freelancer-login');
+    const emailInput = document.getElementById('fr-login-email');
+    const passInput = document.getElementById('fr-login-pass');
+    if (emailInput && email) emailInput.value = email;
+    if (passInput && newPass) passInput.value = newPass;
+    if (passInput) passInput.focus();
+  } else if (portalType === 'customer') {
+    route('auth-customer');
+    switchCustomerAuthTab('signin');
+    const emailInput = document.getElementById('c-login-email');
+    const passInput = document.getElementById('c-login-pass');
+    if (emailInput && email) emailInput.value = email;
+    if (passInput && newPass) passInput.value = newPass;
+    if (passInput) passInput.focus();
+  } else if (portalType === 'business') {
+    route('auth-business');
+    switchBusinessAuthTab('signin');
+    const emailInput = document.getElementById('b-login-email');
+    const passInput = document.getElementById('b-login-pass');
+    if (emailInput && email) emailInput.value = email;
+    if (passInput && newPass) passInput.value = newPass;
+    if (passInput) passInput.focus();
+  }
+}
+
 /* NAVIGATION HEADER SYNC ENGINE */
 function updateNavDisplay() {
   const custNav = document.getElementById('nav-cust-text');
@@ -9765,14 +10599,18 @@ function resetFreelancerFilters() {
 
 async function openPublicFreelancerProfile(usernameOrId) {
   try {
+    route('freelancer-public');
     const data = await apiCall(`/api/public/freelancers/${usernameOrId}`);
     CURRENT_PROFILE_FREELANCER = data;
 
-    const p = data;
-    const isVerified = p.isVerified;
+    const p = data || {};
+    const isVerified = Boolean(p.isVerified);
 
-    document.getElementById('pub-fr-photo').src = p.profilePhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80';
-    document.getElementById('pub-fr-name').innerText = p.verifiedName || p.fullName;
+    const photoEl = document.getElementById('pub-fr-photo');
+    if (photoEl) photoEl.src = p.profilePhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80';
+
+    const nameEl = document.getElementById('pub-fr-name');
+    if (nameEl) nameEl.innerText = p.verifiedName || p.fullName || 'Verified Freelancer';
     
     const badgeEl = document.getElementById('pub-fr-badge');
     if (badgeEl) {
@@ -9787,18 +10625,29 @@ async function openPublicFreelancerProfile(usernameOrId) {
       }
     }
 
-    document.getElementById('pub-fr-title').innerText = p.professionalTitle || p.professionalCategory;
-    document.getElementById('pub-fr-category').innerText = `🏢 ${p.professionalCategory}`;
-    document.getElementById('pub-fr-location').innerText = `${p.city}, ${p.country}`;
-    document.getElementById('pub-fr-exp').innerText = `${p.yearsOfExperience} Years`;
+    const titleEl = document.getElementById('pub-fr-title');
+    if (titleEl) titleEl.innerText = p.professionalTitle || p.professionalCategory || 'Professional Specialist';
+
+    const catEl = document.getElementById('pub-fr-category');
+    if (catEl) catEl.innerText = `🏢 ${p.professionalCategory || 'Services'}`;
+
+    const locEl = document.getElementById('pub-fr-location');
+    if (locEl) locEl.innerText = `${p.city || 'Metro Manila'}, ${p.country || 'Philippines'}`;
+
+    const expEl = document.getElementById('pub-fr-exp');
+    if (expEl) expEl.innerText = `${p.yearsOfExperience || 0} Years`;
     
     const availTag = document.getElementById('pub-fr-avail-tag');
     if (availTag) availTag.innerText = `🟢 ${p.availability || 'Available for Hire'}`;
 
-    document.getElementById('pub-fr-rating-text').innerText = (p.rating || 5.0).toFixed(1);
-    document.getElementById('pub-fr-review-count').innerText = `${p.reviewCount || 0} reviews`;
+    const ratingEl = document.getElementById('pub-fr-rating-text');
+    if (ratingEl) ratingEl.innerText = (p.rating || 5.0).toFixed(1);
 
-    document.getElementById('pub-fr-summary').innerText = p.summary || 'No bio provided.';
+    const revCountEl = document.getElementById('pub-fr-review-count');
+    if (revCountEl) revCountEl.innerText = `${p.reviewCount || 0} reviews`;
+
+    const summaryEl = document.getElementById('pub-fr-summary');
+    if (summaryEl) summaryEl.innerText = p.summary || 'No bio provided.';
 
     const sideStatus = document.getElementById('side-fr-status');
     if (sideStatus) {
@@ -9854,11 +10703,11 @@ async function openPublicFreelancerProfile(usernameOrId) {
                 <strong style="font-size: 0.95rem; color: var(--navy-900);">${r.author_name}</strong>
                 <span class="badge badge-emerald" style="font-size: 0.72rem; margin-left: 8px;">✓ Verified Client</span>
               </div>
-              <span style="color: #F59E0B; font-weight: 800; font-size: 0.95rem;">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
+              <span style="color: #F59E0B; font-weight: 800; font-size: 0.95rem;">${'★'.repeat(r.rating || 5)}${'☆'.repeat(Math.max(0, 5 - (r.rating || 5)))}</span>
             </div>
             ${r.review_title ? `<h4 style="font-family: var(--font-heading); font-size: 0.92rem; font-weight: 800; color: var(--navy-900); margin-bottom: 4px;">${r.review_title}</h4>` : ''}
             <p style="font-size: 0.88rem; color: var(--slate-700); line-height: 1.5; margin: 0;">"${r.review_text}"</p>
-            <div style="font-size: 0.75rem; color: var(--slate-400); margin-top: 8px;">Published: ${new Date(r.created_at).toLocaleDateString()}</div>
+            <div style="font-size: 0.75rem; color: var(--slate-400); margin-top: 8px;">Published: ${r.created_at ? new Date(r.created_at).toLocaleDateString() : '2026'}</div>
           </div>
         `).join('');
       }
@@ -9867,8 +10716,6 @@ async function openPublicFreelancerProfile(usernameOrId) {
     if (window.history && window.history.pushState) {
       window.history.pushState({ username: p.username || p.id }, '', `/freelancers/${p.username || p.id}`);
     }
-
-    route('freelancer-public');
   } catch (err) {
     console.error('Error opening freelancer profile:', err);
     alert("Failed to load freelancer profile: " + err.message);

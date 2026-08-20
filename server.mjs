@@ -1016,8 +1016,8 @@ app.post(['/api/business/auth/register', '/api/auth/register-business'], (req, r
   });
 });
 
-// POST /api/customer/auth/forgot-password, /api/business/auth/forgot-password, /api/auth/forgot-password
-app.post(['/api/customer/auth/forgot-password', '/api/business/auth/forgot-password', '/api/auth/forgot-password'], (req, res) => {
+// POST /api/customer/auth/forgot-password, /api/business/auth/forgot-password, /api/freelancer/auth/forgot-password, /api/auth/forgot-password
+app.post(['/api/customer/auth/forgot-password', '/api/business/auth/forgot-password', '/api/freelancer/auth/forgot-password', '/api/auth/forgot-password'], (req, res) => {
   const { email } = req.body;
   const now = new Date().toISOString();
 
@@ -1027,10 +1027,13 @@ app.post(['/api/customer/auth/forgot-password', '/api/business/auth/forgot-passw
 
   const user = queryOne('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [email]);
   let rawToken = null;
+  let verificationCode = null;
 
   if (user) {
     rawToken = generateSecureToken();
+    verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const tHash = hashToken(rawToken);
+    const codeHash = hashToken(verificationCode);
     const tokenId = `PRT-${Math.floor(10000 + Math.random() * 90000)}`;
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour expiration
 
@@ -1040,45 +1043,58 @@ app.post(['/api/customer/auth/forgot-password', '/api/business/auth/forgot-passw
       [tokenId, user.id, tHash, expiresAt, now]
     );
 
+    // Also store the 6-digit verification code token record for convenience
+    executeRun(
+      `INSERT INTO user_password_reset_tokens (id, user_id, token_hash, used, expires_at, created_at)
+       VALUES (?, ?, ?, 0, ?, ?)`,
+      [`PRT-C-${Math.floor(10000 + Math.random() * 90000)}`, user.id, codeHash, expiresAt, now]
+    );
+
     logSecurityEvent(req, {
       user_id: user.id,
       user_type: user.user_type,
       eventType: 'password_reset_requested',
       severity: 'info',
-      details: `Password reset requested for ${user.email}. Token ${tokenId} created.`,
+      details: `Password reset requested for ${user.email}. Verification code ${verificationCode} & token ${tokenId} created.`,
       ip_address: req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1'
     });
+  } else {
+    // If not found in users table, check demo email fallback
+    verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    rawToken = generateSecureToken();
   }
 
   // Security requirement: Do NOT reveal whether an email exists in the database.
   return res.json({
     success: true,
-    message: 'If an account exists with this email address, a secure password reset link has been sent.',
-    resetToken: rawToken
+    message: 'If an account exists with this email address, a secure verification code and password reset link have been dispatched.',
+    resetToken: rawToken,
+    verificationCode: verificationCode
   });
 });
 
-// POST /api/customer/auth/reset-password, /api/business/auth/reset-password, /api/auth/reset-password
-app.post(['/api/customer/auth/reset-password', '/api/business/auth/reset-password', '/api/auth/reset-password'], (req, res) => {
-  const { token, newPassword } = req.body;
+// POST /api/customer/auth/reset-password, /api/business/auth/reset-password, /api/freelancer/auth/reset-password, /api/auth/reset-password
+app.post(['/api/customer/auth/reset-password', '/api/business/auth/reset-password', '/api/freelancer/auth/reset-password', '/api/auth/reset-password'], (req, res) => {
+  const { token, code, newPassword } = req.body;
+  const tokenOrCode = (token || code || '').trim();
   const now = new Date().toISOString();
 
-  if (!token || !newPassword) {
-    return res.status(400).json({ error: 'Reset token and new password are required.' });
+  if (!tokenOrCode || !newPassword) {
+    return res.status(400).json({ error: 'Verification code or reset token, and new password are required.' });
   }
 
   if (newPassword.length < 6) {
     return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
   }
 
-  const tHash = hashToken(token);
+  const tHash = hashToken(tokenOrCode);
   const tokenRecord = queryOne(
     `SELECT * FROM user_password_reset_tokens WHERE token_hash = ? AND used = 0`,
     [tHash]
   );
 
   if (!tokenRecord || new Date(tokenRecord.expires_at) < new Date()) {
-    return res.status(400).json({ error: 'Invalid, used, or expired password reset link. Please request a new one.' });
+    return res.status(400).json({ error: 'Invalid, used, or expired verification code / reset link. Please request a new one.' });
   }
 
   // Mark token used
