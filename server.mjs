@@ -3564,6 +3564,218 @@ app.post('/api/freelancer/profile', (req, res) => {
   return res.json({ success: true, freelancerId: frId, message: 'Freelancer profile saved successfully' });
 });
 
+// POST /api/freelancer/profile/photo (Upload or update cropped profile picture)
+app.post(['/api/freelancer/profile/photo', '/api/freelancer/profile/avatar'], (req, res) => {
+  try {
+    const { userId, freelancerId, photo, photo_url, profilePhoto } = req.body;
+    const finalPhoto = photo || photo_url || profilePhoto;
+    const id = freelancerId || userId || 'VP-FR-10284';
+
+    if (!finalPhoto) {
+      return res.status(400).json({ error: 'Image data is required' });
+    }
+
+    // Validate size (max 5MB in binary ~ 7MB base64)
+    if (finalPhoto.length > 7 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Image file size exceeds the 5MB limit.' });
+    }
+
+    const now = new Date().toISOString();
+    let existing = queryOne('SELECT id, user_id, full_name, profile_photo FROM freelancer_profiles WHERE id = ? OR user_id = ?', [id, id]);
+
+    if (existing) {
+      executeRun(
+        'UPDATE freelancer_profiles SET profile_photo = ?, updated_at = ? WHERE id = ?',
+        [finalPhoto, now, existing.id]
+      );
+      logAudit(req, {
+        action: 'FREELANCER_PHOTO_UPDATED',
+        entityType: 'FREELANCER_PROFILE',
+        entityId: existing.id,
+        actorName: existing.full_name,
+        details: 'Freelancer updated profile avatar image via crop management tool.'
+      });
+      return res.json({
+        success: true,
+        photo_url: finalPhoto,
+        freelancerId: existing.id,
+        message: 'Profile picture updated successfully!'
+      });
+    } else {
+      const frId = id.startsWith('VP-FR-') ? id : `VP-FR-${Math.floor(10000 + Math.random() * 90000)}`;
+      executeRun(
+        `INSERT INTO freelancer_profiles (id, user_id, full_name, professional_name, profile_photo, professional_category, skills, location, years_of_experience, portfolio_links, website_social_links, verification_status, kyc_verification_status, created_at, updated_at)
+         VALUES (?, ?, 'Verified Freelancer', 'Professional Specialist', ?, 'Web & Software Development', '[]', 'Metro Manila', 1, '[]', '{}', 'pending', 'unverified', ?, ?)`,
+        [frId, id, finalPhoto, now, now]
+      );
+      return res.json({
+        success: true,
+        photo_url: finalPhoto,
+        freelancerId: frId,
+        message: 'Profile picture uploaded successfully!'
+      });
+    }
+  } catch (err) {
+    console.error('Error updating freelancer photo:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST & DELETE /api/freelancer/profile/photo/remove (Remove avatar & revert to fallback)
+app.all(['/api/freelancer/profile/photo/remove', '/api/freelancer/profile/avatar/remove'], (req, res) => {
+  try {
+    const userId = req.body?.userId || req.body?.freelancerId || req.query?.userId || req.query?.freelancerId || 'VP-FR-10284';
+    const now = new Date().toISOString();
+
+    let existing = queryOne('SELECT id, user_id, full_name, profile_photo FROM freelancer_profiles WHERE id = ? OR user_id = ?', [userId, userId]);
+    if (existing) {
+      executeRun('UPDATE freelancer_profiles SET profile_photo = NULL, updated_at = ? WHERE id = ?', [now, existing.id]);
+      logAudit(req, {
+        action: 'FREELANCER_PHOTO_REMOVED',
+        entityType: 'FREELANCER_PROFILE',
+        entityId: existing.id,
+        actorName: existing.full_name,
+        details: 'Freelancer removed profile image, reverted to default initials/placeholder avatar.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Profile picture removed. Reverted to default avatar.',
+      photo_url: null
+    });
+  } catch (err) {
+    console.error('Error removing freelancer photo:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/business/profile/:businessId
+app.get('/api/business/profile/:businessId', (req, res) => {
+  try {
+    const { businessId } = req.params;
+    let biz = queryOne('SELECT * FROM businesses WHERE id = ? OR user_id = ? OR slug = ?', [businessId, businessId, businessId]);
+    if (!biz) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    return res.json({ success: true, business: biz });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/business/profile/:businessId (Update business profile details)
+app.put('/api/business/profile/:businessId', (req, res) => {
+  try {
+    const { businessId } = req.params;
+    const { description, phone, address, website, services, business_name, logo } = req.body;
+    const now = new Date().toISOString();
+
+    let existing = queryOne('SELECT * FROM businesses WHERE id = ? OR user_id = ?', [businessId, businessId]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Business record not found' });
+    }
+
+    const finalDesc = description !== undefined ? description : existing.short_description;
+    const finalPhone = phone !== undefined ? phone : existing.business_phone;
+    const finalAddress = address !== undefined ? address : existing.business_address;
+    const finalWeb = website !== undefined ? website : existing.website;
+    const finalServices = services !== undefined ? (typeof services === 'object' ? JSON.stringify(services) : services) : existing.services;
+    const finalLogo = logo !== undefined ? logo : existing.logo;
+
+    executeRun(
+      `UPDATE businesses SET short_description = ?, business_phone = ?, business_address = ?, website = ?, services = ?, logo = ?, updated_at = ? WHERE id = ?`,
+      [finalDesc, finalPhone, finalAddress, finalWeb, finalServices, finalLogo, now, existing.id]
+    );
+
+    logAudit(req, {
+      action: 'BUSINESS_PROFILE_UPDATED',
+      entityType: 'BUSINESS',
+      entityId: existing.id,
+      actorName: existing.business_name,
+      details: 'Merchant updated business details and contact metadata.'
+    });
+
+    const updated = queryOne('SELECT * FROM businesses WHERE id = ?', [existing.id]);
+    return res.json({ success: true, business: updated, message: 'Business profile updated successfully!' });
+  } catch (err) {
+    console.error('Error updating business profile:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/business/profile/logo (Upload or update cropped company logo)
+app.post(['/api/business/profile/logo', '/api/business/logo'], (req, res) => {
+  try {
+    const { businessId, business_id, logo, logo_url } = req.body;
+    const finalLogo = logo || logo_url;
+    const id = business_id || businessId || '3';
+
+    if (!finalLogo) {
+      return res.status(400).json({ error: 'Logo image data is required' });
+    }
+
+    // Validate size (max 5MB in binary ~ 7MB base64)
+    if (finalLogo.length > 7 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Logo file size exceeds the 5MB limit.' });
+    }
+
+    const now = new Date().toISOString();
+    let existing = queryOne('SELECT * FROM businesses WHERE id = ? OR user_id = ?', [id, id]);
+
+    if (existing) {
+      executeRun('UPDATE businesses SET logo = ?, updated_at = ? WHERE id = ?', [finalLogo, now, existing.id]);
+      logAudit(req, {
+        action: 'BUSINESS_LOGO_UPDATED',
+        entityType: 'BUSINESS',
+        entityId: existing.id,
+        actorName: existing.business_name,
+        details: 'Merchant uploaded/cropped new company brand logo.'
+      });
+      return res.json({
+        success: true,
+        logo_url: finalLogo,
+        businessId: existing.id,
+        message: 'Company logo updated successfully!'
+      });
+    } else {
+      return res.status(404).json({ error: 'Business not found to update logo' });
+    }
+  } catch (err) {
+    console.error('Error updating business logo:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST & DELETE /api/business/profile/logo/remove (Remove company logo & revert to initials)
+app.all(['/api/business/profile/logo/remove', '/api/business/logo/remove'], (req, res) => {
+  try {
+    const businessId = req.body?.businessId || req.body?.business_id || req.query?.business_id || '3';
+    const now = new Date().toISOString();
+
+    let existing = queryOne('SELECT * FROM businesses WHERE id = ? OR user_id = ?', [businessId, businessId]);
+    if (existing) {
+      executeRun('UPDATE businesses SET logo = NULL, updated_at = ? WHERE id = ?', [now, existing.id]);
+      logAudit(req, {
+        action: 'BUSINESS_LOGO_REMOVED',
+        entityType: 'BUSINESS',
+        entityId: existing.id,
+        actorName: existing.business_name,
+        details: 'Merchant removed company logo, reverted to business initials badge.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Company logo removed. Reverted to brand initials badge.',
+      logo_url: null
+    });
+  } catch (err) {
+    console.error('Error removing business logo:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/freelancer/apply-verification
 app.post('/api/freelancer/apply-verification', (req, res) => {
   const { freelancerId, kycAppId } = req.body;
@@ -3614,6 +3826,818 @@ app.post('/api/freelancer/engagements', (req, res) => {
   );
 
   return res.json({ success: true, engagementId: engId, message: 'Work engagement created successfully' });
+});
+
+/* ==========================================================================
+   MILESTONES & WORK LOGS ENDPOINTS
+   ========================================================================== */
+
+// GET /api/freelancer/milestones
+app.get('/api/freelancer/milestones', (req, res) => {
+  try {
+    const { freelancer_id, engagement_id, status } = req.query;
+    let query = `
+      SELECT m.*, e.project_name, e.client_identifier, e.agreed_amount as contract_total
+      FROM freelancer_milestones m
+      JOIN freelancer_engagements e ON m.engagement_id = e.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (freelancer_id) {
+      query += ` AND m.freelancer_id = ?`;
+      params.push(freelancer_id);
+    }
+    if (engagement_id) {
+      query += ` AND m.engagement_id = ?`;
+      params.push(engagement_id);
+    }
+    if (status && status !== 'all') {
+      query += ` AND m.status = ?`;
+      params.push(status);
+    }
+
+    query += ` ORDER BY m.due_date ASC, m.created_at DESC`;
+    const milestones = queryAll(query, params);
+
+    return res.json({ milestones });
+  } catch (err) {
+    console.error('Error fetching milestones:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/freelancer/milestones
+app.post('/api/freelancer/milestones', (req, res) => {
+  try {
+    const { engagementId, freelancerId, milestoneTitle, milestoneDescription, amount, currency, dueDate } = req.body;
+    const now = new Date().toISOString();
+    const mlsId = `MLS-${Math.floor(100 + Math.random() * 900)}`;
+
+    executeRun(
+      `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      [mlsId, engagementId, freelancerId || 'VP-FR-10284', milestoneTitle, milestoneDescription || '', parseFloat(amount) || 0, currency || 'PHP', dueDate || null, now, now]
+    );
+
+    logAudit(req, {
+      action: 'FREELANCER_MILESTONE_CREATED',
+      entityType: 'MILESTONE',
+      entityId: mlsId,
+      actorName: 'Freelancer',
+      details: `Created milestone: ${milestoneTitle} (₱${amount})`
+    });
+
+    return res.json({ success: true, milestoneId: mlsId, message: 'Milestone created successfully' });
+  } catch (err) {
+    console.error('Error creating milestone:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/freelancer/milestones/:id
+app.put('/api/freelancer/milestones/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { milestoneTitle, milestoneDescription, amount, dueDate, status } = req.body;
+    const now = new Date().toISOString();
+
+    const existing = queryOne('SELECT * FROM freelancer_milestones WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Milestone not found' });
+
+    executeRun(
+      `UPDATE freelancer_milestones
+       SET milestone_title = COALESCE(?, milestone_title),
+           milestone_description = COALESCE(?, milestone_description),
+           amount = COALESCE(?, amount),
+           due_date = COALESCE(?, due_date),
+           status = COALESCE(?, status),
+           updated_at = ?
+       WHERE id = ?`,
+      [milestoneTitle, milestoneDescription, amount !== undefined ? parseFloat(amount) : null, dueDate, status, now, id]
+    );
+
+    return res.json({ success: true, message: 'Milestone updated successfully' });
+  } catch (err) {
+    console.error('Error updating milestone:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/freelancer/work-logs
+app.get('/api/freelancer/work-logs', (req, res) => {
+  try {
+    const { freelancer_id, engagement_id, milestone_id, status } = req.query;
+    let query = `
+      SELECT w.*, e.project_name, e.client_identifier, m.milestone_title, m.status as milestone_status
+      FROM freelancer_work_logs w
+      JOIN freelancer_engagements e ON w.engagement_id = e.id
+      LEFT JOIN freelancer_milestones m ON w.milestone_id = m.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (freelancer_id) {
+      query += ` AND w.freelancer_id = ?`;
+      params.push(freelancer_id);
+    }
+    if (engagement_id) {
+      query += ` AND w.engagement_id = ?`;
+      params.push(engagement_id);
+    }
+    if (milestone_id) {
+      query += ` AND w.milestone_id = ?`;
+      params.push(milestone_id);
+    }
+    if (status && status !== 'all') {
+      query += ` AND w.status = ?`;
+      params.push(status);
+    }
+
+    query += ` ORDER BY w.created_at DESC`;
+    const rawLogs = queryAll(query, params);
+
+    const workLogs = rawLogs.map(log => {
+      let deliverableLinks = [];
+      let attachments = [];
+      try { deliverableLinks = JSON.parse(log.deliverable_links || '[]'); } catch (_) { deliverableLinks = log.deliverable_links ? [log.deliverable_links] : []; }
+      try { attachments = JSON.parse(log.attachments || '[]'); } catch (_) { attachments = log.attachments ? [log.attachments] : []; }
+
+      return {
+        ...log,
+        deliverable_links: deliverableLinks,
+        attachments: attachments
+      };
+    });
+
+    return res.json({ workLogs });
+  } catch (err) {
+    console.error('Error fetching work logs:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/freelancer/work-logs
+app.post('/api/freelancer/work-logs', (req, res) => {
+  try {
+    const {
+      freelancerId,
+      engagementId,
+      milestoneId,
+      logType,
+      title,
+      description,
+      hoursLogged,
+      hourlyRate,
+      totalAmount,
+      deliverableLinks,
+      attachments,
+      status
+    } = req.body;
+
+    const now = new Date().toISOString();
+    const wlogId = `WLOG-${Math.floor(100 + Math.random() * 900)}`;
+
+    const type = logType || (milestoneId ? 'milestone' : 'hourly');
+    let computedAmount = parseFloat(totalAmount) || 0;
+    const hours = parseFloat(hoursLogged) || 0;
+    const rate = parseFloat(hourlyRate) || 0;
+
+    if (type === 'hourly' && hours > 0 && rate > 0) {
+      computedAmount = hours * rate;
+    } else if (type === 'milestone' && milestoneId && !computedAmount) {
+      const ms = queryOne('SELECT amount FROM freelancer_milestones WHERE id = ?', [milestoneId]);
+      if (ms) computedAmount = ms.amount;
+    }
+
+    const deliverableJson = Array.isArray(deliverableLinks) ? JSON.stringify(deliverableLinks) : JSON.stringify(deliverableLinks ? [deliverableLinks] : []);
+    const attachJson = Array.isArray(attachments) ? JSON.stringify(attachments) : JSON.stringify(attachments ? [attachments] : []);
+    const initialStatus = status || 'pending_review';
+
+    executeRun(
+      `INSERT INTO freelancer_work_logs (
+        id, freelancer_id, engagement_id, milestone_id, log_type, title, description,
+        hours_logged, hourly_rate, total_amount, deliverable_links, attachments,
+        status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)`,
+      [
+        wlogId,
+        freelancerId || 'VP-FR-10284',
+        engagementId,
+        milestoneId || null,
+        type,
+        title,
+        description,
+        hours,
+        rate,
+        computedAmount,
+        deliverableJson,
+        attachJson,
+        initialStatus,
+        now,
+        now
+      ]
+    );
+
+    // If linked to milestone, advance milestone status to pending_review if it was pending
+    if (milestoneId && initialStatus === 'pending_review') {
+      executeRun(`UPDATE freelancer_milestones SET status = 'pending_review', updated_at = ? WHERE id = ? AND status IN ('pending', 'in_progress', 'changes_requested')`, [now, milestoneId]);
+    }
+
+    logAudit(req, {
+      action: 'FREELANCER_WORK_LOG_SUBMITTED',
+      entityType: 'WORK_LOG',
+      entityId: wlogId,
+      actorName: 'Freelancer',
+      details: `Submitted work log: "${title}" (₱${computedAmount.toLocaleString()})`
+    });
+
+    return res.json({
+      success: true,
+      workLogId: wlogId,
+      message: 'Work log and deliverables submitted successfully for client review!'
+    });
+  } catch (err) {
+    console.error('Error submitting work log:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/freelancer/work-logs/:id
+app.put('/api/freelancer/work-logs/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      description,
+      hoursLogged,
+      hourlyRate,
+      totalAmount,
+      deliverableLinks,
+      attachments,
+      resubmit
+    } = req.body;
+
+    const existing = queryOne('SELECT * FROM freelancer_work_logs WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Work log not found' });
+
+    const now = new Date().toISOString();
+    let newStatus = existing.status;
+    if (resubmit) {
+      newStatus = 'pending_review';
+    }
+
+    let deliverableJson = existing.deliverable_links;
+    if (deliverableLinks !== undefined) {
+      deliverableJson = Array.isArray(deliverableLinks) ? JSON.stringify(deliverableLinks) : JSON.stringify(deliverableLinks ? [deliverableLinks] : []);
+    }
+
+    let attachJson = existing.attachments;
+    if (attachments !== undefined) {
+      attachJson = Array.isArray(attachments) ? JSON.stringify(attachments) : JSON.stringify(attachments ? [attachments] : []);
+    }
+
+    executeRun(
+      `UPDATE freelancer_work_logs
+       SET title = COALESCE(?, title),
+           description = COALESCE(?, description),
+           hours_logged = COALESCE(?, hours_logged),
+           hourly_rate = COALESCE(?, hourly_rate),
+           total_amount = COALESCE(?, total_amount),
+           deliverable_links = ?,
+           attachments = ?,
+           status = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      [
+        title,
+        description,
+        hoursLogged !== undefined ? parseFloat(hoursLogged) : null,
+        hourlyRate !== undefined ? parseFloat(hourlyRate) : null,
+        totalAmount !== undefined ? parseFloat(totalAmount) : null,
+        deliverableJson,
+        attachJson,
+        newStatus,
+        now,
+        id
+      ]
+    );
+
+    if (resubmit && existing.milestone_id) {
+      executeRun(`UPDATE freelancer_milestones SET status = 'pending_review', updated_at = ? WHERE id = ?`, [now, existing.milestone_id]);
+    }
+
+    return res.json({ success: true, message: resubmit ? 'Work log resubmitted for review' : 'Work log updated' });
+  } catch (err) {
+    console.error('Error updating work log:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/freelancer/work-logs/:id
+app.delete('/api/freelancer/work-logs/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = queryOne('SELECT * FROM freelancer_work_logs WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Work log not found' });
+
+    if (existing.status === 'paid' || existing.status === 'invoiced') {
+      return res.status(400).json({ error: 'Cannot delete an invoiced or paid work log' });
+    }
+
+    executeRun('DELETE FROM freelancer_work_logs WHERE id = ?', [id]);
+    return res.json({ success: true, message: 'Work log deleted' });
+  } catch (err) {
+    console.error('Error deleting work log:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/freelancer/work-logs/:id/review (Reviewer Decision Handler)
+app.post(['/api/freelancer/work-logs/:id/review', '/api/reviewer/work-logs/:id/decision'], (req, res) => {
+  try {
+    const { id } = req.params;
+    const { decision, feedback, reviewerName } = req.body; // decision: 'approve', 'request_changes', 'reject'
+    const now = new Date().toISOString();
+
+    const existing = queryOne('SELECT * FROM freelancer_work_logs WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Work log not found' });
+
+    let newStatus = 'pending_review';
+    let milestoneStatus = null;
+
+    if (decision === 'approve' || decision === 'approved') {
+      newStatus = 'approved';
+      milestoneStatus = 'approved';
+    } else if (decision === 'request_changes' || decision === 'changes_requested') {
+      newStatus = 'changes_requested';
+      milestoneStatus = 'changes_requested';
+    } else if (decision === 'reject' || decision === 'rejected') {
+      newStatus = 'rejected';
+      milestoneStatus = 'pending';
+    }
+
+    executeRun(
+      `UPDATE freelancer_work_logs
+       SET status = ?,
+           reviewer_feedback = ?,
+           reviewed_by = ?,
+           reviewed_at = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      [newStatus, feedback || null, reviewerName || 'Verified Client Reviewer', now, now, id]
+    );
+
+    if (existing.milestone_id && milestoneStatus) {
+      executeRun(`UPDATE freelancer_milestones SET status = ?, updated_at = ? WHERE id = ?`, [milestoneStatus, now, existing.milestone_id]);
+    }
+
+    logAudit(req, {
+      action: 'REVIEWER_WORK_LOG_DECISION',
+      entityType: 'WORK_LOG',
+      entityId: id,
+      actorName: reviewerName || 'Verified Client Reviewer',
+      details: `Decision: ${newStatus.toUpperCase()}${feedback ? ` - Notes: "${feedback}"` : ''}`
+    });
+
+    return res.json({
+      success: true,
+      newStatus,
+      message: `Work log status updated to ${newStatus.replace('_', ' ').toUpperCase()}`
+    });
+  } catch (err) {
+    console.error('Error recording reviewer decision:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/* ==========================================================================
+   INVOICING, BILLING & PAYMENT GATEWAY INTEGRATION
+   ========================================================================== */
+
+// GET /api/freelancer/invoices
+app.get('/api/freelancer/invoices', (req, res) => {
+  try {
+    const { freelancer_id, status, client_identifier } = req.query;
+    let query = `
+      SELECT i.*, e.project_name, e.client_identifier as engagement_client, e.contract_ref,
+             m.milestone_title
+      FROM freelancer_invoices i
+      LEFT JOIN freelancer_engagements e ON i.engagement_id = e.id
+      LEFT JOIN freelancer_milestones m ON i.milestone_id = m.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (freelancer_id) {
+      query += ` AND i.freelancer_id = ?`;
+      params.push(freelancer_id);
+    }
+    if (client_identifier) {
+      query += ` AND (i.client_identifier LIKE ? OR e.client_identifier LIKE ?)`;
+      params.push(`%${client_identifier}%`, `%${client_identifier}%`);
+    }
+    if (status && status !== 'all') {
+      query += ` AND i.status = ?`;
+      params.push(status);
+    }
+
+    query += ` ORDER BY i.created_at DESC`;
+    const rawInvoices = queryAll(query, params);
+
+    const invoices = rawInvoices.map(inv => {
+      let workLogIds = [];
+      let history = [];
+      try { workLogIds = JSON.parse(inv.work_log_ids || '[]'); } catch (_) { workLogIds = []; }
+      try { history = JSON.parse(inv.history || '[]'); } catch (_) { history = []; }
+
+      return {
+        ...inv,
+        work_log_ids: workLogIds,
+        history,
+        client_name: inv.client_identifier || inv.engagement_client || 'Client Enterprise'
+      };
+    });
+
+    return res.json({ invoices });
+  } catch (err) {
+    console.error('Error fetching invoices:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/freelancer/invoices/:id
+app.get('/api/freelancer/invoices/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const inv = queryOne(`
+      SELECT i.*, e.project_name, e.client_identifier as engagement_client, e.contract_ref,
+             m.milestone_title, f.full_name as freelancer_name, f.professional_title, f.profile_photo,
+             u.email as freelancer_email, u.mobile_number as freelancer_phone
+      FROM freelancer_invoices i
+      LEFT JOIN freelancer_engagements e ON i.engagement_id = e.id
+      LEFT JOIN freelancer_milestones m ON i.milestone_id = m.id
+      LEFT JOIN freelancer_profiles f ON i.freelancer_id = f.id
+      LEFT JOIN users u ON f.user_id = u.id
+      WHERE i.id = ? OR i.invoice_number = ?
+    `, [id, id]);
+
+    if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+
+    let workLogs = [];
+    if (inv.work_log_ids) {
+      try {
+        const ids = JSON.parse(inv.work_log_ids);
+        if (ids.length > 0) {
+          const placeholders = ids.map(() => '?').join(',');
+          workLogs = queryAll(`SELECT * FROM freelancer_work_logs WHERE id IN (${placeholders})`, ids);
+        }
+      } catch (_) {}
+    }
+
+    let history = [];
+    try { history = JSON.parse(inv.history || '[]'); } catch (_) {}
+
+    return res.json({
+      invoice: {
+        ...inv,
+        history,
+        workLogs
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching invoice detail:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/freelancer/invoices/generate
+app.post('/api/freelancer/invoices/generate', (req, res) => {
+  try {
+    const {
+      freelancerId,
+      engagementId,
+      milestoneId,
+      workLogIds,
+      clientIdentifier,
+      clientEmail,
+      amount,
+      currency,
+      dueDate,
+      notes
+    } = req.body;
+
+    const now = new Date().toISOString();
+    const invId = `INV-FR-${Math.floor(100 + Math.random() * 900)}`;
+    const invoiceNum = `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    let computedAmount = parseFloat(amount) || 0;
+    const logIds = Array.isArray(workLogIds) ? workLogIds : (workLogIds ? [workLogIds] : []);
+
+    // If amount not passed, compute from work logs or milestone
+    if (!computedAmount && logIds.length > 0) {
+      const placeholders = logIds.map(() => '?').join(',');
+      const logs = queryAll(`SELECT total_amount FROM freelancer_work_logs WHERE id IN (${placeholders})`, logIds);
+      computedAmount = logs.reduce((sum, l) => sum + (l.total_amount || 0), 0);
+    } else if (!computedAmount && milestoneId) {
+      const ms = queryOne('SELECT amount FROM freelancer_milestones WHERE id = ?', [milestoneId]);
+      if (ms) computedAmount = ms.amount;
+    }
+
+    // Default due date: +15 days
+    const due = dueDate || new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0];
+
+    const initialHistory = [
+      {
+        status: 'sent',
+        timestamp: now,
+        actor: 'Freelancer',
+        note: `Invoice ${invoiceNum} generated and dispatched to ${clientIdentifier || 'Client'}`
+      }
+    ];
+
+    executeRun(
+      `INSERT INTO freelancer_invoices (
+        id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number,
+        client_identifier, client_email, amount, currency, due_date, status,
+        payment_method, paid_at, receipt_number, notes, history, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', NULL, NULL, NULL, ?, ?, ?, ?)`,
+      [
+        invId,
+        freelancerId || 'VP-FR-10284',
+        engagementId || null,
+        milestoneId || null,
+        JSON.stringify(logIds),
+        invoiceNum,
+        clientIdentifier || 'Client Enterprise',
+        clientEmail || 'billing@client.ph',
+        computedAmount,
+        currency || 'PHP',
+        due,
+        notes || 'Professional services rendered under VeriPinoy milestone contract.',
+        JSON.stringify(initialHistory),
+        now,
+        now
+      ]
+    );
+
+    // Transition linked work logs to 'invoiced'
+    if (logIds.length > 0) {
+      const placeholders = logIds.map(() => '?').join(',');
+      executeRun(`UPDATE freelancer_work_logs SET status = 'invoiced', invoice_id = ?, updated_at = ? WHERE id IN (${placeholders})`, [invId, now, ...logIds]);
+    }
+
+    // Transition linked milestone to 'invoiced'
+    if (milestoneId) {
+      executeRun(`UPDATE freelancer_milestones SET status = 'invoiced', updated_at = ? WHERE id = ?`, [now, milestoneId]);
+    }
+
+    logAudit(req, {
+      action: 'FREELANCER_INVOICE_GENERATED',
+      entityType: 'INVOICE',
+      entityId: invId,
+      actorName: 'Freelancer',
+      details: `Generated Invoice ${invoiceNum} for ₱${computedAmount.toLocaleString()} to ${clientIdentifier}`
+    });
+
+    return res.json({
+      success: true,
+      invoiceId: invId,
+      invoiceNumber: invoiceNum,
+      amount: computedAmount,
+      message: `Formal Invoice ${invoiceNum} generated and dispatched successfully!`
+    });
+  } catch (err) {
+    console.error('Error generating invoice:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/freelancer/invoices/:id/pay (Process Payment & Synchronize Status)
+app.post(['/api/freelancer/invoices/:id/pay', '/api/reviewer/invoices/:id/approve-and-pay'], (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentMethod, actorName, paymentRef } = req.body;
+    const now = new Date().toISOString();
+
+    const inv = queryOne('SELECT * FROM freelancer_invoices WHERE id = ? OR invoice_number = ?', [id, id]);
+    if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+
+    if (inv.status === 'paid') {
+      return res.json({ success: true, message: 'Invoice is already marked as paid.', receiptNumber: inv.receipt_number });
+    }
+
+    const receiptNum = `RCP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const method = paymentMethod || 'VeriPinoy Instant Escrow Gateway';
+
+    let history = [];
+    try { history = JSON.parse(inv.history || '[]'); } catch (_) {}
+    history.push({
+      status: 'paid',
+      timestamp: now,
+      actor: actorName || 'Verified Client Reviewer',
+      note: `Payment cleared via ${method} (Ref: ${paymentRef || receiptNum})`
+    });
+
+    // 1. Update Invoice to PAID
+    executeRun(
+      `UPDATE freelancer_invoices
+       SET status = 'paid',
+           payment_method = ?,
+           paid_at = ?,
+           receipt_number = ?,
+           history = ?,
+           updated_at = ?
+       WHERE id = ?`,
+      [method, now, receiptNum, JSON.stringify(history), now, inv.id]
+    );
+
+    // 2. Update linked Work Logs to PAID
+    let logIds = [];
+    try { logIds = JSON.parse(inv.work_log_ids || '[]'); } catch (_) {}
+    if (logIds.length > 0) {
+      const placeholders = logIds.map(() => '?').join(',');
+      executeRun(`UPDATE freelancer_work_logs SET status = 'paid', updated_at = ? WHERE id IN (${placeholders})`, [now, ...logIds]);
+    } else {
+      executeRun(`UPDATE freelancer_work_logs SET status = 'paid', updated_at = ? WHERE invoice_id = ?`, [now, inv.id]);
+    }
+
+    // 3. Update linked Milestone to PAID
+    if (inv.milestone_id) {
+      executeRun(`UPDATE freelancer_milestones SET status = 'paid', updated_at = ? WHERE id = ?`, [now, inv.milestone_id]);
+    }
+
+    // 4. Record in freelancer_payments table
+    const paymentId = `PAY-FR-${Math.floor(100 + Math.random() * 900)}`;
+    executeRun(
+      `INSERT INTO freelancer_payments (id, engagement_id, invoice_id, amount, currency, payment_date, payment_method, proof_file, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?)`,
+      [paymentId, inv.engagement_id || null, inv.id, inv.amount, inv.currency || 'PHP', now, method, `/receipts/${receiptNum}.pdf`, now]
+    );
+
+    // 5. If all milestones in engagement are paid, update engagement status
+    if (inv.engagement_id) {
+      const remainingMilestones = queryAll(`SELECT status FROM freelancer_milestones WHERE engagement_id = ? AND status != 'paid'`, [inv.engagement_id]);
+      if (remainingMilestones.length === 0) {
+        executeRun(`UPDATE freelancer_engagements SET completion_status = 'completed', payment_status = 'paid', updated_at = ? WHERE id = ?`, [now, inv.engagement_id]);
+      } else {
+        executeRun(`UPDATE freelancer_engagements SET payment_status = 'partially_paid', updated_at = ? WHERE id = ?`, [now, inv.engagement_id]);
+      }
+    }
+
+    logAudit(req, {
+      action: 'PAYMENT_SETTLED_ESCROW_RELEASE',
+      entityType: 'INVOICE',
+      entityId: inv.id,
+      actorName: actorName || 'Verified Client Reviewer',
+      details: `Cleared payment of ₱${inv.amount.toLocaleString()} for Invoice ${inv.invoice_number} (Receipt: ${receiptNum})`
+    });
+
+    return res.json({
+      success: true,
+      invoiceNumber: inv.invoice_number,
+      receiptNumber: receiptNum,
+      amount: inv.amount,
+      paidAt: now,
+      paymentMethod: method,
+      message: `Payment of ₱${inv.amount.toLocaleString()} confirmed! Official receipt ${receiptNum} issued.`
+    });
+  } catch (err) {
+    console.error('Error processing payment:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/freelancer/invoices/:id/status
+app.post('/api/freelancer/invoices/:id/status', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, note, actorName } = req.body;
+    const now = new Date().toISOString();
+
+    const inv = queryOne('SELECT * FROM freelancer_invoices WHERE id = ?', [id]);
+    if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+
+    let history = [];
+    try { history = JSON.parse(inv.history || '[]'); } catch (_) {}
+    history.push({
+      status,
+      timestamp: now,
+      actor: actorName || 'System',
+      note: note || `Invoice status changed to ${status}`
+    });
+
+    executeRun(`UPDATE freelancer_invoices SET status = ?, history = ?, updated_at = ? WHERE id = ?`, [status, JSON.stringify(history), now, id]);
+
+    return res.json({ success: true, message: `Invoice status updated to ${status}` });
+  } catch (err) {
+    console.error('Error updating invoice status:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/reviewer/decisions/overview
+app.get('/api/reviewer/decisions/overview', (req, res) => {
+  try {
+    const pendingLogs = queryAll(`
+      SELECT w.*, e.project_name, e.client_identifier, m.milestone_title
+      FROM freelancer_work_logs w
+      JOIN freelancer_engagements e ON w.engagement_id = e.id
+      LEFT JOIN freelancer_milestones m ON w.milestone_id = m.id
+      WHERE w.status IN ('pending_review', 'changes_requested')
+      ORDER BY w.created_at DESC
+    `).map(log => {
+      let deliverableLinks = [];
+      let attachments = [];
+      try { deliverableLinks = JSON.parse(log.deliverable_links || '[]'); } catch (_) { deliverableLinks = log.deliverable_links ? [log.deliverable_links] : []; }
+      try { attachments = JSON.parse(log.attachments || '[]'); } catch (_) { attachments = log.attachments ? [log.attachments] : []; }
+      return { ...log, deliverable_links: deliverableLinks, attachments };
+    });
+
+    const pendingInvoices = queryAll(`
+      SELECT i.*, e.project_name, e.client_identifier as engagement_client, m.milestone_title
+      FROM freelancer_invoices i
+      LEFT JOIN freelancer_engagements e ON i.engagement_id = e.id
+      LEFT JOIN freelancer_milestones m ON i.milestone_id = m.id
+      WHERE i.status IN ('sent', 'approved')
+      ORDER BY i.created_at DESC
+    `);
+
+    const paidInvoices = queryAll(`
+      SELECT i.*, e.project_name, e.client_identifier as engagement_client
+      FROM freelancer_invoices i
+      LEFT JOIN freelancer_engagements e ON i.engagement_id = e.id
+      WHERE i.status = 'paid'
+      ORDER BY i.paid_at DESC LIMIT 10
+    `);
+
+    const allEngagements = queryAll(`
+      SELECT e.*,
+        (SELECT COUNT(*) FROM freelancer_milestones WHERE engagement_id = e.id) as total_milestones,
+        (SELECT COUNT(*) FROM freelancer_milestones WHERE engagement_id = e.id AND status = 'paid') as completed_milestones
+      FROM freelancer_engagements e
+      ORDER BY e.created_at DESC
+    `);
+
+    const stats = {
+      pendingReviewCount: pendingLogs.length,
+      pendingInvoicesAmount: pendingInvoices.reduce((sum, i) => sum + (i.amount || 0), 0),
+      totalPaidAmount: paidInvoices.reduce((sum, i) => sum + (i.amount || 0), 0),
+      activeContractsCount: allEngagements.length
+    };
+
+    return res.json({
+      stats,
+      pendingLogs,
+      pendingInvoices,
+      paidInvoices,
+      engagements: allEngagements
+    });
+  } catch (err) {
+    console.error('Error fetching reviewer decisions overview:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/freelancer/receipts/:receiptId
+app.get('/api/freelancer/receipts/:receiptId', (req, res) => {
+  try {
+    const { receiptId } = req.params;
+    const inv = queryOne(`
+      SELECT i.*, e.project_name, e.client_identifier as engagement_client, e.contract_ref,
+             m.milestone_title, f.full_name as freelancer_name, f.professional_title,
+             u.email as freelancer_email
+      FROM freelancer_invoices i
+      LEFT JOIN freelancer_engagements e ON i.engagement_id = e.id
+      LEFT JOIN freelancer_milestones m ON i.milestone_id = m.id
+      LEFT JOIN freelancer_profiles f ON i.freelancer_id = f.id
+      LEFT JOIN users u ON f.user_id = u.id
+      WHERE i.receipt_number = ? OR i.id = ? OR i.invoice_number = ?
+    `, [receiptId, receiptId, receiptId]);
+
+    if (!inv) return res.status(404).json({ error: 'Receipt not found' });
+
+    return res.json({
+      receipt: {
+        receiptNumber: inv.receipt_number || `RCP-${inv.id}`,
+        invoiceNumber: inv.invoice_number,
+        amount: inv.amount,
+        currency: inv.currency || 'PHP',
+        paymentDate: inv.paid_at || inv.updated_at,
+        paymentMethod: inv.payment_method || 'Verified Online Escrow Gateway',
+        clientName: inv.client_identifier || inv.engagement_client,
+        freelancerName: inv.freelancer_name,
+        projectName: inv.project_name,
+        milestoneTitle: inv.milestone_title || 'Contract Deliverable',
+        contractRef: inv.contract_ref,
+        verificationHash: `VP-TX-${Math.abs(Math.sin(inv.amount) * 10000000).toFixed(0).padStart(12, '0')}`,
+        dtiSecRegistration: 'DTI-NCR-2026-098812 / SEC CS202601928'
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching receipt:', err);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/freelancer/disputes and /api/freelancer/disputes/:freelancerId

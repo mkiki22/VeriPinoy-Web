@@ -865,21 +865,86 @@ export async function initDatabase() {
   `);
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS freelancer_milestones (
+      id TEXT PRIMARY KEY,
+      engagement_id TEXT NOT NULL,
+      freelancer_id TEXT NOT NULL,
+      milestone_title TEXT NOT NULL,
+      milestone_description TEXT,
+      amount REAL NOT NULL,
+      currency TEXT DEFAULT 'PHP',
+      due_date TEXT,
+      status TEXT DEFAULT 'pending', -- pending, in_progress, logged, pending_review, changes_requested, approved, invoiced, paid, disputed
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (engagement_id) REFERENCES freelancer_engagements(id) ON DELETE CASCADE,
+      FOREIGN KEY (freelancer_id) REFERENCES freelancer_profiles(id) ON DELETE CASCADE
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS freelancer_work_logs (
+      id TEXT PRIMARY KEY,
+      freelancer_id TEXT NOT NULL,
+      engagement_id TEXT NOT NULL,
+      milestone_id TEXT,
+      log_type TEXT DEFAULT 'milestone', -- milestone, hourly
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      hours_logged REAL DEFAULT 0,
+      hourly_rate REAL DEFAULT 0,
+      total_amount REAL NOT NULL,
+      deliverable_links TEXT,
+      attachments TEXT,
+      status TEXT DEFAULT 'pending_review', -- draft, logged, pending_review, changes_requested, approved, invoiced, paid, rejected
+      reviewer_feedback TEXT,
+      reviewed_by TEXT,
+      reviewed_at TEXT,
+      invoice_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (freelancer_id) REFERENCES freelancer_profiles(id) ON DELETE CASCADE,
+      FOREIGN KEY (engagement_id) REFERENCES freelancer_engagements(id) ON DELETE CASCADE,
+      FOREIGN KEY (milestone_id) REFERENCES freelancer_milestones(id) ON DELETE SET NULL
+    );
+  `);
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS freelancer_invoices (
       id TEXT PRIMARY KEY,
       freelancer_id TEXT NOT NULL,
       engagement_id TEXT,
+      milestone_id TEXT,
+      work_log_ids TEXT,
       invoice_number TEXT NOT NULL,
+      client_identifier TEXT,
+      client_email TEXT,
       amount REAL NOT NULL,
       currency TEXT DEFAULT 'PHP',
       due_date TEXT NOT NULL,
       status TEXT DEFAULT 'sent',
+      payment_method TEXT,
+      paid_at TEXT,
+      receipt_number TEXT,
       notes TEXT,
+      history TEXT,
       created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
       FOREIGN KEY (freelancer_id) REFERENCES freelancer_profiles(id) ON DELETE CASCADE,
       FOREIGN KEY (engagement_id) REFERENCES freelancer_engagements(id) ON DELETE SET NULL
     );
   `);
+
+  // Column Migrations for Existing Tables
+  try { db.run('ALTER TABLE freelancer_invoices ADD COLUMN milestone_id TEXT;'); } catch (_) {}
+  try { db.run('ALTER TABLE freelancer_invoices ADD COLUMN work_log_ids TEXT;'); } catch (_) {}
+  try { db.run('ALTER TABLE freelancer_invoices ADD COLUMN client_identifier TEXT;'); } catch (_) {}
+  try { db.run('ALTER TABLE freelancer_invoices ADD COLUMN client_email TEXT;'); } catch (_) {}
+  try { db.run('ALTER TABLE freelancer_invoices ADD COLUMN payment_method TEXT;'); } catch (_) {}
+  try { db.run('ALTER TABLE freelancer_invoices ADD COLUMN paid_at TEXT;'); } catch (_) {}
+  try { db.run('ALTER TABLE freelancer_invoices ADD COLUMN receipt_number TEXT;'); } catch (_) {}
+  try { db.run('ALTER TABLE freelancer_invoices ADD COLUMN history TEXT;'); } catch (_) {}
+  try { db.run('ALTER TABLE freelancer_invoices ADD COLUMN updated_at TEXT;'); } catch (_) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS freelancer_payments (
@@ -2058,7 +2123,7 @@ function seedFreelancerData(now = new Date().toISOString()) {
     [now, now]
   );
 
-  /* FREELANCER ENGAGEMENT */
+  /* FREELANCER ENGAGEMENTS */
   executeRun(
     `INSERT INTO freelancer_engagements (id, freelancer_id, client_identifier, project_name, project_description, contract_ref, agreed_amount, currency, payment_terms, start_date, expected_completion_date, completion_status, payment_status, supporting_documents, created_at, updated_at)
      VALUES ('ENG-901', 'VP-FR-10284', 'ABC Company (Metro Manila Retail)', 'E-Commerce Web Portal Development', 'Full-stack online store with inventory synchronization, payment gateway integration, and customer order management.', 'CTR-2026-8819', 50000, 'PHP', '50% upfront / 50% upon milestone completion', '2026-07-01', '2026-07-30', 'delivered', 'in_dispute', ?, ?, ?)`,
@@ -2067,6 +2132,153 @@ function seedFreelancerData(now = new Date().toISOString()) {
       now,
       now
     ]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_engagements (id, freelancer_id, client_identifier, project_name, project_description, contract_ref, agreed_amount, currency, payment_terms, start_date, expected_completion_date, completion_status, payment_status, supporting_documents, created_at, updated_at)
+     VALUES ('ENG-902', 'VP-FR-10284', 'Nexus Digital Media Inc', 'Mobile Fintech App UI & Secure API Architecture', 'React Native mobile application frontend paired with high-concurrency Node.js REST APIs and real-time transaction ledger.', 'CTR-2026-9042', 85000, 'PHP', 'Milestone-based (3 Milestones)', '2026-08-01', '2026-09-15', 'in_progress', 'partially_paid', ?, ?, ?)`,
+    [
+      JSON.stringify([{ name: 'Master_Services_Agreement_MSA.pdf', path: '/docs/MSA_Nexus_Digital.pdf' }]),
+      now,
+      now
+    ]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_engagements (id, freelancer_id, client_identifier, project_name, project_description, contract_ref, agreed_amount, currency, payment_terms, start_date, expected_completion_date, completion_status, payment_status, supporting_documents, created_at, updated_at)
+     VALUES ('ENG-903', 'VP-FR-10284', 'Bahay Kubo Enterprise', 'Cloud Inventory Synchronization Engine', 'Automated webhook engine syncing POS terminal orders with cloud inventory databases and automated supplier re-orders.', 'CTR-2026-9110', 35000, 'PHP', 'Hourly rate (₱1,500/hr) capped at ₱35,000', '2026-08-10', '2026-08-28', 'in_progress', 'invoiced', ?, ?, ?)`,
+    [
+      JSON.stringify([{ name: 'Inventory_Sync_Spec_Signed.pdf', path: '/docs/Spec_BahayKubo.pdf' }]),
+      now,
+      now
+    ]
+  );
+
+  /* FREELANCER MILESTONES */
+  executeRun(
+    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+     VALUES ('MLS-901-1', 'ENG-901', 'VP-FR-10284', 'Milestone 1: Database Architecture & Core API Wireframes', 'Database ERD schemas, secure API routing, and backend auth integration.', 25000, 'PHP', '2026-07-15', 'paid', ?, ?)`,
+    [now, now]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+     VALUES ('MLS-901-2', 'ENG-901', 'VP-FR-10284', 'Milestone 2: Payment Gateway, Storefront Delivery & UAT Signoff', 'Final store delivery, payment gateway testing, and signed UAT.', 25000, 'PHP', '2026-07-30', 'disputed', ?, ?)`,
+    [now, now]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+     VALUES ('MLS-902-1', 'ENG-902', 'VP-FR-10284', 'Milestone 1: UI Component Design System & State Management', 'High-fidelity Figma implementation, reusable tokenized UI components, and state store architecture.', 30000, 'PHP', '2026-08-10', 'paid', ?, ?)`,
+    [now, now]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+     VALUES ('MLS-902-2', 'ENG-902', 'VP-FR-10284', 'Milestone 2: Secure API Integration & Deliverable Testing', 'REST API client endpoints, OAuth2 token refresh, and integration test suite.', 35000, 'PHP', '2026-08-25', 'pending_review', ?, ?)`,
+    [now, now]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+     VALUES ('MLS-902-3', 'ENG-902', 'VP-FR-10284', 'Milestone 3: Production Deployment, CI/CD Pipeline & Audit Logs', 'Cloud Run deployment pipeline, SSL pinning, and DPA audit log compliance.', 20000, 'PHP', '2026-09-15', 'in_progress', ?, ?)`,
+    [now, now]
+  );
+
+  /* FREELANCER WORK LOGS */
+  executeRun(
+    `INSERT INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
+     VALUES ('WLOG-101', 'VP-FR-10284', 'ENG-902', 'MLS-902-1', 'milestone', 'Completed UI Component Design System & Navigation Engine', 'Built responsive screens, dark/light theme tokens, and biometric login authentication screen flows.', 0, 0, 30000, ?, ?, 'paid', 'Excellent execution and clean codebase. Approved for payment release.', 'Nexus Reviewer (Sarah Lim)', '2026-08-12 11:30:00', 'INV-FR-301', ?, ?)`,
+    [
+      JSON.stringify(['https://github.com/marcoreyes-dev/nexus-fintech-ui', 'https://nexus-demo-staging.app.ph']),
+      JSON.stringify(['ui_design_spec_v1.pdf', 'component_tokens_export.json']),
+      now,
+      now
+    ]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
+     VALUES ('WLOG-102', 'VP-FR-10284', 'ENG-902', 'MLS-902-2', 'milestone', 'Implemented Encrypted API Endpoints & Transaction Engine', 'Completed AES-256 payload encryption, webhook listeners, and comprehensive automated test suites.', 0, 0, 35000, ?, ?, 'pending_review', NULL, NULL, NULL, NULL, ?, ?)`,
+    [
+      JSON.stringify(['https://github.com/marcoreyes-dev/nexus-fintech-core/pull/18', 'https://api-staging.nexus.ph/docs']),
+      JSON.stringify(['api_security_audit_results.pdf', 'postman_collection_v2.json']),
+      now,
+      now
+    ]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
+     VALUES ('WLOG-103', 'VP-FR-10284', 'ENG-903', NULL, 'hourly', 'Real-Time Webhook Synchronization & POS Queue Worker', 'Engineered robust retry backoff algorithms for POS intermittent network drops and SQLite transaction syncing.', 16, 1500, 24000, ?, ?, 'approved', 'Verified POS load test results. Approved for invoice generation.', 'Bahay Kubo Tech Lead', '2026-08-18 16:00:00', 'INV-FR-303', ?, ?)`,
+    [
+      JSON.stringify(['https://github.com/marcoreyes-dev/bahay-kubo-sync/tree/main/workers']),
+      JSON.stringify(['pos_sync_architecture_diagram.pdf', 'load_stress_benchmark.csv']),
+      now,
+      now
+    ]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
+     VALUES ('WLOG-104', 'VP-FR-10284', 'ENG-903', NULL, 'hourly', 'Inventory Alert Notifications & Email Digest Automation', 'Scheduled background cron workers for stock depletion alerts and automated nightly reconciliation logs.', 6, 1500, 9000, ?, ?, 'changes_requested', 'Please add support for SMS alert dispatch via Semaphore/Twilio API before approving.', 'Bahay Kubo Tech Lead', '2026-08-19 14:15:00', NULL, ?, ?)`,
+    [
+      JSON.stringify(['https://github.com/marcoreyes-dev/bahay-kubo-sync/pull/4']),
+      JSON.stringify(['cron_alert_spec.pdf']),
+      now,
+      now
+    ]
+  );
+
+  /* FREELANCER INVOICES & PAYMENTS */
+  executeRun(
+    `INSERT INTO freelancer_invoices (id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number, client_identifier, client_email, amount, currency, due_date, status, payment_method, paid_at, receipt_number, notes, history, created_at, updated_at)
+     VALUES ('INV-FR-301', 'VP-FR-10284', 'ENG-902', 'MLS-902-1', ?, 'INV-2026-0891', 'Nexus Digital Media Inc', 'billing@nexusdigital.ph', 30000, 'PHP', '2026-08-15', 'paid', 'GCash Verified Gateway', '2026-08-15T14:30:00Z', 'RCP-2026-9901', 'Milestone 1: UI Component Design System & Navigation', ?, ?, ?)`,
+    [
+      JSON.stringify(['WLOG-101']),
+      JSON.stringify([
+        { status: 'draft', timestamp: '2026-08-10 10:00:00', actor: 'Marco Antonio Reyes', note: 'Invoice generated from approved work log WLOG-101' },
+        { status: 'sent', timestamp: '2026-08-10 10:05:00', actor: 'Marco Antonio Reyes', note: 'Invoice sent to billing@nexusdigital.ph' },
+        { status: 'paid', timestamp: '2026-08-15 14:30:00', actor: 'Nexus Digital Media Inc', note: 'Settled via GCash Instant Gateway Ref #GC-881920' }
+      ]),
+      now,
+      now
+    ]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_invoices (id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number, client_identifier, client_email, amount, currency, due_date, status, payment_method, paid_at, receipt_number, notes, history, created_at, updated_at)
+     VALUES ('INV-FR-302', 'VP-FR-10284', 'ENG-901', 'MLS-901-2', ?, 'INV-2026-0089', 'ABC Company (Metro Manila Retail)', 'finance@abcretail.ph', 25000, 'PHP', '2026-08-01', 'disputed', NULL, NULL, NULL, 'Final 50% delivery milestone payment', ?, ?, ?)`,
+    [
+      JSON.stringify([]),
+      JSON.stringify([
+        { status: 'sent', timestamp: '2026-07-31 09:00:00', actor: 'Marco Antonio Reyes', note: 'Invoice sent to finance@abcretail.ph' },
+        { status: 'disputed', timestamp: '2026-08-05 11:20:00', actor: 'Marco Antonio Reyes', note: 'Dispute filed due to past-due non-payment' }
+      ]),
+      now,
+      now
+    ]
+  );
+
+  executeRun(
+    `INSERT INTO freelancer_invoices (id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number, client_identifier, client_email, amount, currency, due_date, status, payment_method, paid_at, receipt_number, notes, history, created_at, updated_at)
+     VALUES ('INV-FR-303', 'VP-FR-10284', 'ENG-903', NULL, ?, 'INV-2026-0915', 'Bahay Kubo Enterprise', 'owner@bahaykubo.ph', 24000, 'PHP', '2026-09-05', 'approved', NULL, NULL, NULL, '16 Logged Hours: POS Webhook & Sync Architecture Engine', ?, ?, ?)`,
+    [
+      JSON.stringify(['WLOG-103']),
+      JSON.stringify([
+        { status: 'sent', timestamp: '2026-08-19 09:00:00', actor: 'Marco Antonio Reyes', note: 'Invoice generated and sent to owner@bahaykubo.ph' },
+        { status: 'approved', timestamp: '2026-08-19 16:30:00', actor: 'Bahay Kubo Tech Lead', note: 'Approved for payout processing' }
+      ]),
+      now,
+      now
+    ]
+  );
+
+  /* FREELANCER PAYMENTS SEED */
+  executeRun(
+    `INSERT INTO freelancer_payments (id, engagement_id, invoice_id, amount, currency, payment_date, payment_method, proof_file, status, created_at)
+     VALUES ('PAY-FR-801', 'ENG-902', 'INV-FR-301', 30000, 'PHP', '2026-08-15 14:30:00', 'GCash Direct Gateway', '/receipts/RCP-2026-9901.pdf', 'confirmed', ?)`,
+    [now]
   );
 
   /* FREELANCER DISPUTE */

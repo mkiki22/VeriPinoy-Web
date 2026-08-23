@@ -6,47 +6,76 @@
 <title>VeriPinoy — Tatak Pinoy, Tatak Sigurado</title>
 <script>
   /* Intercept and suppress external browser extension noise (e.g., MetaMask, Solana, Web3 in-page injection errors) */
-  window.addEventListener('unhandledrejection', function(event) {
-    if (event && event.reason) {
-      const reasonStr = (typeof event.reason === 'object' ? (event.reason.message || event.reason.stack || JSON.stringify(event.reason)) : String(event.reason));
-      if (reasonStr && (
-        reasonStr.toLowerCase().includes('metamask') ||
-        reasonStr.toLowerCase().includes('ethereum') ||
-        reasonStr.includes('chrome-extension://') ||
-        reasonStr.includes('moz-extension://') ||
-        reasonStr.includes('Failed to connect')
-      )) {
-        event.preventDefault();
-        event.stopPropagation();
-        console.warn('Suppressed third-party browser extension rejection:', reasonStr);
-        return false;
-      }
+  (function() {
+    function isExtensionNoise(msg) {
+      if (!msg) return false;
+      var str = (typeof msg === 'object' ? (msg.message || msg.stack || JSON.stringify(msg)) : String(msg)).toLowerCase();
+      return (
+        str.includes('metamask') ||
+        str.includes('failed to connect to metamask') ||
+        str.includes('ethereum') ||
+        str.includes('web3') ||
+        str.includes('chrome-extension://') ||
+        str.includes('moz-extension://') ||
+        str.includes('evm') ||
+        str.includes('solana') ||
+        str.includes('phantom')
+      );
     }
-  });
 
-  window.addEventListener('error', function(event) {
-    if (event) {
-      const msg = event.message || '';
-      const src = event.filename || '';
-      if (
-        msg.toLowerCase().includes('metamask') ||
-        msg.toLowerCase().includes('ethereum') ||
-        msg.includes('Failed to connect') ||
-        src.includes('chrome-extension://') ||
-        src.includes('moz-extension://')
-      ) {
+    // Override console.error to filter out extension connection noise
+    var originalConsoleError = console.error;
+    console.error = function() {
+      var args = Array.prototype.slice.call(arguments);
+      for (var i = 0; i < args.length; i++) {
+        if (isExtensionNoise(args[i])) {
+          return; // Suppress silently
+        }
+      }
+      return originalConsoleError.apply(console, args);
+    };
+
+    // Capture unhandled promise rejections
+    window.addEventListener('unhandledrejection', function(event) {
+      if (event && event.reason && isExtensionNoise(event.reason)) {
         event.preventDefault();
         event.stopPropagation();
-        console.warn('Suppressed external browser extension error:', msg);
+        event.stopImmediatePropagation();
         return false;
       }
-    }
-  });
+    }, true);
+
+    // Capture runtime window errors
+    window.addEventListener('error', function(event) {
+      if (event && (isExtensionNoise(event.message) || isExtensionNoise(event.filename) || (event.error && isExtensionNoise(event.error)))) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return false;
+      }
+    }, true);
+
+    // Global onerror fallback
+    var originalOnError = window.onerror;
+    window.onerror = function(message, source, lineno, colno, error) {
+      if (isExtensionNoise(message) || isExtensionNoise(source) || isExtensionNoise(error)) {
+        return true; // Suppress standard error reporting
+      }
+      if (typeof originalOnError === 'function') {
+        return originalOnError.apply(window, arguments);
+      }
+      return false;
+    };
+  })();
 </script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1L2 6.5V15.5C2 23.5 7.5 30.5 15 33C22.5 30.5 28 23.5 28 15.5V6.5L15 1Z' fill='%230F172A'/%3E%3Cpath d='M15 3.5L4.5 8V15.5C4.5 22 9 28 15 30.2C21 28 25.5 22 25.5 15.5V8L15 3.5Z' fill='%231E293B'/%3E%3Ccircle cx='9' cy='10' r='1.3' fill='%23F59E0B'/%3E%3Ccircle cx='15' cy='8' r='1.3' fill='%23F59E0B'/%3E%3Ccircle cx='21' cy='10' r='1.3' fill='%23F59E0B'/%3E%3Cpath d='M9.5 18L13.5 22L21 13.5' stroke='%2310B981' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- Client-Side Multi-Format Export Libraries -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 /* === DESIGN SYSTEM ARCHITECTURE === */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -718,6 +747,46 @@ footer .foot-bottom { text-align: center; padding-top: 28px; border-top: 1px sol
 .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
 input:checked + .slider { background-color: var(--emerald-500); }
 input:checked + .slider:before { transform: translateX(22px); }
+
+/* Report Export Dropdown Styling */
+.export-dropdown { position: relative; display: inline-block; }
+.export-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 6px;
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  z-index: 1050;
+  min-width: 175px;
+  overflow: hidden;
+  animation: fadeInScale 0.15s ease-out;
+}
+.export-menu.show { display: block; }
+.export-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--navy-900);
+  transition: background 0.15s ease;
+}
+.export-menu button:hover {
+  background: var(--slate-100);
+}
+.export-menu button:not(:last-child) {
+  border-bottom: 1px solid var(--slate-100);
+}
 
 /* Responsive Mobile Navigation Controls */
 .nav-controls { display: flex; align-items: center; gap: 10px; }
@@ -1700,9 +1769,28 @@ input:checked + .slider:before { transform: translateX(22px); }
       <div>
         <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:24px; box-shadow:var(--shadow-sm); margin-bottom:24px;">
           <div style="text-align:center; margin-bottom:20px;">
-            <img id="fr-photo" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80" style="width:90px; height:90px; border-radius:50%; object-fit:cover; border:3px solid var(--emerald-500); margin-bottom:12px;">
-            <h3 id="fr-name" style="font-family:var(--font-heading); font-weight:800; font-size:1.2rem; color:var(--navy-900);">Marco Antonio Reyes</h3>
-            <p id="fr-cat" style="font-size:0.82rem; color:var(--slate-500); font-weight:600;">Web & Software Development</p>
+            <!-- FREELANCER AVATAR WITH PREVIEW & FALLBACK -->
+            <div id="fr-avatar-wrapper" style="position:relative; width:96px; height:96px; margin:0 auto 12px;">
+              <img id="fr-photo" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80" alt="Freelancer Avatar" style="width:96px; height:96px; border-radius:50%; object-fit:cover; border:3px solid var(--emerald-500); display:block;" onerror="handleFreelancerAvatarError(this)">
+              <div id="fr-photo-fallback" style="display:none; width:96px; height:96px; border-radius:50%; background:linear-gradient(135deg, #059669 0%, #10B981 100%); color:white; font-family:var(--font-heading); font-size:2rem; font-weight:800; line-height:96px; text-align:center; border:3px solid var(--emerald-500);">MR</div>
+              <span class="badge badge-emerald" style="position:absolute; bottom:-4px; right:-4px; padding:2px 6px; font-size:0.65rem; border:2px solid white; box-shadow:var(--shadow-xs);">✓</span>
+            </div>
+
+            <!-- AVATAR ACTION CONTROLS -->
+            <div style="display:flex; justify-content:center; gap:6px; margin-bottom:14px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline" style="padding:4px 8px; font-size:0.72rem; font-weight:700;" onclick="triggerFreelancerPhotoUpload()" title="Upload a new profile photo (PNG, JPG, WebP up to 5MB)">
+                📤 Upload
+              </button>
+              <button type="button" class="btn btn-outline" style="padding:4px 8px; font-size:0.72rem; font-weight:700;" onclick="openCropperForCurrentFreelancerPhoto()" title="Edit, zoom, or crop the current avatar">
+                ✂️ Crop
+              </button>
+              <button type="button" class="btn btn-outline" style="padding:4px 8px; font-size:0.72rem; font-weight:700; color:#DC2626; border-color:#FCA5A5;" onclick="openRemoveImageConfirm('freelancer')" title="Remove photo and revert to initials badge">
+                🗑️ Remove
+              </button>
+            </div>
+
+            <h3 id="fr-name" style="font-family:var(--font-heading); font-weight:800; font-size:1.2rem; color:var(--navy-900); margin:0 0 2px;">Marco Antonio Reyes</h3>
+            <p id="fr-cat" style="font-size:0.82rem; color:var(--slate-500); font-weight:600; margin:0;">Web & Software Development</p>
             <div id="fr-id-tag" style="font-size:0.75rem; color:var(--emerald-600); font-weight:800; margin-top:4px;">ID: VP-FR-10284</div>
           </div>
 
@@ -1743,17 +1831,204 @@ input:checked + .slider:before { transform: translateX(22px); }
       <!-- RIGHT MAIN WORKSPACE PANES -->
       <div>
         <!-- SUB-NAVIGATION TABS -->
-        <div style="display:flex; gap:10px; border-bottom:2px solid var(--slate-200); margin-bottom:24px; overflow-x:auto;">
-          <button class="sub-tab-btn active" id="fr-tab-btn-disputes" onclick="switchFreelancerTab('disputes')">⚖️ Neutral Disputes & Evidence Vault</button>
-          <button class="sub-tab-btn" id="fr-tab-btn-engagements" onclick="switchFreelancerTab('engagements')">📜 Work Engagements & Milestone Contracts</button>
-          <button class="sub-tab-btn" id="fr-tab-btn-messages" onclick="switchFreelancerTab('messages')">💬 Client Messages & Inquiries (<span id="fr-unread-msg-badge">0</span>)</button>
-          <button class="sub-tab-btn" id="fr-tab-btn-profile" onclick="switchFreelancerTab('profile')">👤 Profile & Verification Application</button>
+        <div style="display:flex; gap:8px; border-bottom:2px solid var(--slate-200); margin-bottom:24px; overflow-x:auto; padding-bottom:4px;" class="no-scrollbar">
+          <button class="sub-tab-btn active" id="fr-tab-btn-worklogs" onclick="switchFreelancerTab('worklogs')">⏱️ Work Logging & Deliverables</button>
+          <button class="sub-tab-btn" id="fr-tab-btn-engagements" onclick="switchFreelancerTab('engagements')">📜 Milestones & Contracts</button>
           <button class="sub-tab-btn" id="fr-tab-btn-invoices" onclick="switchFreelancerTab('invoices')">💳 Invoices & Payments</button>
+          <button class="sub-tab-btn" id="fr-tab-btn-disputes" onclick="switchFreelancerTab('disputes')">⚖️ Disputes Vault</button>
+          <button class="sub-tab-btn" id="fr-tab-btn-messages" onclick="switchFreelancerTab('messages')">💬 Client Messages (<span id="fr-unread-msg-badge">0</span>)</button>
+          <button class="sub-tab-btn" id="fr-tab-btn-profile" onclick="switchFreelancerTab('profile')">👤 Profile & Verification</button>
           <button class="sub-tab-btn" id="fr-tab-btn-security" onclick="switchFreelancerTab('security')">🔒 Security & Sessions</button>
         </div>
 
-        <!-- PANE 1: NEUTRAL DISPUTES & EVIDENCE VAULT -->
-        <div id="fr-pane-disputes" class="fr-pane" style="display:block;">
+        <!-- PANE: WORK LOGGING & DELIVERABLES (FEATURE 1) -->
+        <div id="fr-pane-worklogs" class="fr-pane" style="display:block;">
+          
+          <!-- SUMMARY METRICS BAR -->
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:24px;">
+            <div class="metric-card" style="border-top:4px solid var(--blue-600);">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Total Logged Hours</div>
+              <div style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--navy-900); margin-top:4px;" id="fr-stat-logged-hours">22.0 hrs</div>
+              <div style="font-size:0.75rem; color:var(--blue-600); font-weight:700;">Across active contracts</div>
+            </div>
+
+            <div class="metric-card" style="border-top:4px solid var(--amber-500);">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Pending Review</div>
+              <div style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--navy-900); margin-top:4px;" id="fr-stat-pending-val">₱35,000</div>
+              <div style="font-size:0.75rem; color:var(--amber-600); font-weight:700;">Awaiting client sign-off</div>
+            </div>
+
+            <div class="metric-card" style="border-top:4px solid var(--emerald-500);">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Approved for Invoicing</div>
+              <div style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--navy-900); margin-top:4px;" id="fr-stat-approved-val">₱24,000</div>
+              <div style="font-size:0.75rem; color:var(--emerald-600); font-weight:700;">Ready to convert to invoice</div>
+            </div>
+
+            <div class="metric-card" style="border-top:4px solid var(--purple-500);">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Total Paid Out</div>
+              <div style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--navy-900); margin-top:4px;" id="fr-stat-paid-val">₱30,000</div>
+              <div style="font-size:0.75rem; color:var(--purple-600); font-weight:700;">Disbursed via Escrow</div>
+            </div>
+          </div>
+
+          <!-- ACTION BAR -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900);">Work Logs & Milestone Deliverables</h3>
+              <p class="text-muted" style="font-size:0.85rem;">Submit proof of work, log project hours or milestone deliverables, track reviewer feedback, and generate formal client invoices.</p>
+            </div>
+            
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+              <!-- EXPORT REPORT DROPDOWN (FEATURE 2) -->
+              <div class="export-dropdown">
+                <button class="btn btn-outline" style="font-weight:700; font-size:0.85rem;" onclick="toggleExportMenu(this)">
+                  📥 Export Report ▾
+                </button>
+                <div class="export-menu">
+                  <button onclick="handleExportReport('worklogs', 'xlsx')">
+                    <span style="color:#059669;">📗</span> Excel (.xlsx)
+                  </button>
+                  <button onclick="handleExportReport('worklogs', 'csv')">
+                    <span style="color:#2563EB;">📄</span> CSV (.csv)
+                  </button>
+                  <button onclick="handleExportReport('worklogs', 'pdf')">
+                    <span style="color:#DC2626;">📑</span> PDF (.pdf)
+                  </button>
+                </div>
+              </div>
+
+              <button class="btn btn-gold" style="font-weight:700; font-size:0.85rem;" onclick="openGenerateInvoiceModal()">
+                🧾 Generate & Send Invoice
+              </button>
+
+              <button class="btn btn-emerald" style="font-weight:700; font-size:0.85rem;" onclick="openSubmitWorkLogModal()">
+                ➕ Submit Work Log
+              </button>
+            </div>
+          </div>
+
+          <!-- FILTER BAR -->
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:14px 18px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <span style="font-size:0.8rem; font-weight:700; color:var(--slate-600);">Filter Status:</span>
+              <button class="btn btn-outline" style="padding:4px 12px; font-size:0.78rem; border-radius:var(--radius-pill); font-weight:700; background:var(--navy-900); color:white;" onclick="filterFreelancerWorkLogs('all', this)">All</button>
+              <button class="btn btn-outline" style="padding:4px 12px; font-size:0.78rem; border-radius:var(--radius-pill); font-weight:700;" onclick="filterFreelancerWorkLogs('pending_review', this)">⏳ Pending Review</button>
+              <button class="btn btn-outline" style="padding:4px 12px; font-size:0.78rem; border-radius:var(--radius-pill); font-weight:700;" onclick="filterFreelancerWorkLogs('approved', this)">🟢 Approved</button>
+              <button class="btn btn-outline" style="padding:4px 12px; font-size:0.78rem; border-radius:var(--radius-pill); font-weight:700;" onclick="filterFreelancerWorkLogs('changes_requested', this)">🟡 Changes Requested</button>
+              <button class="btn btn-outline" style="padding:4px 12px; font-size:0.78rem; border-radius:var(--radius-pill); font-weight:700;" onclick="filterFreelancerWorkLogs('invoiced', this)">🧾 Invoiced</button>
+              <button class="btn btn-outline" style="padding:4px 12px; font-size:0.78rem; border-radius:var(--radius-pill); font-weight:700;" onclick="filterFreelancerWorkLogs('paid', this)">💳 Paid</button>
+            </div>
+            <div style="font-size:0.8rem; color:var(--slate-500);" id="fr-worklogs-count-label">
+              Showing all work logs
+            </div>
+          </div>
+
+          <!-- WORK LOGS CONTAINER -->
+          <div id="fr-worklogs-list">
+            <p style="text-align:center; color:var(--slate-500); padding:30px;">Loading work logs...</p>
+          </div>
+
+        </div>
+
+        <!-- PANE: MILESTONES & WORK ENGAGEMENTS -->
+        <div id="fr-pane-engagements" class="fr-pane" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900);">Work Engagements & Milestone Contracts</h3>
+              <p class="text-muted" style="font-size:0.85rem;">Manage milestone contracts, agreed payment milestones, release schedules, and signed SOW documents.</p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <!-- EXPORT MILESTONES DROPDOWN (FEATURE 2) -->
+              <div class="export-dropdown">
+                <button class="btn btn-outline" style="font-weight:700; font-size:0.85rem;" onclick="toggleExportMenu(this)">
+                  📥 Export Milestones ▾
+                </button>
+                <div class="export-menu">
+                  <button onclick="handleExportReport('milestones', 'xlsx')">
+                    <span style="color:#059669;">📗</span> Excel (.xlsx)
+                  </button>
+                  <button onclick="handleExportReport('milestones', 'csv')">
+                    <span style="color:#2563EB;">📄</span> CSV (.csv)
+                  </button>
+                  <button onclick="handleExportReport('milestones', 'pdf')">
+                    <span style="color:#DC2626;">📑</span> PDF (.pdf)
+                  </button>
+                </div>
+              </div>
+              <button class="btn btn-emerald" onclick="openCreateEngagementModal()">➕ Log Work Engagement</button>
+            </div>
+          </div>
+
+          <div id="fr-engagements-list"></div>
+        </div>
+
+        <!-- PANE: INVOICES & PAYMENTS -->
+        <div id="fr-pane-invoices" class="fr-pane" style="display:none;">
+          <!-- INVOICE STATS -->
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:24px;">
+            <div class="metric-card" style="border-top:4px solid var(--emerald-500);">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Paid Invoices</div>
+              <div style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--navy-900); margin-top:4px;" id="fr-stat-inv-paid">₱30,000</div>
+              <div style="font-size:0.75rem; color:var(--emerald-600); font-weight:700;">Settled & Disbursed</div>
+            </div>
+
+            <div class="metric-card" style="border-top:4px solid var(--blue-600);">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Outstanding / Sent</div>
+              <div style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--navy-900); margin-top:4px;" id="fr-stat-inv-sent">₱24,000</div>
+              <div style="font-size:0.75rem; color:var(--blue-600); font-weight:700;">Awaiting client payment</div>
+            </div>
+
+            <div class="metric-card" style="border-top:4px solid var(--amber-500);">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">In Dispute / Hold</div>
+              <div style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--navy-900); margin-top:4px;" id="fr-stat-inv-dispute">₱25,000</div>
+              <div style="font-size:0.75rem; color:var(--amber-600); font-weight:700;">Under neutral review</div>
+            </div>
+
+            <div class="metric-card" style="border-top:4px solid var(--navy-900);">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Total Invoiced</div>
+              <div style="font-family:var(--font-heading); font-size:1.8rem; font-weight:900; color:var(--navy-900); margin-top:4px;" id="fr-stat-inv-total">₱79,000</div>
+              <div style="font-size:0.75rem; color:var(--slate-600); font-weight:700;">Lifetime volume</div>
+            </div>
+          </div>
+
+          <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:28px; box-shadow:var(--shadow-sm);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+              <div>
+                <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin:0;">Milestone Invoices & Payment Ledger</h3>
+                <p class="text-muted" style="font-size:0.85rem; margin-top:4px; margin-bottom:0;">Automated invoice generation, BIR tax breakdown, DTI/SEC registration references, and downloadable receipts.</p>
+              </div>
+
+              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <!-- EXPORT INVOICES DROPDOWN (FEATURE 2) -->
+                <div class="export-dropdown">
+                  <button class="btn btn-outline" style="font-weight:700; font-size:0.85rem;" onclick="toggleExportMenu(this)">
+                    📥 Export Invoices ▾
+                  </button>
+                  <div class="export-menu">
+                    <button onclick="handleExportReport('invoices', 'xlsx')">
+                      <span style="color:#059669;">📗</span> Excel (.xlsx)
+                    </button>
+                    <button onclick="handleExportReport('invoices', 'csv')">
+                      <span style="color:#2563EB;">📄</span> CSV (.csv)
+                    </button>
+                    <button onclick="handleExportReport('invoices', 'pdf')">
+                      <span style="color:#DC2626;">📑</span> PDF (.pdf)
+                    </button>
+                  </div>
+                </div>
+
+                <button class="btn btn-emerald" style="font-weight:700; font-size:0.85rem;" onclick="openGenerateInvoiceModal()">
+                  🧾 Generate New Invoice
+                </button>
+              </div>
+            </div>
+
+            <div id="fr-invoices-list"></div>
+          </div>
+        </div>
+
+        <!-- PANE: NEUTRAL DISPUTES & EVIDENCE VAULT -->
+        <div id="fr-pane-disputes" class="fr-pane" style="display:none;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
             <div>
               <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900);">Active Disputes & Evidence Vault</h3>
@@ -1763,19 +2038,6 @@ input:checked + .slider:before { transform: translateX(22px); }
           </div>
 
           <div id="fr-disputes-list"></div>
-        </div>
-
-        <!-- PANE 2: WORK ENGAGEMENTS -->
-        <div id="fr-pane-engagements" class="fr-pane" style="display:none;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
-            <div>
-              <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900);">Work Engagements & Client Contracts</h3>
-              <p class="text-muted" style="font-size:0.85rem;">Log formal project agreements, deliverable timelines, agreed payment terms, and signed SOW documents.</p>
-            </div>
-            <button class="btn btn-emerald" onclick="openCreateEngagementModal()">➕ Log Work Engagement</button>
-          </div>
-
-          <div id="fr-engagements-list"></div>
         </div>
 
         <!-- PANE: CLIENT MESSAGES & INQUIRIES -->
@@ -1793,10 +2055,46 @@ input:checked + .slider:before { transform: translateX(22px); }
           </div>
         </div>
 
-        <!-- PANE 3: PROFILE & VERIFICATION -->
+        <!-- PANE: PROFILE & VERIFICATION -->
         <div id="fr-pane-profile" class="fr-pane" style="display:none;">
           <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:28px; box-shadow:var(--shadow-sm);">
-            <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin-bottom:16px;">Verified Freelancer Profile Settings</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+              <div>
+                <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin:0;">Verified Freelancer Profile Settings</h3>
+                <p class="text-muted" style="font-size:0.85rem; margin-top:4px; margin-bottom:0;">Update your public visual identity, professional category, skills, and portfolio credentials.</p>
+              </div>
+              <span class="badge badge-emerald">🛡️ KYC PhilID Verified</span>
+            </div>
+
+            <!-- PROFILE PHOTO MANAGEMENT CARD -->
+            <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:20px; margin-bottom:24px;">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--navy-900); text-transform:uppercase; margin-bottom:12px;">
+                📸 Profile Picture & Visual Branding
+              </div>
+              <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+                <div style="position:relative; width:80px; height:80px; flex-shrink:0;">
+                  <img id="fr-settings-photo-preview" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80" alt="Avatar Preview" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:3px solid var(--emerald-500); display:block;" onerror="handleFreelancerAvatarError(this)">
+                  <div id="fr-settings-photo-fallback" style="display:none; width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg, #059669 0%, #10B981 100%); color:white; font-family:var(--font-heading); font-size:1.8rem; font-weight:800; line-height:80px; text-align:center; border:3px solid var(--emerald-500);">MR</div>
+                </div>
+                <div style="flex:1; min-width:240px;">
+                  <div style="font-weight:700; font-size:0.9rem; color:var(--navy-900);">High-Resolution Profile Picture</div>
+                  <p style="font-size:0.8rem; color:var(--slate-500); margin:4px 0 10px;">
+                    Upload PNG, JPG, or WebP up to 5MB. Use the interactive crop tool to adjust zoom, center, and circular frame.
+                  </p>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-emerald" style="padding:7px 14px; font-size:0.8rem; font-weight:700;" onclick="triggerFreelancerPhotoUpload()">
+                      📤 Upload New Image
+                    </button>
+                    <button type="button" class="btn btn-outline" style="padding:7px 14px; font-size:0.8rem; font-weight:700;" onclick="openCropperForCurrentFreelancerPhoto()">
+                      ✂️ Edit / Crop Image
+                    </button>
+                    <button type="button" class="btn btn-outline" style="padding:7px 14px; font-size:0.8rem; font-weight:700; color:#DC2626; border-color:#FCA5A5;" onclick="openRemoveImageConfirm('freelancer')">
+                      🗑️ Remove Image
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
             
             <form onsubmit="handleSaveFreelancerProfileSubmit(event)">
               <div class="form-row">
@@ -1848,15 +2146,7 @@ input:checked + .slider:before { transform: translateX(22px); }
           </div>
         </div>
 
-        <!-- PANE 4: INVOICES & PAYMENTS -->
-        <div id="fr-pane-invoices" class="fr-pane" style="display:none;">
-          <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:28px; box-shadow:var(--shadow-sm);">
-            <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin-bottom:16px;">Milestone Invoices & Payment Ledger</h3>
-            <div id="fr-invoices-list"></div>
-          </div>
-        </div>
-
-        <!-- PANE 5: SECURITY & ACTIVE SESSIONS -->
+        <!-- PANE: SECURITY & ACTIVE SESSIONS -->
         <div id="fr-pane-security" class="fr-pane" style="display:none;">
           <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:28px; box-shadow:var(--shadow-sm);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
@@ -2691,10 +2981,31 @@ input:checked + .slider:before { transform: translateX(22px); }
       <div style="background:var(--white); border-radius:var(--radius-xl); padding:36px; border:1px solid var(--slate-200); box-shadow:var(--shadow-xl);">
         
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; flex-wrap:wrap; gap:16px; border-bottom:1px solid var(--slate-100); padding-bottom:20px;">
-          <div>
-            <span class="badge badge-gold">🏢 Merchant Control Deck</span>
-            <h2 id="dash-biz-name" style="font-family:var(--font-heading); font-weight:800; color:var(--navy-900); margin-top:6px;">Bahay Kubo Restaurant</h2>
-            <div id="dash-biz-sub" class="text-muted" style="margin-top:4px;">Food & Dining · Makati Hub · Owner: Roberto Mendoza</div>
+          <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
+            <!-- COMPANY LOGO WITH PREVIEW & FALLBACK INITIALS -->
+            <div id="dash-biz-logo-container" style="position:relative; width:80px; height:80px; flex-shrink:0;">
+              <img id="dash-biz-logo" src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=200&q=80" alt="Company Logo" style="width:80px; height:80px; border-radius:var(--radius-lg); object-fit:cover; border:2px solid var(--slate-300); display:block; box-shadow:var(--shadow-sm);" onerror="handleBusinessLogoError(this)">
+              <div id="dash-biz-logo-fallback" style="display:none; width:80px; height:80px; border-radius:var(--radius-lg); background:linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); color:white; font-family:var(--font-heading); font-size:1.8rem; font-weight:800; line-height:80px; text-align:center; border:2px solid #93C5FD; box-shadow:var(--shadow-sm);">BK</div>
+            </div>
+
+            <div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                <span class="badge badge-gold">🏢 Merchant Control Deck</span>
+                <div style="display:inline-flex; gap:4px;">
+                  <button type="button" class="btn btn-outline" style="padding:2px 6px; font-size:0.7rem; font-weight:700;" onclick="triggerBusinessLogoUpload()" title="Upload new company logo">
+                    📤 Upload Logo
+                  </button>
+                  <button type="button" class="btn btn-outline" style="padding:2px 6px; font-size:0.7rem; font-weight:700;" onclick="openCropperForCurrentBusinessLogo()" title="Edit, crop, or zoom company logo">
+                    ✂️ Crop
+                  </button>
+                  <button type="button" class="btn btn-outline" style="padding:2px 6px; font-size:0.7rem; font-weight:700; color:#DC2626; border-color:#FCA5A5;" onclick="openRemoveImageConfirm('business')" title="Remove logo and revert to corporate initials">
+                    🗑️ Remove
+                  </button>
+                </div>
+              </div>
+              <h2 id="dash-biz-name" style="font-family:var(--font-heading); font-weight:800; color:var(--navy-900); margin:0;">Bahay Kubo Restaurant</h2>
+              <div id="dash-biz-sub" class="text-muted" style="margin-top:4px; font-size:0.85rem;">Food & Dining · Makati Hub · Owner: Roberto Mendoza</div>
+            </div>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
             <div id="dash-biz-badge"></div>
@@ -2852,21 +3163,56 @@ input:checked + .slider:before { transform: translateX(22px); }
 
           <!-- EDIT PROFILE TAB -->
           <div id="m-panel-edit" style="display:none;">
+            
+            <!-- COMPANY LOGO & BRAND IDENTITY CARD -->
+            <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:20px; margin-bottom:24px;">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--navy-900); text-transform:uppercase; margin-bottom:12px;">
+                🏢 Company Brand Identity & Official Logo
+              </div>
+              <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+                <div style="position:relative; width:80px; height:80px; flex-shrink:0;">
+                  <img id="edit-b-logo-preview" src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=200&q=80" alt="Logo Preview" style="width:80px; height:80px; border-radius:var(--radius-lg); object-fit:cover; border:2px solid var(--slate-300); display:block; box-shadow:var(--shadow-sm);" onerror="handleBusinessLogoError(this)">
+                  <div id="edit-b-logo-fallback" style="display:none; width:80px; height:80px; border-radius:var(--radius-lg); background:linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); color:white; font-family:var(--font-heading); font-size:1.8rem; font-weight:800; line-height:80px; text-align:center; border:2px solid #93C5FD; box-shadow:var(--shadow-sm);">BK</div>
+                </div>
+                <div style="flex:1; min-width:240px;">
+                  <div style="font-weight:700; font-size:0.9rem; color:var(--navy-900);">Official Brand Trademark / Logo</div>
+                  <p style="font-size:0.8rem; color:var(--slate-500); margin:4px 0 10px;">
+                    Upload PNG, JPG, or WebP logo file up to 5MB. Use the crop tool to center and adjust square or circular aspect ratio.
+                  </p>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-emerald" style="padding:7px 14px; font-size:0.8rem; font-weight:700;" onclick="triggerBusinessLogoUpload()">
+                      📤 Upload New Logo
+                    </button>
+                    <button type="button" class="btn btn-outline" style="padding:7px 14px; font-size:0.8rem; font-weight:700;" onclick="openCropperForCurrentBusinessLogo()">
+                      ✂️ Edit / Crop Logo
+                    </button>
+                    <button type="button" class="btn btn-outline" style="padding:7px 14px; font-size:0.8rem; font-weight:700; color:#DC2626; border-color:#FCA5A5;" onclick="openRemoveImageConfirm('business')">
+                      🗑️ Remove Logo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="form-group">
-              <label>Store Description</label>
-              <textarea id="edit-b-desc" rows="3"></textarea>
+              <label>Store & Enterprise Description</label>
+              <textarea id="edit-b-desc" rows="3" placeholder="Tell customers about your products, heritage, and services..."></textarea>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>Hotline Phone Number</label>
-                <input type="text" id="edit-b-phone">
+                <input type="text" id="edit-b-phone" placeholder="+63 2 812 3456">
               </div>
               <div class="form-group">
                 <label>Physical Address</label>
-                <input type="text" id="edit-b-address">
+                <input type="text" id="edit-b-address" placeholder="e.g. Legaspi Village, Makati City">
               </div>
             </div>
-            <button class="btn btn-emerald" onclick="saveMerchantProfileChanges()">Save Profile Updates</button>
+            <div class="form-group">
+              <label>Official Website / Ordering URL</label>
+              <input type="url" id="edit-b-website" placeholder="https://www.bahaykubo.ph">
+            </div>
+            <button class="btn btn-emerald" style="padding:10px 22px; font-size:0.9rem; font-weight:800;" onclick="saveMerchantProfileChanges()">💾 Save Profile Updates</button>
           </div>
 
           <!-- VERIFICATION (KYB) TAB -->
@@ -3555,6 +3901,7 @@ input:checked + .slider:before { transform: translateX(22px); }
         </div>
 
         <div style="display:flex; align-items:center; gap:12px;">
+          <button class="btn btn-outline" style="background:rgba(16, 185, 129, 0.25); color:#6EE7B7; border-color:rgba(16, 185, 129, 0.5); font-weight:700;" onclick="route('reviewer-decisions')">👔 Reviewer Decisions & Escrow Hub</button>
           <button class="btn btn-outline" style="background:rgba(255,255,255,0.1); color:var(--white); border-color:rgba(255,255,255,0.2);" onclick="switchStaffAccount()">🔄 Switch Staff Account</button>
           <button class="btn btn-outline" style="background:rgba(239, 68, 68, 0.2); color:#FCA5A5; border-color:rgba(239, 68, 68, 0.4);" onclick="handleStaffLogout()">Sign Out</button>
         </div>
@@ -5079,6 +5426,540 @@ input:checked + .slider:before { transform: translateX(22px); }
   </div>
 </div>
 
+<!-- ==========================================================================
+     PAGE: REVIEWER DECISION DASHBOARD & ESCROW RELEASE HUB
+     ========================================================================== -->
+<section id="page-reviewer-decisions" class="page">
+  <div class="wrap">
+    
+    <!-- DASHBOARD BANNER -->
+    <div style="background: linear-gradient(135deg, #0B132B 0%, #1E293B 100%); border-radius: var(--radius-xl); padding: 36px 32px; color: var(--white); margin-bottom: 28px; box-shadow: var(--shadow-xl); position: relative; overflow: hidden;">
+      <div style="position: absolute; right: -20px; bottom: -20px; opacity: 0.08; font-size: 14rem; pointer-events: none; user-select: none;">👔</div>
+      
+      <div style="max-width: 850px; position: relative; z-index: 1;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+          <span class="badge badge-gold" style="font-size: 0.85rem; padding: 6px 14px;">👔 VeriPinoy Reviewer Workspace</span>
+          <span style="font-size: 0.82rem; color: #FDE68A; font-weight: 700;">Neutral Client Reviewer & Escrow Authority</span>
+        </div>
+        
+        <h1 style="font-family: var(--font-heading); font-size: 2.2rem; font-weight: 800; line-height: 1.25; margin-bottom: 12px; color: var(--white);">
+          Reviewer Decision Dashboard & Milestone Escrow Hub
+        </h1>
+        
+        <p style="font-size: 1rem; color: var(--slate-300); line-height: 1.6; margin-bottom: 20px;">
+          Inspect submitted freelancer work logs, review deliverables and proof of work links, make binding review decisions (Approve, Request Changes, Reject), and disburse milestone payments through the VeriPinoy secure escrow ledger.
+        </p>
+
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+          <button class="btn btn-outline" style="color: white; border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); font-weight: 700;" onclick="route('admin-portal')">← Return to Staff Workspace</button>
+          <button class="btn btn-emerald" onclick="loadReviewerDecisionsDashboard()">🔄 Refresh Decision Queue</button>
+          
+          <!-- EXPORT REPORT DROPDOWN (FEATURE 2) -->
+          <div class="export-dropdown">
+            <button class="btn btn-outline" style="color: #A7F3D0; border-color: #059669; background: rgba(6, 78, 59, 0.5); font-weight: 700;" onclick="toggleExportMenu(this)">
+              📥 Export Audit Report ▾
+            </button>
+            <div class="export-menu">
+              <button onclick="handleExportReport('reviewer', 'xlsx')">
+                <span style="color:#059669;">📗</span> Excel (.xlsx)
+              </button>
+              <button onclick="handleExportReport('reviewer', 'csv')">
+                <span style="color:#2563EB;">📄</span> CSV (.csv)
+              </button>
+              <button onclick="handleExportReport('reviewer', 'pdf')">
+                <span style="color:#DC2626;">📑</span> PDF (.pdf)
+              </button>
+            </div>
+          </div>
+
+          <div style="font-size: 0.82rem; color: var(--slate-400);">
+            Active Officer: <strong style="color: white;">Atty. Roberto Tan (REV-MNL-201)</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REVIEWER METRICS BAR -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px;">
+      <div class="metric-card" style="border-top: 4px solid var(--amber-500);">
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--slate-500); text-transform: uppercase;">Pending Decision</div>
+        <div style="font-family: var(--font-heading); font-size: 1.9rem; font-weight: 900; color: var(--navy-900); margin-top: 4px;" id="rev-stat-pending-logs">2 Logs</div>
+        <div style="font-size: 0.75rem; color: var(--amber-600); font-weight: 700;">Awaiting inspection</div>
+      </div>
+
+      <div class="metric-card" style="border-top: 4px solid var(--blue-600);">
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--slate-500); text-transform: uppercase;">Changes Requested</div>
+        <div style="font-family: var(--font-heading); font-size: 1.9rem; font-weight: 900; color: var(--navy-900); margin-top: 4px;" id="rev-stat-changes-logs">1 Item</div>
+        <div style="font-size: 0.75rem; color: var(--blue-600); font-weight: 700;">In revision by freelancer</div>
+      </div>
+
+      <div class="metric-card" style="border-top: 4px solid var(--purple-500);">
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--slate-500); text-transform: uppercase;">Approved Invoices</div>
+        <div style="font-family: var(--font-heading); font-size: 1.9rem; font-weight: 900; color: var(--navy-900); margin-top: 4px;" id="rev-stat-approved-invs">₱24,000</div>
+        <div style="font-size: 0.75rem; color: var(--purple-600); font-weight: 700;">Ready for Escrow Release</div>
+      </div>
+
+      <div class="metric-card" style="border-top: 4px solid var(--emerald-500);">
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--slate-500); text-transform: uppercase;">Total Escrow Disbursed</div>
+        <div style="font-family: var(--font-heading); font-size: 1.9rem; font-weight: 900; color: var(--navy-900); margin-top: 4px;" id="rev-stat-escrow-paid">₱30,000</div>
+        <div style="font-size: 0.75rem; color: var(--emerald-600); font-weight: 700;">Paid & settled</div>
+      </div>
+    </div>
+
+    <!-- SECTION 1: WORK LOGS & DELIVERABLES DECISION QUEUE -->
+    <div style="background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-xl); padding: 28px; box-shadow: var(--shadow-md); margin-bottom: 32px;">
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3 style="font-family: var(--font-heading); font-size: 1.3rem; font-weight: 800; color: var(--navy-900); margin: 0;">
+            📥 Work Logs & Deliverables Decision Queue
+          </h3>
+          <p class="text-muted" style="font-size: 0.85rem; margin-top: 4px; margin-bottom: 0;">
+            Review submitted work logs, inspect proof links, and make decisions to Approve, Request Changes, or Reject.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <span style="font-size: 0.8rem; font-weight: 700; color: var(--slate-600);">Filter:</span>
+          <button class="btn btn-outline" style="padding: 4px 12px; font-size: 0.75rem; border-radius: var(--radius-pill); font-weight: 700; background: var(--navy-900); color: white;" onclick="filterReviewerWorkLogsQueue('all', this)">All</button>
+          <button class="btn btn-outline" style="padding: 4px 12px; font-size: 0.75rem; border-radius: var(--radius-pill); font-weight: 700;" onclick="filterReviewerWorkLogsQueue('pending_review', this)">⏳ Pending Decision</button>
+          <button class="btn btn-outline" style="padding: 4px 12px; font-size: 0.75rem; border-radius: var(--radius-pill); font-weight: 700;" onclick="filterReviewerWorkLogsQueue('approved', this)">🟢 Approved</button>
+          <button class="btn btn-outline" style="padding: 4px 12px; font-size: 0.75rem; border-radius: var(--radius-pill); font-weight: 700;" onclick="filterReviewerWorkLogsQueue('changes_requested', this)">🟡 Changes Requested</button>
+        </div>
+      </div>
+
+      <div id="rev-worklogs-queue">
+        <p style="text-align: center; color: var(--slate-500); padding: 30px;">Loading decision queue...</p>
+      </div>
+
+    </div>
+
+    <!-- SECTION 2: MILESTONE INVOICES & ESCROW RELEASE QUEUE -->
+    <div style="background: var(--white); border: 1px solid var(--slate-200); border-radius: var(--radius-xl); padding: 28px; box-shadow: var(--shadow-md); margin-bottom: 32px;">
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3 style="font-family: var(--font-heading); font-size: 1.3rem; font-weight: 800; color: var(--navy-900); margin: 0;">
+            💳 Milestone Invoices & Escrow Release Queue
+          </h3>
+          <p class="text-muted" style="font-size: 0.85rem; margin-top: 4px; margin-bottom: 0;">
+            Disburse milestone escrow payments to freelancers, inspect BIR tax breakdown, and issue official digital receipts.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <div class="export-dropdown">
+            <button class="btn btn-outline" style="font-size: 0.82rem; font-weight: 700;" onclick="toggleExportMenu(this)">
+              📥 Export Invoices ▾
+            </button>
+            <div class="export-menu">
+              <button onclick="handleExportReport('reviewer_invoices', 'xlsx')">📗 Excel (.xlsx)</button>
+              <button onclick="handleExportReport('reviewer_invoices', 'csv')">📄 CSV (.csv)</button>
+              <button onclick="handleExportReport('reviewer_invoices', 'pdf')">📑 PDF (.pdf)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="rev-invoices-queue">
+        <p style="text-align: center; color: var(--slate-500); padding: 30px;">Loading invoice queue...</p>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+<!-- ==========================================================================
+     MODAL: SUBMIT NEW WORK LOG (FEATURE 1)
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-submit-worklog" onclick="if(event.target === this) closeSubmitWorkLogModal()">
+  <div class="modal-content" style="max-width: 620px; border-radius: var(--radius-xl); padding: 30px; box-shadow: var(--shadow-2xl);">
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; border-bottom: 1px solid var(--slate-200); padding-bottom: 14px;">
+      <div>
+        <span class="badge badge-emerald" style="font-size: 0.75rem; margin-bottom: 4px;">⏱️ VeriPinoy Work Logging Engine</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.35rem; font-weight: 800; color: var(--navy-900); margin: 0;">
+          Submit Work Log & Deliverables
+        </h3>
+      </div>
+      <button type="button" class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.2rem;" onclick="closeSubmitWorkLogModal()">✕</button>
+    </div>
+
+    <form onsubmit="handleSubmitWorkLog(event)">
+      
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700; color: var(--navy-900);">Associated Work Contract *</label>
+        <select id="wlog-engagement-select" required onchange="onWorkLogEngagementChange(this.value)" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+          <option value="">-- Select Client Engagement --</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700; color: var(--navy-900);">Project Milestone (Optional)</label>
+        <select id="wlog-milestone-select" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+          <option value="">-- Select Milestone --</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700; color: var(--navy-900);">Work Log Title / Task Summary *</label>
+        <input type="text" id="wlog-title" required placeholder="e.g. Completed Payment Gateway Webhook Integration" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700; color: var(--navy-900);">Detailed Description of Work Done *</label>
+        <textarea id="wlog-desc" rows="3" required placeholder="Detail the technical implementation, files modified, test coverage, and key deliverables..." style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;"></textarea>
+      </div>
+
+      <!-- RATE & HOURS CALCULATION ROW -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 14px; background: var(--slate-50); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--slate-200);">
+        <div>
+          <label style="font-size: 0.78rem; font-weight: 700; color: var(--slate-600); display: block; margin-bottom: 4px;">Logged Hours</label>
+          <input type="number" id="wlog-hours" step="0.5" min="0" value="4.0" oninput="calculateWorkLogTotal()" style="width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+        </div>
+        <div>
+          <label style="font-size: 0.78rem; font-weight: 700; color: var(--slate-600); display: block; margin-bottom: 4px;">Hourly Rate (₱)</label>
+          <input type="number" id="wlog-rate" step="50" min="0" value="1500" oninput="calculateWorkLogTotal()" style="width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+        </div>
+        <div>
+          <label style="font-size: 0.78rem; font-weight: 700; color: var(--emerald-700); display: block; margin-bottom: 4px;">Calculated Amount (₱)</label>
+          <input type="number" id="wlog-total-amount" required step="100" min="0" value="6000" style="width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--emerald-400); background: #ECFDF5; font-weight: 800; color: var(--emerald-800); font-size: 0.95rem;">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700; color: var(--navy-900);">Deliverable & Proof of Work Links (comma-separated URLs) *</label>
+        <input type="text" id="wlog-links" required placeholder="https://github.com/org/repo/pull/18, https://staging.example.com/demo" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+        <p style="font-size: 0.75rem; color: var(--slate-500); margin-top: 4px;">Provide PR links, Figma design boards, staging URLs, or Google Drive assets for client verification.</p>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 18px;">
+        <label style="font-size: 0.85rem; font-weight: 700; color: var(--navy-900);">Attachment Notes / Filenames (Optional)</label>
+        <input type="text" id="wlog-attachments" placeholder="e.g. test_suite_report.pdf, security_audit.png" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeSubmitWorkLogModal()">Cancel</button>
+        <button type="submit" class="btn btn-emerald" style="font-weight: 700; padding: 10px 22px;">
+          🚀 Submit for Client Review
+        </button>
+      </div>
+
+    </form>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     MODAL: CREATE MILESTONE CONTRACT (FEATURE 1)
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-create-milestone" onclick="if(event.target === this) closeCreateMilestoneModal()">
+  <div class="modal-content" style="max-width: 540px; border-radius: var(--radius-xl); padding: 30px; box-shadow: var(--shadow-2xl);">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px solid var(--slate-200); padding-bottom: 14px;">
+      <div>
+        <span class="badge badge-purple" style="font-size: 0.75rem; margin-bottom: 4px;">📜 Milestone Escrow Allocation</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.35rem; font-weight: 800; color: var(--navy-900); margin: 0;">
+          Add Contract Milestone
+        </h3>
+      </div>
+      <button type="button" class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.2rem;" onclick="closeCreateMilestoneModal()">✕</button>
+    </div>
+
+    <form onsubmit="handleCreateMilestoneSubmit(event)">
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700;">Engagement Contract *</label>
+        <select id="mls-engagement-select" required style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+          <option value="">-- Select Engagement --</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700;">Milestone Title *</label>
+        <input type="text" id="mls-title" required placeholder="e.g. Milestone 3: Production Deployment & QA" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700;">Description & Scope of Work *</label>
+        <textarea id="mls-desc" rows="2" required placeholder="Specific deliverables required for milestone sign-off..." style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;"></textarea>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 700;">Milestone Amount (₱) *</label>
+          <input type="number" id="mls-amount" required step="500" min="1000" value="35000" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem; font-weight: 700;">
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 700;">Target Due Date</label>
+          <input type="date" id="mls-due-date" value="2026-09-15" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeCreateMilestoneModal()">Cancel</button>
+        <button type="submit" class="btn btn-emerald" style="font-weight: 700; padding: 10px 20px;">Save Milestone</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     MODAL: GENERATE & SEND FORMAL INVOICE (FEATURE 1)
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-generate-invoice" onclick="if(event.target === this) closeGenerateInvoiceModal()">
+  <div class="modal-content" style="max-width: 680px; border-radius: var(--radius-xl); padding: 32px; box-shadow: var(--shadow-2xl);">
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; border-bottom: 1px solid var(--slate-200); padding-bottom: 14px;">
+      <div>
+        <span class="badge badge-gold" style="font-size: 0.75rem; margin-bottom: 4px;">🧾 BIR-Compliant Automated Invoicing</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.4rem; font-weight: 800; color: var(--navy-900); margin: 0;">
+          Generate & Send Formal Invoice
+        </h3>
+      </div>
+      <button type="button" class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.2rem;" onclick="closeGenerateInvoiceModal()">✕</button>
+    </div>
+
+    <form onsubmit="handleGenerateInvoiceSubmit(event)">
+      
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700;">Client Contract / Engagement *</label>
+        <select id="inv-gen-engagement-select" required onchange="onInvoiceEngagementChange(this.value)" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+          <option value="">-- Select Client Engagement --</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700;">Invoice Title / Billing Header *</label>
+        <input type="text" id="inv-gen-title" required placeholder="e.g. Invoice for Milestone 2: Core REST API & Security" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+      </div>
+
+      <!-- SELECTION OF WORK LOGS TO BIND -->
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700; display: block; margin-bottom: 6px;">Attach Approved Work Logs & Milestone Items</label>
+        <div id="inv-gen-worklogs-checkboxes" style="max-height: 140px; overflow-y: auto; background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: var(--radius-md); padding: 10px 14px;">
+          <div style="font-size: 0.82rem; color: var(--slate-500);">Select a contract above to populate work items...</div>
+        </div>
+      </div>
+
+      <!-- TAX & AMOUNT COMPUTATION -->
+      <div style="background: #F8FAFC; border: 1px solid var(--slate-200); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.88rem;">
+          <span>Subtotal Amount:</span>
+          <strong id="inv-gen-subtotal-display" style="color: var(--navy-900);">₱0.00</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.82rem; color: var(--slate-600);">
+          <span>Withholding Tax (2% Creditable Form 2307):</span>
+          <span id="inv-gen-tax-display">- ₱0.00</span>
+        </div>
+        <div style="border-top: 1px dashed var(--slate-300); margin-top: 8px; padding-top: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 1rem;">
+          <strong style="color: var(--navy-900);">Total Net Due to Freelancer:</strong>
+          <strong id="inv-gen-total-display" style="color: var(--emerald-600); font-size: 1.2rem;">₱0.00</strong>
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-bottom: 14px;">
+        <div class="form-group">
+          <label style="font-size: 0.85rem; font-weight: 700;">Payment Due Date *</label>
+          <input type="date" id="inv-gen-due-date" required value="2026-09-01" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+        </div>
+        <div class="form-group">
+          <label style="font-size: 0.85rem; font-weight: 700;">Payment Terms</label>
+          <input type="text" id="inv-gen-terms" value="Net 15 Days (Direct Bank / Escrow Release)" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 18px;">
+        <label style="font-size: 0.85rem; font-weight: 700;">Notes to Client / Payment Instructions</label>
+        <textarea id="inv-gen-notes" rows="2" placeholder="e.g. Kindly release escrow upon review of the delivered GitHub PR." style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;"></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeGenerateInvoiceModal()">Cancel</button>
+        <button type="submit" class="btn btn-emerald" style="font-weight: 700; padding: 10px 24px;">
+          📨 Send Formal Invoice to Client
+        </button>
+      </div>
+
+    </form>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     MODAL: VIEW BIR/SEC COMPLIANT FORMAL INVOICE (FEATURE 1)
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-view-invoice" onclick="if(event.target === this) closeViewInvoiceModal()">
+  <div class="modal-content" style="max-width: 780px; border-radius: var(--radius-xl); padding: 36px; box-shadow: var(--shadow-2xl); position: relative;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid var(--slate-200); padding-bottom: 18px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 48px; height: 48px; border-radius: 10px; background: var(--navy-900); color: white; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+          🇵🇭
+        </div>
+        <div>
+          <h2 style="font-family: var(--font-heading); font-size: 1.4rem; font-weight: 900; color: var(--navy-900); margin: 0;">
+            VeriPinoy Electronic Invoice
+          </h2>
+          <div style="font-size: 0.78rem; color: var(--slate-500);">BIR & DTI Electronic Sales Reference Record</div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button class="btn btn-outline" style="font-size: 0.8rem; padding: 6px 12px;" onclick="printActiveInvoice()">🖨️ Print</button>
+        <button class="btn btn-emerald" style="font-size: 0.8rem; padding: 6px 14px;" onclick="downloadActiveInvoicePDF()">📥 Download PDF</button>
+        <button class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.2rem;" onclick="closeViewInvoiceModal()">✕</button>
+      </div>
+    </div>
+
+    <!-- INVOICE RENDER VIEWPORT -->
+    <div id="invoice-modal-content-viewport" style="background: var(--white); padding: 10px 0;">
+      <!-- Content dynamically inserted -->
+    </div>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     MODAL: REVIEWER DECISION ACTIONS (APPROVE / CHANGES / REJECT)
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-reviewer-decision" onclick="if(event.target === this) closeReviewDecisionModal()">
+  <div class="modal-content" style="max-width: 580px; border-radius: var(--radius-xl); padding: 30px; box-shadow: var(--shadow-2xl);">
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px solid var(--slate-200); padding-bottom: 12px;">
+      <div>
+        <span class="badge badge-purple" style="font-size: 0.75rem; margin-bottom: 4px;">👔 Reviewer Decision Terminal</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.3rem; font-weight: 800; color: var(--navy-900); margin: 0;" id="rev-modal-action-title">
+          Review Deliverable Submission
+        </h3>
+      </div>
+      <button type="button" class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.2rem;" onclick="closeReviewDecisionModal()">✕</button>
+    </div>
+
+    <form onsubmit="handleReviewDecisionSubmit(event)">
+      <input type="hidden" id="rev-modal-log-id">
+
+      <!-- LOG SUMMARY CARD -->
+      <div style="background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px; font-size: 0.85rem;">
+        <div style="font-weight: 800; color: var(--navy-900);" id="rev-modal-log-title">Work Log: Title</div>
+        <div style="color: var(--slate-600); margin-top: 4px;" id="rev-modal-log-meta">Freelancer: Marco Reyes • Amount: ₱24,000</div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700; display: block; margin-bottom: 6px;">Select Decision *</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+          <label style="border: 2px solid #10B981; background: #ECFDF5; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer;">
+            <input type="radio" name="rev_decision_radio" value="approved" checked style="margin-right: 4px;">
+            <strong style="color: #065F46; font-size: 0.85rem; display: block;">🟢 Approve</strong>
+          </label>
+
+          <label style="border: 2px solid #F59E0B; background: #FFFBEB; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer;">
+            <input type="radio" name="rev_decision_radio" value="changes_requested" style="margin-right: 4px;">
+            <strong style="color: #92400E; font-size: 0.85rem; display: block;">🟡 Changes</strong>
+          </label>
+
+          <label style="border: 2px solid #EF4444; background: #FEF2F2; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer;">
+            <input type="radio" name="rev_decision_radio" value="rejected" style="margin-right: 4px;">
+            <strong style="color: #991B1B; font-size: 0.85rem; display: block;">🔴 Reject</strong>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 18px;">
+        <label style="font-size: 0.85rem; font-weight: 700;">Reviewer Feedback & Notes *</label>
+        <textarea id="rev-modal-feedback" rows="3" required placeholder="Provide clear feedback, revision requests, or approval remarks for the freelancer..." style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;"></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeReviewDecisionModal()">Cancel</button>
+        <button type="submit" class="btn btn-emerald" style="font-weight: 700; padding: 10px 22px;">
+          💾 Confirm Binding Decision
+        </button>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     MODAL: APPROVE & PAY / RELEASE ESCROW (FEATURE 1)
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-approve-pay" onclick="if(event.target === this) closeApproveAndPayModal()">
+  <div class="modal-content" style="max-width: 540px; border-radius: var(--radius-xl); padding: 30px; box-shadow: var(--shadow-2xl);">
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px solid var(--slate-200); padding-bottom: 12px;">
+      <div>
+        <span class="badge badge-emerald" style="font-size: 0.75rem; margin-bottom: 4px;">🛡️ Escrow Payout Terminal</span>
+        <h3 style="font-family: var(--font-heading); font-size: 1.35rem; font-weight: 800; color: var(--navy-900); margin: 0;">
+          Approve & Release Escrow Payment
+        </h3>
+      </div>
+      <button type="button" class="btn btn-outline" style="padding: 4px 10px; border: none; font-size: 1.2rem;" onclick="closeApproveAndPayModal()">✕</button>
+    </div>
+
+    <form onsubmit="handleApproveAndPaySubmit(event)">
+      <input type="hidden" id="pay-modal-invoice-id">
+
+      <div style="background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%); border: 1px solid #A7F3D0; border-radius: var(--radius-lg); padding: 16px; margin-bottom: 18px;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #047857; text-transform: uppercase;">Disbursement Target</div>
+        <div style="font-size: 1.1rem; font-weight: 800; color: #065F46; margin-top: 2px;" id="pay-modal-freelancer-name">Marco Antonio Reyes</div>
+        <div style="font-size: 1.4rem; font-weight: 900; color: var(--navy-900); margin-top: 6px;" id="pay-modal-amount">₱24,000.00 PHP</div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label style="font-size: 0.85rem; font-weight: 700;">Payout Gateway / Channel *</label>
+        <select id="pay-modal-channel" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+          <option value="gcash">GCash Instant Payout (0917-***-8821)</option>
+          <option value="maya">Maya Philippines Enterprise</option>
+          <option value="bdo">BDO Unibank Direct ACH (****-****-9102)</option>
+          <option value="bpi">BPI Bank Express</option>
+          <option value="unionbank">UnionBank Corporate Disburse</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 18px;">
+        <label style="font-size: 0.85rem; font-weight: 700;">Disbursement Reference Note</label>
+        <input type="text" id="pay-modal-note" value="Milestone deliverable approved by Compliance Reviewer. Escrow released." style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--slate-300); font-size: 0.88rem;">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeApproveAndPayModal()">Cancel</button>
+        <button type="submit" class="btn btn-emerald" style="font-weight: 800; padding: 12px 24px; font-size: 0.95rem;">
+          💸 Authorize & Release Escrow
+        </button>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     MODAL: OFFICIAL PAYMENT RECEIPT (FEATURE 1)
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-view-receipt" onclick="if(event.target === this) closeViewReceiptModal()">
+  <div class="modal-content" style="max-width: 560px; border-radius: var(--radius-xl); padding: 32px; box-shadow: var(--shadow-2xl);">
+    
+    <div style="text-align: center; margin-bottom: 20px;">
+      <div style="width: 56px; height: 56px; border-radius: 50%; background: #ECFDF5; border: 2px solid #10B981; color: #10B981; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; margin: 0 auto 10px;">
+        ✓
+      </div>
+      <span class="badge badge-emerald" style="font-size: 0.75rem;">Official Escrow Settlement</span>
+      <h3 style="font-family: var(--font-heading); font-size: 1.35rem; font-weight: 900; color: var(--navy-900); margin: 6px 0 0;">
+        Payment Receipt
+      </h3>
+    </div>
+
+    <div id="receipt-modal-content-viewport" style="background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 20px; font-size: 0.88rem;">
+      <!-- Content dynamically inserted -->
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <button class="btn btn-outline" onclick="printActiveReceipt()">🖨️ Print Receipt</button>
+      <button class="btn btn-emerald" onclick="closeViewReceiptModal()">Done</button>
+    </div>
+
+  </div>
+</div>
+
 <!-- FOOTER -->
 <footer>
   <div class="wrap">
@@ -5419,6 +6300,190 @@ input:checked + .slider:before { transform: translateX(22px); }
   </div>
 </div>
 
+<!-- ==========================================================================
+     UNIVERSAL PROFILE IMAGE & LOGO CROPPER / ADJUSTMENT MODAL
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-image-cropper" role="dialog" aria-modal="true" aria-labelledby="modal-cropper-title" onclick="if(event.target === this) closeImageCropperModal()">
+  <div class="modal-content" style="max-width:700px; border-radius:var(--radius-xl); padding:32px; box-shadow:var(--shadow-2xl); position:relative;">
+    
+    <!-- MODAL HEADER -->
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; border-bottom:1px solid var(--slate-200); padding-bottom:16px;">
+      <div>
+        <span id="modal-cropper-badge" class="badge badge-emerald" style="margin-bottom:6px; font-size:0.75rem;">
+          👤 Freelancer Avatar
+        </span>
+        <h3 id="modal-cropper-title" style="font-family:var(--font-heading); font-size:1.4rem; font-weight:800; color:var(--navy-900); margin:0;">
+          Edit & Crop Profile Image
+        </h3>
+        <p id="modal-cropper-subtitle" class="text-muted" style="font-size:0.85rem; margin-top:4px; margin-bottom:0;">
+          Reposition, zoom, and rotate your image to fit the verified badge layout.
+        </p>
+      </div>
+      <button type="button" class="btn btn-outline" style="padding:6px 12px; font-size:0.82rem;" onclick="closeImageCropperModal()" aria-label="Close modal">
+        ✕
+      </button>
+    </div>
+
+    <!-- MAIN CROP WORKSPACE (CANVAS & CONTROLS) -->
+    <div style="display:grid; grid-template-columns:360px 1fr; gap:24px; align-items:start;" id="cropper-workspace-grid">
+      
+      <!-- LEFT: INTERACTIVE CANVAS VIEWPORT -->
+      <div>
+        <div style="position:relative; width:360px; height:360px; background:#0B132B; border-radius:var(--radius-lg); overflow:hidden; box-shadow:inset 0 2px 8px rgba(0,0,0,0.5); user-select:none; touch-action:none; display:flex; align-items:center; justify-content:center;">
+          <canvas id="crop-canvas" width="360" height="360" style="width:360px; height:360px; cursor:grab;"></canvas>
+          <div id="crop-canvas-loading" style="display:none; position:absolute; inset:0; background:rgba(11,19,43,0.85); color:white; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;">
+            <div style="font-size:1.6rem;">⏳</div>
+            <div style="font-size:0.85rem; font-weight:600;">Processing Image...</div>
+          </div>
+        </div>
+        <p style="font-size:0.75rem; color:var(--slate-500); margin-top:8px; text-align:center;">
+          🖱️ Click and drag canvas to pan image • Scroll or use slider to zoom
+        </p>
+      </div>
+
+      <!-- RIGHT: ADJUSTMENT CONTROLS & PREVIEW -->
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        
+        <!-- SHAPE / MASK SELECTOR -->
+        <div>
+          <label style="font-size:0.8rem; font-weight:800; color:var(--navy-900); display:block; margin-bottom:6px;">
+            Crop Mask Shape
+          </label>
+          <div style="display:flex; gap:8px;">
+            <button type="button" id="crop-shape-circle-btn" class="btn btn-emerald" style="flex:1; padding:7px 10px; font-size:0.78rem; font-weight:700;" onclick="setCropperMaskShape('circle')">
+              ⚪ Circle (Avatar)
+            </button>
+            <button type="button" id="crop-shape-square-btn" class="btn btn-outline" style="flex:1; padding:7px 10px; font-size:0.78rem; font-weight:700;" onclick="setCropperMaskShape('square')">
+              ⬛ Square (Logo)
+            </button>
+          </div>
+        </div>
+
+        <!-- ZOOM SLIDER -->
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label style="font-size:0.8rem; font-weight:800; color:var(--navy-900);">
+              🔍 Zoom Level
+            </label>
+            <span id="crop-zoom-label" style="font-size:0.8rem; font-weight:700; color:var(--emerald-700); font-family:monospace;">100%</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="btn btn-outline" style="padding:3px 8px; font-size:0.82rem;" onclick="stepCropperZoom(-0.15)">−</button>
+            <input type="range" id="crop-zoom-range" min="0.5" max="3.0" step="0.05" value="1.0" style="flex:1; cursor:pointer;" oninput="onCropperZoomInput(parseFloat(this.value))">
+            <button type="button" class="btn btn-outline" style="padding:3px 8px; font-size:0.82rem;" onclick="stepCropperZoom(0.15)">+</button>
+          </div>
+        </div>
+
+        <!-- ROTATION CONTROLS -->
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label style="font-size:0.8rem; font-weight:800; color:var(--navy-900);">
+              🔄 Rotation & Angle
+            </label>
+            <span id="crop-angle-label" style="font-size:0.8rem; font-weight:700; color:var(--slate-600); font-family:monospace;">0°</span>
+          </div>
+          <div style="display:flex; gap:6px; margin-bottom:6px;">
+            <button type="button" class="btn btn-outline" style="flex:1; padding:5px 8px; font-size:0.75rem;" onclick="rotateCropperBy(-90)">
+              ⟲ -90°
+            </button>
+            <button type="button" class="btn btn-outline" style="flex:1; padding:5px 8px; font-size:0.75rem;" onclick="rotateCropperBy(90)">
+              ⟳ +90°
+            </button>
+          </div>
+          <input type="range" id="crop-angle-range" min="-45" max="45" step="1" value="0" style="width:100%; cursor:pointer;" oninput="onCropperAngleInput(parseInt(this.value))">
+        </div>
+
+        <!-- LIVE PREVIEW THUMBNAILS -->
+        <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:10px;">
+          <div style="font-size:0.72rem; font-weight:800; color:var(--slate-600); text-transform:uppercase; margin-bottom:6px;">
+            Live Display Previews
+          </div>
+          <div style="display:flex; align-items:center; gap:16px;">
+            <div style="text-align:center;">
+              <div id="crop-preview-circle-wrap" style="width:52px; height:52px; border-radius:50%; border:2px solid var(--emerald-500); overflow:hidden; background:#0B132B; margin:0 auto 2px; box-shadow:var(--shadow-xs);">
+                <canvas id="crop-thumb-circle" width="52" height="52" style="width:52px; height:52px;"></canvas>
+              </div>
+              <span style="font-size:0.68rem; color:var(--slate-500); font-weight:600;">Avatar</span>
+            </div>
+            <div style="text-align:center;">
+              <div id="crop-preview-square-wrap" style="width:52px; height:52px; border-radius:8px; border:2px solid var(--navy-500); overflow:hidden; background:#0B132B; margin:0 auto 2px; box-shadow:var(--shadow-xs);">
+                <canvas id="crop-thumb-square" width="52" height="52" style="width:52px; height:52px;"></canvas>
+              </div>
+              <span style="font-size:0.68rem; color:var(--slate-500); font-weight:600;">Logo</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RESET BUTTON -->
+        <button type="button" class="btn btn-outline" style="padding:5px 10px; font-size:0.78rem;" onclick="resetCropperTransformations()">
+          ↺ Reset Adjustments
+        </button>
+
+      </div>
+    </div>
+
+    <!-- MODAL FOOTER -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; border-top:1px solid var(--slate-200); padding-top:16px;">
+      <button type="button" class="btn btn-outline" onclick="closeImageCropperModal()" style="font-size:0.85rem; padding:9px 16px;">
+        Cancel
+      </button>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="modal-cropper-choose-another-btn" class="btn btn-outline" onclick="triggerAlternativeFileUpload()" style="font-size:0.85rem; padding:9px 14px;">
+          📁 Choose Different File
+        </button>
+        <button type="button" id="modal-cropper-save-btn" class="btn btn-emerald" onclick="applyAndSaveCroppedImage()" style="font-size:0.88rem; font-weight:800; padding:9px 20px;">
+          💾 Apply & Save Image
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     REMOVE PROFILE IMAGE / LOGO CONFIRMATION MODAL
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-image-remove-confirm" role="dialog" aria-modal="true" aria-labelledby="modal-remove-img-title" onclick="if(event.target === this) closeImageRemoveModal()">
+  <div class="modal-content" style="max-width:460px; border-radius:var(--radius-xl); padding:30px; box-shadow:var(--shadow-2xl); text-align:center;">
+    
+    <div style="width:60px; height:60px; border-radius:50%; background:#FEF2F2; border:2px solid #FCA5A5; color:#DC2626; display:flex; align-items:center; justify-content:center; font-size:1.6rem; margin:0 auto 14px;">
+      🗑️
+    </div>
+
+    <h3 id="modal-remove-img-title" style="font-family:var(--font-heading); font-size:1.25rem; font-weight:800; color:var(--navy-900); margin-bottom:6px;">
+      Remove Profile Image?
+    </h3>
+
+    <p id="modal-remove-img-desc" style="font-size:0.85rem; color:var(--slate-600); margin-bottom:18px; line-height:1.5;">
+      Are you sure you want to remove this image? Your profile will automatically revert to using an initials fallback badge or standard verified placeholder.
+    </p>
+
+    <!-- PREVIEW OF FALLBACK INITIALS -->
+    <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:14px; margin-bottom:20px;">
+      <div style="font-size:0.72rem; font-weight:700; color:var(--slate-500); text-transform:uppercase; margin-bottom:8px;">
+        Profile will revert to:
+      </div>
+      <div id="modal-remove-fallback-preview" style="display:flex; justify-content:center; align-items:center;">
+        <!-- Injected initials avatar -->
+      </div>
+    </div>
+
+    <div style="display:flex; justify-content:center; gap:10px;">
+      <button type="button" class="btn btn-outline" style="flex:1; padding:9px 14px; font-size:0.85rem;" onclick="closeImageRemoveModal()">
+        Cancel & Keep
+      </button>
+      <button type="button" id="modal-remove-img-confirm-btn" class="btn" style="flex:1; background:#DC2626; color:white; border:none; padding:9px 14px; font-size:0.85rem; font-weight:800;" onclick="executeConfirmedImageRemoval()">
+        🗑️ Yes, Remove
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- HIDDEN FILE INPUTS FOR DIRECT PROFILE & LOGO UPLOAD -->
+<input type="file" id="freelancer-photo-file-input" accept="image/png, image/jpeg, image/webp" style="display:none;" onchange="handleImageFileSelected(event, 'freelancer')">
+<input type="file" id="business-logo-file-input" accept="image/png, image/jpeg, image/webp" style="display:none;" onchange="handleImageFileSelected(event, 'business')">
+
 <script>
 /* ========================================
    DATA MODELS & STATE
@@ -5437,11 +6502,686 @@ const REVIEWS = [
   { id: 3, businessName: "Sari-Sari Mart", author: "Anonymous", verification: "Verified Reviewer", rating: 5, text: "Always carries inventory stock required by local residential sectors.", privacy: "anon", officialResponse: null }
 ];
 
+// Global aliases and identifiers for reviews / reviewers
+const REV = REVIEWS;
+window.REV = REVIEWS;
+window.REVIEWS = REVIEWS;
+
 let CURRENT_CUSTOMER = null;
 let CURRENT_MERCHANT = null;
 let CURRENT_FREELANCER_TOKEN = localStorage.getItem('veripinoy_freelancer_token') || 'demo_freelancer_token';
 let CURRENT_FREELANCER_USER = JSON.parse(localStorage.getItem('veripinoy_freelancer_user') || '{"name":"Marco Antonio Reyes","email":"freelancer@marcoreyes.dev"}');
 let QUICK_STATUS_FILTER = 'all';
+
+/* ==========================================================================
+   PROFILE IMAGE & BUSINESS LOGO MANAGEMENT ENGINE (UPLOAD / CROP / REMOVE)
+   ========================================================================== */
+let CROP_STATE = {
+  targetType: 'freelancer', // 'freelancer' | 'business'
+  imageObj: null,
+  imageSrc: '',
+  zoom: 1.0,
+  rotation: 0,
+  fineAngle: 0,
+  panX: 0,
+  panY: 0,
+  isDragging: false,
+  dragStartX: 0,
+  dragStartY: 0,
+  maskShape: 'circle', // 'circle' | 'square'
+  originalFileName: ''
+};
+
+let REMOVE_IMAGE_TARGET = 'freelancer'; // 'freelancer' | 'business'
+let CROP_CANVAS_EVENTS_INITIALIZED = false;
+
+function getInitials(name = '') {
+  if (!name) return 'VP';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function triggerFreelancerPhotoUpload() {
+  const input = document.getElementById('freelancer-photo-file-input');
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+
+function triggerBusinessLogoUpload() {
+  const input = document.getElementById('business-logo-file-input');
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+
+function triggerAlternativeFileUpload() {
+  if (CROP_STATE.targetType === 'business') {
+    triggerBusinessLogoUpload();
+  } else {
+    triggerFreelancerPhotoUpload();
+  }
+}
+
+function handleImageFileSelected(event, targetType) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  // Validate format (PNG, JPG, WebP)
+  const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+  if (!allowedTypes.includes(file.type.toLowerCase())) {
+    alert('❌ Invalid File Format: Please upload a PNG, JPG, or WebP image file.');
+    return;
+  }
+
+  // Validate size (5MB max)
+  const maxSize = 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    alert(`❌ File Too Large: Selected file is ${sizeMb} MB. Maximum allowed size is 5.0 MB.`);
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    openImageCropperModal(dataUrl, targetType, file.name);
+  };
+  reader.onerror = function() {
+    alert('❌ Failed to read selected image file.');
+  };
+  reader.readAsDataURL(file);
+}
+
+function openImageCropperModal(imageSrc, targetType = 'freelancer', fileName = 'upload.png') {
+  CROP_STATE.targetType = targetType;
+  CROP_STATE.imageSrc = imageSrc;
+  CROP_STATE.originalFileName = fileName;
+  CROP_STATE.zoom = 1.0;
+  CROP_STATE.rotation = 0;
+  CROP_STATE.fineAngle = 0;
+  CROP_STATE.panX = 0;
+  CROP_STATE.panY = 0;
+  CROP_STATE.maskShape = targetType === 'business' ? 'square' : 'circle';
+
+  const modal = document.getElementById('modal-image-cropper');
+  const badge = document.getElementById('modal-cropper-badge');
+  const title = document.getElementById('modal-cropper-title');
+  const subtitle = document.getElementById('modal-cropper-subtitle');
+
+  if (targetType === 'business') {
+    if (badge) {
+      badge.className = 'badge badge-gold';
+      badge.textContent = '🏢 Company Brand Logo';
+    }
+    if (title) title.textContent = 'Edit & Crop Business Logo';
+    if (subtitle) subtitle.textContent = 'Reposition, zoom, and rotate your corporate emblem for verified directory badges.';
+  } else {
+    if (badge) {
+      badge.className = 'badge badge-emerald';
+      badge.textContent = '👤 Freelancer Avatar';
+    }
+    if (title) title.textContent = 'Edit & Crop Profile Image';
+    if (subtitle) subtitle.textContent = 'Reposition, zoom, and rotate your image to fit the verified badge layout.';
+  }
+
+  updateCropperShapeUI();
+  updateCropperControlsUI();
+
+  if (modal) modal.style.display = 'flex';
+
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function() {
+    CROP_STATE.imageObj = img;
+    initCropCanvasEvents();
+    renderCropCanvas();
+  };
+  img.onerror = function() {
+    alert('❌ Failed to load image in editor.');
+    closeImageCropperModal();
+  };
+  img.src = imageSrc;
+}
+
+function openCropperForCurrentFreelancerPhoto() {
+  const imgEl = document.getElementById('fr-photo');
+  const src = imgEl && imgEl.src ? imgEl.src : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80';
+  openImageCropperModal(src, 'freelancer', 'freelancer_avatar.png');
+}
+
+function openCropperForCurrentBusinessLogo() {
+  const imgEl = document.getElementById('dash-biz-logo');
+  const src = imgEl && imgEl.src ? imgEl.src : 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=200&q=80';
+  openImageCropperModal(src, 'business', 'business_logo.png');
+}
+
+function closeImageCropperModal() {
+  const modal = document.getElementById('modal-image-cropper');
+  if (modal) modal.style.display = 'none';
+}
+
+function setCropperMaskShape(shape) {
+  CROP_STATE.maskShape = shape;
+  updateCropperShapeUI();
+  renderCropCanvas();
+}
+
+function updateCropperShapeUI() {
+  const circleBtn = document.getElementById('crop-shape-circle-btn');
+  const squareBtn = document.getElementById('crop-shape-square-btn');
+  if (circleBtn && squareBtn) {
+    if (CROP_STATE.maskShape === 'circle') {
+      circleBtn.className = 'btn btn-emerald';
+      squareBtn.className = 'btn btn-outline';
+    } else {
+      circleBtn.className = 'btn btn-outline';
+      squareBtn.className = 'btn btn-emerald';
+    }
+  }
+}
+
+function onCropperZoomInput(val) {
+  CROP_STATE.zoom = Math.max(0.4, Math.min(3.5, val));
+  updateCropperControlsUI();
+  renderCropCanvas();
+}
+
+function stepCropperZoom(delta) {
+  onCropperZoomInput(CROP_STATE.zoom + delta);
+}
+
+function rotateCropperBy(deltaDegrees) {
+  CROP_STATE.rotation = (CROP_STATE.rotation + deltaDegrees) % 360;
+  updateCropperControlsUI();
+  renderCropCanvas();
+}
+
+function onCropperAngleInput(val) {
+  CROP_STATE.fineAngle = val;
+  updateCropperControlsUI();
+  renderCropCanvas();
+}
+
+function resetCropperTransformations() {
+  CROP_STATE.zoom = 1.0;
+  CROP_STATE.rotation = 0;
+  CROP_STATE.fineAngle = 0;
+  CROP_STATE.panX = 0;
+  CROP_STATE.panY = 0;
+  updateCropperControlsUI();
+  renderCropCanvas();
+}
+
+function updateCropperControlsUI() {
+  const zoomRange = document.getElementById('crop-zoom-range');
+  const zoomLabel = document.getElementById('crop-zoom-label');
+  const angleRange = document.getElementById('crop-angle-range');
+  const angleLabel = document.getElementById('crop-angle-label');
+
+  if (zoomRange) zoomRange.value = CROP_STATE.zoom;
+  if (zoomLabel) zoomLabel.textContent = `${Math.round(CROP_STATE.zoom * 100)}%`;
+
+  if (angleRange) angleRange.value = CROP_STATE.fineAngle;
+  const totalAngle = (CROP_STATE.rotation + CROP_STATE.fineAngle) % 360;
+  if (angleLabel) angleLabel.textContent = `${totalAngle}°`;
+}
+
+function initCropCanvasEvents() {
+  if (CROP_CANVAS_EVENTS_INITIALIZED) return;
+  const canvas = document.getElementById('crop-canvas');
+  if (!canvas) return;
+
+  CROP_CANVAS_EVENTS_INITIALIZED = true;
+
+  const onStart = (clientX, clientY) => {
+    CROP_STATE.isDragging = true;
+    CROP_STATE.dragStartX = clientX - CROP_STATE.panX;
+    CROP_STATE.dragStartY = clientY - CROP_STATE.panY;
+    canvas.style.cursor = 'grabbing';
+  };
+
+  const onMove = (clientX, clientY) => {
+    if (!CROP_STATE.isDragging) return;
+    CROP_STATE.panX = clientX - CROP_STATE.dragStartX;
+    CROP_STATE.panY = clientY - CROP_STATE.dragStartY;
+    renderCropCanvas();
+  };
+
+  const onEnd = () => {
+    CROP_STATE.isDragging = false;
+    canvas.style.cursor = 'grab';
+  };
+
+  canvas.addEventListener('mousedown', e => onStart(e.clientX, e.clientY));
+  window.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
+  window.addEventListener('mouseup', onEnd);
+
+  canvas.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      onStart(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    if (e.touches.length === 1 && CROP_STATE.isDragging) {
+      e.preventDefault();
+      onMove(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', onEnd);
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.08 : -0.08;
+    stepCropperZoom(delta);
+  }, { passive: false });
+}
+
+function renderCropCanvas() {
+  const canvas = document.getElementById('crop-canvas');
+  if (!canvas || !CROP_STATE.imageObj) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Dark background
+  ctx.fillStyle = '#0B132B';
+  ctx.fillRect(0, 0, W, H);
+
+  const img = CROP_STATE.imageObj;
+  const totalAngle = (CROP_STATE.rotation + CROP_STATE.fineAngle) * Math.PI / 180;
+
+  // Base scale calculation to fit nicely inside 260px circle/square
+  const baseScale = Math.max(260 / img.width, 260 / img.height);
+  const currentScale = baseScale * CROP_STATE.zoom;
+
+  ctx.save();
+  ctx.translate(W / 2 + CROP_STATE.panX, H / 2 + CROP_STATE.panY);
+  ctx.rotate(totalAngle);
+  ctx.scale(currentScale, currentScale);
+  ctx.drawImage(img, -img.width / 2, -img.height / 2);
+  ctx.restore();
+
+  // Draw Mask Overlay
+  drawCropMask(ctx, W, H, CROP_STATE.maskShape);
+
+  // Render live thumbnail previews
+  renderCropThumbnails();
+}
+
+function drawCropMask(ctx, W, H, shape) {
+  ctx.save();
+  const cropSize = 260;
+  const cropX = (W - cropSize) / 2;
+  const cropY = (H - cropSize) / 2;
+  const cx = W / 2;
+  const cy = H / 2;
+  const radius = cropSize / 2;
+
+  // Mask overlay
+  ctx.fillStyle = 'rgba(11, 19, 43, 0.7)';
+  ctx.beginPath();
+  ctx.rect(0, 0, W, H);
+
+  if (shape === 'circle') {
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2, true);
+  } else {
+    const r = 16;
+    ctx.moveTo(cropX + r, cropY);
+    ctx.lineTo(cropX + cropSize - r, cropY);
+    ctx.quadraticCurveTo(cropX + cropSize, cropY, cropX + cropSize, cropY + r);
+    ctx.lineTo(cropX + cropSize, cropY + cropSize - r);
+    ctx.quadraticCurveTo(cropX + cropSize, cropY + cropSize, cropX + cropSize - r, cropY + cropSize);
+    ctx.lineTo(cropX + r, cropY + cropSize);
+    ctx.quadraticCurveTo(cropX, cropY + cropSize, cropX, cropY + cropSize - r);
+    ctx.lineTo(cropX, cropY + r);
+    ctx.quadraticCurveTo(cropX, cropY, cropX + r, cropY);
+    ctx.closePath();
+  }
+  ctx.fill('evenodd');
+
+  // Dash outline border
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = shape === 'circle' ? '#10B981' : '#3B82F6';
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  if (shape === 'circle') {
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  } else {
+    const r = 16;
+    ctx.moveTo(cropX + r, cropY);
+    ctx.lineTo(cropX + cropSize - r, cropY);
+    ctx.quadraticCurveTo(cropX + cropSize, cropY, cropX + cropSize, cropY + r);
+    ctx.lineTo(cropX + cropSize, cropY + cropSize - r);
+    ctx.quadraticCurveTo(cropX + cropSize, cropY + cropSize, cropX + cropSize - r, cropY + cropSize);
+    ctx.lineTo(cropX + r, cropY + cropSize);
+    ctx.quadraticCurveTo(cropX, cropY + cropSize, cropX, cropY + cropSize - r);
+    ctx.lineTo(cropX, cropY + r);
+    ctx.quadraticCurveTo(cropX, cropY, cropX + r, cropY);
+    ctx.closePath();
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Center crosshair
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy); ctx.lineTo(cx + 10, cy);
+  ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy + 10);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function renderCropThumbnails() {
+  if (!CROP_STATE.imageObj) return;
+
+  const circleThumb = document.getElementById('crop-thumb-circle');
+  const squareThumb = document.getElementById('crop-thumb-square');
+  if (!circleThumb || !squareThumb) return;
+
+  const renderToThumb = (canvas, shape) => {
+    const ctx = canvas.getContext('2d');
+    const S = canvas.width;
+    ctx.clearRect(0, 0, S, S);
+
+    ctx.save();
+    if (shape === 'circle') {
+      ctx.beginPath();
+      ctx.arc(S/2, S/2, S/2, 0, Math.PI * 2);
+      ctx.clip();
+    } else {
+      ctx.beginPath();
+      const r = 6;
+      ctx.moveTo(r, 0); ctx.lineTo(S - r, 0); ctx.quadraticCurveTo(S, 0, S, r);
+      ctx.lineTo(S, S - r); ctx.quadraticCurveTo(S, S, S - r, S);
+      ctx.lineTo(r, S); ctx.quadraticCurveTo(0, S, 0, S - r);
+      ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.clip();
+    }
+
+    const img = CROP_STATE.imageObj;
+    const totalAngle = (CROP_STATE.rotation + CROP_STATE.fineAngle) * Math.PI / 180;
+    const scaleFactor = S / 260;
+    const baseScale = Math.max(260 / img.width, 260 / img.height);
+    const currentScale = baseScale * CROP_STATE.zoom * scaleFactor;
+
+    ctx.translate(S / 2 + CROP_STATE.panX * scaleFactor, S / 2 + CROP_STATE.panY * scaleFactor);
+    ctx.rotate(totalAngle);
+    ctx.scale(currentScale, currentScale);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    ctx.restore();
+  };
+
+  renderToThumb(circleThumb, 'circle');
+  renderToThumb(squareThumb, 'square');
+}
+
+async function applyAndSaveCroppedImage() {
+  if (!CROP_STATE.imageObj) return;
+
+  const saveBtn = document.getElementById('modal-cropper-save-btn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerText = '⏳ Saving Image...';
+  }
+
+  try {
+    const exportCanvas = document.createElement('canvas');
+    const S = 400;
+    exportCanvas.width = S;
+    exportCanvas.height = S;
+    const ctx = exportCanvas.getContext('2d');
+
+    const img = CROP_STATE.imageObj;
+    const totalAngle = (CROP_STATE.rotation + CROP_STATE.fineAngle) * Math.PI / 180;
+    const scaleFactor = S / 260;
+    const baseScale = Math.max(260 / img.width, 260 / img.height);
+    const currentScale = baseScale * CROP_STATE.zoom * scaleFactor;
+
+    ctx.translate(S / 2 + CROP_STATE.panX * scaleFactor, S / 2 + CROP_STATE.panY * scaleFactor);
+    ctx.rotate(totalAngle);
+    ctx.scale(currentScale, currentScale);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+    const dataUrl = exportCanvas.toDataURL('image/png', 0.92);
+
+    if (CROP_STATE.targetType === 'business') {
+      const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+      await apiCall('/api/business/profile/logo', 'POST', {
+        business_id: bizId,
+        logo: dataUrl
+      });
+
+      const bizObj = BUSINESSES.find(b => b.id === Number(bizId));
+      if (bizObj) bizObj.logo = dataUrl;
+      if (CURRENT_MERCHANT) CURRENT_MERCHANT.logo = dataUrl;
+
+      updateBusinessLogoUI(dataUrl, bizObj ? bizObj.name : 'Bahay Kubo Restaurant');
+      alert('✓ Company logo updated and saved successfully!');
+    } else {
+      const frId = CURRENT_FREELANCER_ID || 'VP-FR-10284';
+      await apiCall('/api/freelancer/profile/photo', 'POST', {
+        freelancerId: frId,
+        photo: dataUrl
+      });
+
+      updateFreelancerAvatarUI(dataUrl, 'Marco Antonio Reyes');
+      alert('✓ Profile picture updated and saved successfully!');
+    }
+
+    closeImageCropperModal();
+  } catch (err) {
+    console.error('Failed to save cropped image:', err);
+    alert('❌ Failed to save image: ' + (err.message || err));
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerText = '💾 Apply & Save Image';
+    }
+  }
+}
+
+function openRemoveImageConfirm(targetType = 'freelancer') {
+  REMOVE_IMAGE_TARGET = targetType;
+  const modal = document.getElementById('modal-image-remove-confirm');
+  const title = document.getElementById('modal-remove-img-title');
+  const desc = document.getElementById('modal-remove-img-desc');
+  const preview = document.getElementById('modal-remove-fallback-preview');
+
+  if (targetType === 'business') {
+    if (title) title.textContent = 'Remove Company Logo?';
+    if (desc) desc.textContent = 'Are you sure you want to remove your company logo? Your business profile will revert to using official corporate initials.';
+    const bizName = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessName || 'Bahay Kubo Restaurant') : 'Bahay Kubo Restaurant';
+    const initials = getInitials(bizName);
+    if (preview) {
+      preview.innerHTML = `
+        <div style="width:72px; height:72px; border-radius:var(--radius-lg); background:linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); color:white; font-family:var(--font-heading); font-size:1.6rem; font-weight:800; line-height:72px; text-align:center; border:2px solid #93C5FD;">
+          ${initials}
+        </div>
+      `;
+    }
+  } else {
+    if (title) title.textContent = 'Remove Profile Picture?';
+    if (desc) desc.textContent = 'Are you sure you want to remove your profile picture? Your profile will revert to a verified initials avatar placeholder.';
+    const frName = (CURRENT_FREELANCER_USER && CURRENT_FREELANCER_USER.name) || 'Marco Antonio Reyes';
+    const initials = getInitials(frName);
+    if (preview) {
+      preview.innerHTML = `
+        <div style="width:72px; height:72px; border-radius:50%; background:linear-gradient(135deg, #059669 0%, #10B981 100%); color:white; font-family:var(--font-heading); font-size:1.6rem; font-weight:800; line-height:72px; text-align:center; border:3px solid var(--emerald-500);">
+          ${initials}
+        </div>
+      `;
+    }
+  }
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeImageRemoveModal() {
+  const modal = document.getElementById('modal-image-remove-confirm');
+  if (modal) modal.style.display = 'none';
+}
+
+async function executeConfirmedImageRemoval() {
+  const confirmBtn = document.getElementById('modal-remove-img-confirm-btn');
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.innerText = '⏳ Removing...';
+  }
+
+  try {
+    if (REMOVE_IMAGE_TARGET === 'business') {
+      const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+      await apiCall('/api/business/profile/logo/remove', 'POST', { business_id: bizId });
+
+      const bizObj = BUSINESSES.find(b => b.id === Number(bizId));
+      if (bizObj) bizObj.logo = null;
+      if (CURRENT_MERCHANT) CURRENT_MERCHANT.logo = null;
+
+      updateBusinessLogoUI(null, bizObj ? bizObj.name : 'Bahay Kubo Restaurant');
+      alert('✓ Company logo removed. Reverted to corporate initials badge.');
+    } else {
+      const frId = CURRENT_FREELANCER_ID || 'VP-FR-10284';
+      await apiCall('/api/freelancer/profile/photo/remove', 'POST', { freelancerId: frId });
+
+      updateFreelancerAvatarUI(null, 'Marco Antonio Reyes');
+      alert('✓ Profile picture removed. Reverted to verified initials avatar.');
+    }
+
+    closeImageRemoveModal();
+  } catch (err) {
+    console.error('Failed to remove image:', err);
+    alert('❌ Error removing image: ' + (err.message || err));
+  } finally {
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.innerText = '🗑️ Yes, Remove';
+    }
+  }
+}
+
+function updateFreelancerAvatarUI(photoUrl, name = 'Marco Antonio Reyes') {
+  const initials = getInitials(name);
+  const elements = [
+    { img: 'fr-photo', fallback: 'fr-photo-fallback' },
+    { img: 'fr-settings-photo-preview', fallback: 'fr-settings-photo-fallback' },
+    { img: 'pub-fr-photo', fallback: null }
+  ];
+
+  elements.forEach(({ img, fallback }) => {
+    const imgEl = document.getElementById(img);
+    const fbEl = fallback ? document.getElementById(fallback) : null;
+
+    if (photoUrl) {
+      if (imgEl) {
+        imgEl.src = photoUrl;
+        imgEl.style.display = 'block';
+      }
+      if (fbEl) fbEl.style.display = 'none';
+    } else {
+      if (fbEl) {
+        fbEl.textContent = initials;
+        fbEl.style.display = 'block';
+        if (imgEl) imgEl.style.display = 'none';
+      } else if (imgEl) {
+        imgEl.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23059669"/><text x="50" y="58" font-size="36" font-family="sans-serif" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${initials}</text></svg>`;
+        imgEl.style.display = 'block';
+      }
+    }
+  });
+}
+
+function updateBusinessLogoUI(logoUrl, name = 'Bahay Kubo Restaurant') {
+  const initials = getInitials(name);
+  const elements = [
+    { img: 'dash-biz-logo', fallback: 'dash-biz-logo-fallback' },
+    { img: 'edit-b-logo-preview', fallback: 'edit-b-logo-fallback' }
+  ];
+
+  elements.forEach(({ img, fallback }) => {
+    const imgEl = document.getElementById(img);
+    const fbEl = fallback ? document.getElementById(fallback) : null;
+
+    if (logoUrl) {
+      if (imgEl) {
+        imgEl.src = logoUrl;
+        imgEl.style.display = 'block';
+      }
+      if (fbEl) fbEl.style.display = 'none';
+    } else {
+      if (fbEl) {
+        fbEl.textContent = initials;
+        fbEl.style.display = 'block';
+        if (imgEl) imgEl.style.display = 'none';
+      } else if (imgEl) {
+        imgEl.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" rx="16" fill="%231E3A8A"/><text x="50" y="58" font-size="36" font-family="sans-serif" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${initials}</text></svg>`;
+        imgEl.style.display = 'block';
+      }
+    }
+  });
+}
+
+function handleFreelancerAvatarError(img) {
+  const fb = document.getElementById('fr-photo-fallback');
+  if (fb) {
+    fb.style.display = 'block';
+    img.style.display = 'none';
+  }
+}
+
+function handleBusinessLogoError(img) {
+  const fb = document.getElementById('dash-biz-logo-fallback');
+  if (fb) {
+    fb.style.display = 'block';
+    img.style.display = 'none';
+  }
+}
+
+async function saveMerchantProfileChanges() {
+  const bizId = CURRENT_MERCHANT ? (CURRENT_MERCHANT.businessId || CURRENT_MERCHANT.id || 3) : 3;
+  const desc = document.getElementById('edit-b-desc')?.value || '';
+  const phone = document.getElementById('edit-b-phone')?.value || '';
+  const address = document.getElementById('edit-b-address')?.value || '';
+  const website = document.getElementById('edit-b-website')?.value || '';
+
+  try {
+    await apiCall(`/api/business/profile/${bizId}`, 'PUT', {
+      description: desc,
+      phone: phone,
+      address: address,
+      website: website
+    });
+
+    const bizObj = BUSINESSES.find(b => b.id === Number(bizId));
+    if (bizObj) {
+      bizObj.description = desc;
+      bizObj.phone = phone;
+      bizObj.address = address;
+      bizObj.website = website;
+    }
+    if (CURRENT_MERCHANT) {
+      CURRENT_MERCHANT.description = desc;
+      CURRENT_MERCHANT.phone = phone;
+      CURRENT_MERCHANT.address = address;
+      CURRENT_MERCHANT.website = website;
+    }
+
+    alert('✓ Store profile updates saved successfully!');
+  } catch (err) {
+    console.error('Failed to save merchant profile:', err);
+    alert('❌ Failed to save updates: ' + (err.message || err));
+  }
+}
 
 /* PUBLIC DISCOVERY & COMPARISON STATE */
 let SELECTED_COMPARE_ITEMS = []; // Array of business slugs or IDs
@@ -5477,6 +7217,7 @@ function route(page) {
   if (page === 'auth-business') updateMerchantAuthPageDisplay();
   if (page === 'admin-portal') initAdminPortal();
   if (page === 'freelancer') loadFreelancerPortal();
+  if (page === 'reviewer-decisions') loadReviewerDecisionsDashboard();
   if (page === 'freelancer-public' && !CURRENT_PROFILE_FREELANCER) openPublicFreelancerProfile('VP-FR-10284');
   if (page === 'checkout-session' && CURRENT_CHECKOUT_SESSION_ID) loadCheckoutSessionPage(CURRENT_CHECKOUT_SESSION_ID);
 
@@ -5508,35 +7249,57 @@ function badgeHTML(biz) {
 // 1. Fetch Dynamic Dropdown Locations & Industries from Database
 async function loadPublicFilterOptions() {
   try {
-    const [locRes, indRes] = await Promise.all([
-      fetch('/api/public/locations').then(r => r.json()),
-      fetch('/api/public/industries').then(r => r.json())
-    ]);
+    let locRes = null;
+    let indRes = null;
+
+    try {
+      const locFetch = fetch('/api/public/locations').then(r => r.ok ? r.json() : null).catch(() => null);
+      const indFetch = fetch('/api/public/industries').then(r => r.ok ? r.json() : null).catch(() => null);
+      [locRes, indRes] = await Promise.all([locFetch, indFetch]);
+    } catch {
+      // Gracefully fall through to fallback
+    }
 
     // Populate City Select
     const citySelect = document.getElementById('filter-city');
-    if (citySelect && locRes.success && locRes.locations) {
+    if (citySelect) {
       let html = '<option value="all">📍 All Cities & Hubs</option>';
-      locRes.locations.forEach(c => {
-        html += `<option value="${c.slug}">${c.name} (${c.business_count} businesses)</option>`;
-      });
+      if (locRes && locRes.success && Array.isArray(locRes.locations) && locRes.locations.length > 0) {
+        locRes.locations.forEach(c => {
+          html += `<option value="${c.slug || c.name}">${c.name} (${c.business_count || 0} businesses)</option>`;
+        });
+      } else if (typeof BUSINESSES !== 'undefined' && Array.isArray(BUSINESSES)) {
+        const uniqueCities = [...new Set(BUSINESSES.map(b => b.city).filter(Boolean))].sort();
+        uniqueCities.forEach(city => {
+          const count = BUSINESSES.filter(b => b.city === city).length;
+          html += `<option value="${city.toLowerCase()}">${city} (${count} businesses)</option>`;
+        });
+      }
       citySelect.innerHTML = html;
     }
 
     // Populate Industry Select
     const indSelect = document.getElementById('filter-industry');
-    if (indSelect && indRes.success && indRes.tree) {
+    if (indSelect) {
       let html = '<option value="all">🏢 All Industry Sectors</option>';
-      indRes.tree.forEach(cat => {
-        html += `<optgroup label="${cat.name}">`;
-        html += `<option value="${cat.slug}">${cat.name} (${cat.business_count})</option>`;
-        if (cat.subcategories && cat.subcategories.length > 0) {
-          cat.subcategories.forEach(sub => {
-            html += `<option value="${sub.slug}">&nbsp;&nbsp;└ ${sub.name} (${sub.business_count})</option>`;
-          });
-        }
-        html += `</optgroup>`;
-      });
+      if (indRes && indRes.success && Array.isArray(indRes.tree) && indRes.tree.length > 0) {
+        indRes.tree.forEach(cat => {
+          html += `<optgroup label="${cat.name}">`;
+          html += `<option value="${cat.slug || cat.name}">${cat.name} (${cat.business_count || 0})</option>`;
+          if (cat.subcategories && cat.subcategories.length > 0) {
+            cat.subcategories.forEach(sub => {
+              html += `<option value="${sub.slug || sub.name}">&nbsp;&nbsp;└ ${sub.name} (${sub.business_count || 0})</option>`;
+            });
+          }
+          html += `</optgroup>`;
+        });
+      } else if (typeof BUSINESSES !== 'undefined' && Array.isArray(BUSINESSES)) {
+        const uniqueInds = [...new Set(BUSINESSES.map(b => b.industry).filter(Boolean))].sort();
+        uniqueInds.forEach(ind => {
+          const count = BUSINESSES.filter(b => b.industry === ind).length;
+          html += `<option value="${ind.toLowerCase()}">${ind} (${count})</option>`;
+        });
+      }
       indSelect.innerHTML = html;
     }
 
@@ -5544,7 +7307,7 @@ async function loadPublicFilterOptions() {
     syncFiltersFromUrl();
 
   } catch (err) {
-    console.error('Failed to load discovery options:', err);
+    console.warn('Discovery options loaded with default presets:', err?.message || err);
   }
 }
 
@@ -6309,10 +8072,6 @@ function submitNewReview() {
   alert("Thank you! Your review has been saved to the VeriPinoy directory.");
 }
 
-function getInitials(str) {
-  return str.split(' ').map(n => n[0]).join('.') + '.';
-}
-
 /* CUSTOMER AUTH */
 function switchCustomerAuthTab(mode) {
   const signinBtn = document.getElementById('cust-auth-tab-signin');
@@ -6677,6 +8436,8 @@ function updateMerchantAuthPageDisplay() {
     document.getElementById('dash-biz-name').textContent = bizObj.name;
     document.getElementById('dash-biz-sub').textContent = `${bizObj.industry} · ${bizObj.city} Hub · Owner: ${bizObj.ownerName || 'Merchant'}`;
     
+    updateBusinessLogoUI(bizObj.logo || bizObj.logo_url, bizObj.name);
+
     document.getElementById('dash-stat-status').textContent = bizObj.status;
     document.getElementById('dash-stat-status').style.color = bizObj.status === 'Verified' ? 'var(--emerald-600)' : 'var(--amber-600)';
     document.getElementById('dash-stat-rating').textContent = `★ ${bizObj.rating || 5.0} / 5.0`;
@@ -6690,6 +8451,9 @@ function updateMerchantAuthPageDisplay() {
     document.getElementById('edit-b-desc').value = bizObj.description || '';
     document.getElementById('edit-b-phone').value = bizObj.phone || '';
     document.getElementById('edit-b-address').value = bizObj.address || '';
+    if (document.getElementById('edit-b-website')) {
+      document.getElementById('edit-b-website').value = bizObj.website || '';
+    }
 
     renderMerchantReviewsFeed();
   } else {
@@ -11098,47 +12862,6 @@ async function loadAuditLogs() {
    ========================================================================== */
 let CURRENT_FREELANCER_ID = 'VP-FR-10284';
 
-function switchFreelancerAuthTab(mode) {
-  const signinBtn = document.getElementById('fr-auth-tab-signin');
-  const regBtn = document.getElementById('fr-auth-tab-register');
-  const signinForm = document.getElementById('fr-form-signin');
-  const regForm = document.getElementById('fr-form-register');
-  const title = document.getElementById('fr-auth-title');
-  const subtitle = document.getElementById('fr-auth-subtitle');
-
-  if (mode === 'register') {
-    if (signinBtn) {
-      signinBtn.style.background = 'transparent';
-      signinBtn.style.color = 'var(--slate-600)';
-      signinBtn.style.boxShadow = 'none';
-    }
-    if (regBtn) {
-      regBtn.style.background = 'var(--white)';
-      regBtn.style.color = 'var(--navy-900)';
-      regBtn.style.boxShadow = 'var(--shadow-sm)';
-    }
-    if (signinForm) signinForm.style.display = 'none';
-    if (regForm) regForm.style.display = 'block';
-    if (title) title.innerText = 'Register as Verified Freelancer';
-    if (subtitle) subtitle.innerText = 'Create your professional developer / creative profile, submit KYC credentials, and get discovered by clients across the Philippines.';
-  } else {
-    if (regBtn) {
-      regBtn.style.background = 'transparent';
-      regBtn.style.color = 'var(--slate-600)';
-      regBtn.style.boxShadow = 'none';
-    }
-    if (signinBtn) {
-      signinBtn.style.background = 'var(--white)';
-      signinBtn.style.color = 'var(--navy-900)';
-      signinBtn.style.boxShadow = 'var(--shadow-sm)';
-    }
-    if (regForm) regForm.style.display = 'none';
-    if (signinForm) signinForm.style.display = 'block';
-    if (title) title.innerText = 'Freelancer Portal Sign In';
-    if (subtitle) subtitle.innerText = 'Access your verified portfolio, manage active work engagements, track payments, and file neutral arbitration claims.';
-  }
-}
-
 function triggerSocialAuth(provider, portal) {
   const providerLabel = provider === 'google' ? 'Google' : 'LinkedIn';
   const emailPrompt = prompt(`Authenticate with ${providerLabel} for ${portal.toUpperCase()} portal:\nEnter your verified account email:`, portal === 'customer' ? 'maria.santos@gmail.com' : (portal === 'business' ? 'owner@bahaykubo.ph' : 'freelancer@marcoreyes.dev'));
@@ -11176,65 +12899,6 @@ function triggerMagicLink(portal) {
   }
 }
 
-async function loginFreelancer() {
-  const email = document.getElementById('fr-login-email')?.value?.trim();
-  const pass = document.getElementById('fr-login-pass')?.value || 'Password123!';
-  if (!email) { alert("Please enter your email address."); return; }
-
-  try {
-    const res = await apiCall('/api/auth/login', 'POST', { email, password: pass, user_type: 'freelancer' });
-    CURRENT_FREELANCER_ID = res.user?.freelancerId || res.user?.id || 'VP-FR-10284';
-    if (res.token) {
-      localStorage.setItem('veripinoy_freelancer_token', res.token);
-    }
-  } catch (err) {
-    console.warn("Freelancer login fallback:", err.message);
-    CURRENT_FREELANCER_ID = 'VP-FR-10284';
-  }
-
-  route('freelancer');
-  loadFreelancerPortal();
-  alert(`Welcome back to your Freelancer Portal! Logged in as ${email}.`);
-}
-
-async function registerFreelancerAccount() {
-  const name = document.getElementById('fr-reg-name')?.value?.trim();
-  const email = document.getElementById('fr-reg-email')?.value?.trim();
-  const pass = document.getElementById('fr-reg-pass')?.value || 'Password123!';
-  const title = document.getElementById('fr-reg-title')?.value?.trim();
-  const cat = document.getElementById('fr-reg-category')?.value;
-  const city = document.getElementById('fr-reg-city')?.value?.trim();
-  const exp = parseInt(document.getElementById('fr-reg-exp')?.value || '1', 10);
-  const skills = document.getElementById('fr-reg-skills')?.value?.split(',').map(s => s.trim()) || ['Web Development'];
-
-  if (!name || !email || !title || !city) {
-    alert("Please fill in all required registration fields.");
-    return;
-  }
-
-  try {
-    const res = await apiCall('/api/freelancers/register', 'POST', {
-      full_name: name,
-      professional_name: name,
-      email,
-      password: pass,
-      category: cat,
-      city,
-      years_experience: exp,
-      skills,
-      portfolio_links: []
-    });
-    CURRENT_FREELANCER_ID = res.freelancer_id || res.id || 'VP-FR-10284';
-  } catch (err) {
-    console.warn("Freelancer register fallback:", err.message);
-    CURRENT_FREELANCER_ID = 'VP-FR-10284';
-  }
-
-  route('freelancer');
-  loadFreelancerPortal();
-  alert(`Congratulations ${name}! Your Verified Freelancer profile has been created. Start submitting your KYC credentials.`);
-}
-
 async function loadFreelancerPortal() {
   try {
     const data = await apiCall(`/api/freelancer/profile/${CURRENT_FREELANCER_ID}`);
@@ -11246,7 +12910,8 @@ async function loadFreelancerPortal() {
     const location = p.location || 'Metro Manila, Philippines';
     const yearsExp = p.years_experience || p.years_of_experience || 1;
 
-    document.getElementById('fr-photo').src = p.photo_url || p.profile_photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80';
+    updateFreelancerAvatarUI(p.photo_url || p.profile_photo, fullName);
+
     document.getElementById('fr-name').innerText = fullName;
     document.getElementById('fr-cat').innerText = category;
     document.getElementById('fr-id-tag').innerText = `ID: ${p.freelancer_id || p.id || CURRENT_FREELANCER_ID}`;
@@ -11263,10 +12928,12 @@ async function loadFreelancerPortal() {
     document.getElementById('fr-input-location').value = location;
     document.getElementById('fr-input-portfolio').value = Array.isArray(p.portfolio_links) ? p.portfolio_links.join(', ') : (p.portfolio_links || '');
 
-    // Load active disputes and engagements
-    loadFreelancerDisputes();
+    // Load active dashboard data
+    loadFreelancerWorkLogs();
+    loadFreelancerMilestones();
     loadFreelancerEngagements();
     loadFreelancerInvoices();
+    loadFreelancerDisputes();
   } catch (err) {
     console.error('Failed to load freelancer profile:', err);
   }
@@ -11281,84 +12948,393 @@ function switchFreelancerTab(tab) {
 
   if (btn) btn.classList.add('active');
   if (pane) pane.style.display = 'block';
+
+  if (tab === 'worklogs') loadFreelancerWorkLogs();
+  if (tab === 'milestones') loadFreelancerMilestones();
+  if (tab === 'engagements') loadFreelancerEngagements();
+  if (tab === 'invoices') loadFreelancerInvoices();
+  if (tab === 'disputes') loadFreelancerDisputes();
 }
 
-async function loadFreelancerDisputes() {
-  try {
-    const res = await apiCall(`/api/freelancer/disputes?freelancer_id=${CURRENT_FREELANCER_ID}`);
-    const disputes = res.disputes;
-    const container = document.getElementById('fr-disputes-list');
-    if (!container) return;
+/* ==========================================================================
+   REVIEWER STATE & SCOPE DEFINITION
+   ========================================================================== */
+const CURRENT_REVIEWER = {
+  id: 'REV-MNL-201',
+  name: 'Atty. Roberto Tan',
+  role: 'Lead Compliance Reviewer & Escrow Officer',
+  email: 'roberto.tan@veripinoy.ph',
+  region: 'Metro Manila / NCR'
+};
+window.CURRENT_REVIEWER = CURRENT_REVIEWER;
 
-    if (disputes.length === 0) {
-      container.innerHTML = `<div style="background:var(--slate-50); padding:28px; border-radius:var(--radius-lg); text-align:center; color:var(--slate-500);">No active dispute claims filed. Your account holds pristine compliance records.</div>`;
+/* ==========================================================================
+   FEATURE 1: FREELANCER WORK LOGGING & DELIVERABLES MODULE
+   ========================================================================== */
+let ACTIVE_FREELANCER_WORK_LOGS = [];
+let ACTIVE_FREELANCER_ENGAGEMENTS = [];
+let ACTIVE_FREELANCER_MILESTONES = [];
+let ACTIVE_FREELANCER_INVOICES = [];
+let ACTIVE_INVOICE_DATA = null;
+
+async function loadFreelancerWorkLogs(filterStatus = 'all') {
+  const container = document.getElementById('fr-worklogs-list');
+  if (!container) return;
+
+  try {
+    const url = `/api/freelancer/work-logs?freelancer_id=${CURRENT_FREELANCER_ID}${filterStatus !== 'all' ? `&status=${filterStatus}` : ''}`;
+    const res = await apiCall(url);
+    ACTIVE_FREELANCER_WORK_LOGS = res.work_logs || [];
+
+    renderFreelancerWorkLogs(ACTIVE_FREELANCER_WORK_LOGS);
+  } catch (err) {
+    console.error('Failed to load work logs:', err);
+    container.innerHTML = `<div class="alert alert-warn">Failed to load work logs: ${err.message}</div>`;
+  }
+}
+
+function renderFreelancerWorkLogs(logs) {
+  const container = document.getElementById('fr-worklogs-list');
+  if (!container) return;
+
+  if (!logs || logs.length === 0) {
+    container.innerHTML = `
+      <div style="background:var(--slate-50); border:1px dashed var(--slate-300); border-radius:var(--radius-lg); padding:36px; text-align:center;">
+        <div style="font-size:2.5rem; margin-bottom:10px;">⏱️</div>
+        <h4 style="font-family:var(--font-heading); font-size:1.1rem; color:var(--navy-900); font-weight:800; margin:0 0 6px;">No Work Logs Found</h4>
+        <p style="color:var(--slate-500); font-size:0.88rem; max-width:420px; margin:0 auto 16px;">
+          Log your task hours, submit proof of work URLs, and attach milestone deliverables to get reviewed and paid.
+        </p>
+        <button class="btn btn-emerald" onclick="openSubmitWorkLogModal()">+ Submit First Work Log</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = logs.map(l => {
+    let statusBadge = `<span class="badge badge-amber">⏳ PENDING REVIEW</span>`;
+    if (l.status === 'approved') statusBadge = `<span class="badge badge-emerald">🟢 APPROVED</span>`;
+    if (l.status === 'changes_requested') statusBadge = `<span class="badge badge-blue">✏️ CHANGES REQUESTED</span>`;
+    if (l.status === 'invoiced') statusBadge = `<span class="badge badge-purple">🧾 INVOICED</span>`;
+    if (l.status === 'paid') statusBadge = `<span class="badge badge-emerald">💰 PAID</span>`;
+    if (l.status === 'rejected') statusBadge = `<span class="badge badge-red">❌ REJECTED</span>`;
+
+    const links = (l.deliverable_links || []).map(link => 
+      `<a href="${link}" target="_blank" rel="noopener noreferrer" style="color:var(--emerald-600); font-weight:700; text-decoration:underline; margin-right:12px; font-size:0.82rem;">🔗 ${link}</a>`
+    ).join('');
+
+    return `
+      <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:22px; box-shadow:var(--shadow-sm); margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="font-size:0.75rem; font-weight:800; color:var(--emerald-600); text-transform:uppercase;">
+              Log Ref: ${l.id} • ${new Date(l.logged_at).toLocaleDateString()}
+            </div>
+            <h4 style="font-family:var(--font-heading); font-size:1.15rem; color:var(--navy-900); font-weight:800; margin-top:2px;">
+              ${l.task_title}
+            </h4>
+            <div style="font-size:0.85rem; color:var(--slate-600); margin-top:3px;">
+              Contract: <strong>${l.project_title || 'Client Project'}</strong> ${l.milestone_title ? `• Milestone: <span class="badge badge-purple" style="font-size:0.7rem;">${l.milestone_title}</span>` : ''}
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:1.25rem; font-weight:900; color:var(--navy-900); font-family:var(--font-heading);">
+              ₱${(l.calculated_amount || 0).toLocaleString()}
+            </div>
+            <div style="font-size:0.75rem; color:var(--slate-500);">${l.hours_spent || 0} hrs @ ₱${(l.hourly_rate || 0).toLocaleString()}/hr</div>
+            <div style="margin-top:4px;">${statusBadge}</div>
+          </div>
+        </div>
+
+        <p style="font-size:0.88rem; color:var(--slate-700); line-height:1.6; margin-bottom:14px; background:var(--slate-50); padding:12px 16px; border-radius:var(--radius-md);">
+          ${l.description}
+        </p>
+
+        ${links ? `
+          <div style="margin-bottom:14px; padding:8px 12px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:var(--radius-md);">
+            <span style="font-size:0.75rem; font-weight:800; color:#166534; text-transform:uppercase; display:block; margin-bottom:4px;">Deliverable & Proof URLs:</span>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">${links}</div>
+          </div>
+        ` : ''}
+
+        ${l.review_feedback ? `
+          <div style="background:#FEF3C7; border-left:4px solid #F59E0B; padding:12px 16px; border-radius:0 var(--radius-md) var(--radius-md) 0; margin-bottom:14px;">
+            <div style="font-size:0.78rem; font-weight:800; color:#92400E; text-transform:uppercase;">Reviewer Feedback (${l.reviewed_by_name || 'Client Reviewer'}):</div>
+            <div style="font-size:0.85rem; color:#78350F; margin-top:2px;">"${l.review_feedback}"</div>
+          </div>
+        ` : ''}
+
+        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--slate-100); padding-top:12px; font-size:0.8rem; color:var(--slate-500); flex-wrap:wrap; gap:8px;">
+          <div>Attachments: <strong>${l.attachments && l.attachments.length > 0 ? l.attachments.join(', ') : 'None attached'}</strong></div>
+          <div>
+            ${l.status === 'approved' ? `
+              <button class="btn btn-emerald" style="padding:4px 12px; font-size:0.78rem; font-weight:700;" onclick="openGenerateInvoiceModal('${l.engagement_id}')">
+                🧾 Convert to Invoice
+              </button>
+            ` : ''}
+            ${l.status === 'changes_requested' ? `
+              <button class="btn btn-outline" style="padding:4px 12px; font-size:0.78rem; font-weight:700; color:#D97706; border-color:#FDE68A;" onclick="openSubmitWorkLogModal('${l.engagement_id}', '${l.milestone_id}')">
+                ✏️ Submit Revised Log
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterFreelancerWorkLogs(status, btn) {
+  document.querySelectorAll('#fr-pane-worklogs .sub-tab-btn, #fr-pane-worklogs button').forEach(b => {
+    if (b.classList.contains('sub-tab-btn')) b.classList.remove('active');
+  });
+  if (btn) btn.classList.add('active');
+  loadFreelancerWorkLogs(status);
+}
+
+async function openSubmitWorkLogModal(engagementId = '', milestoneId = '') {
+  try {
+    const res = await apiCall(`/api/freelancer/engagements?freelancer_id=${CURRENT_FREELANCER_ID}`);
+    ACTIVE_FREELANCER_ENGAGEMENTS = res.engagements || [];
+
+    const engSelect = document.getElementById('wlog-engagement-select');
+    if (engSelect) {
+      engSelect.innerHTML = '<option value="">-- Select Client Engagement --</option>' + 
+        ACTIVE_FREELANCER_ENGAGEMENTS.map(e => 
+          `<option value="${e.id}" ${e.id === engagementId ? 'selected' : ''}>${e.project_title} (${e.client_name})</option>`
+        ).join('');
+    }
+
+    if (engagementId) {
+      await onWorkLogEngagementChange(engagementId, milestoneId);
+    }
+
+    document.getElementById('modal-submit-worklog').style.display = 'flex';
+  } catch (err) {
+    alert('Failed to load engagements: ' + err.message);
+  }
+}
+
+function closeSubmitWorkLogModal() {
+  document.getElementById('modal-submit-worklog').style.display = 'none';
+}
+
+async function onWorkLogEngagementChange(engagementId, selectMilestoneId = '') {
+  const mlsSelect = document.getElementById('wlog-milestone-select');
+  if (!mlsSelect) return;
+
+  if (!engagementId) {
+    mlsSelect.innerHTML = '<option value="">-- Select Milestone (Optional) --</option>';
+    return;
+  }
+
+  try {
+    const res = await apiCall(`/api/freelancer/milestones?engagement_id=${engagementId}`);
+    const milestones = res.milestones || [];
+    mlsSelect.innerHTML = '<option value="">-- General Contract Hours (No Milestone) --</option>' +
+      milestones.map(m => 
+        `<option value="${m.id}" ${m.id === selectMilestoneId ? 'selected' : ''}>${m.milestone_title} (₱${(m.amount || 0).toLocaleString()}) - ${m.status.toUpperCase()}</option>`
+      ).join('');
+  } catch (err) {
+    console.error('Failed to load milestones for select:', err);
+  }
+}
+
+function calculateWorkLogTotal() {
+  const hours = parseFloat(document.getElementById('wlog-hours').value) || 0;
+  const rate = parseFloat(document.getElementById('wlog-rate').value) || 0;
+  const totalInput = document.getElementById('wlog-total-amount');
+  if (totalInput) {
+    totalInput.value = (hours * rate).toFixed(0);
+  }
+}
+
+async function handleSubmitWorkLog(e) {
+  e.preventDefault();
+  const engId = document.getElementById('wlog-engagement-select').value;
+  const mlsId = document.getElementById('wlog-milestone-select').value;
+  const title = document.getElementById('wlog-title').value;
+  const desc = document.getElementById('wlog-desc').value;
+  const hours = parseFloat(document.getElementById('wlog-hours').value) || 0;
+  const rate = parseFloat(document.getElementById('wlog-rate').value) || 0;
+  const total = parseFloat(document.getElementById('wlog-total-amount').value) || (hours * rate);
+  const links = document.getElementById('wlog-links').value.split(',').map(s => s.trim()).filter(Boolean);
+  const attachNotes = document.getElementById('wlog-attachments').value;
+
+  try {
+    const res = await apiCall('/api/freelancer/work-logs', 'POST', {
+      freelancer_id: CURRENT_FREELANCER_ID,
+      engagement_id: engId,
+      milestone_id: mlsId || null,
+      task_title: title,
+      description: desc,
+      hours_spent: hours,
+      hourly_rate: rate,
+      calculated_amount: total,
+      deliverable_links: links,
+      attachments: attachNotes ? [attachNotes] : []
+    });
+
+    closeSubmitWorkLogModal();
+    alert(`✓ Work Log submitted successfully! Reference ID: ${res.work_log_id}\nIt is now pending reviewer inspection.`);
+    loadFreelancerWorkLogs();
+    loadFreelancerMilestones();
+  } catch (err) {
+    alert('Error submitting work log: ' + err.message);
+  }
+}
+
+/* ==========================================================================
+   MILESTONE CONTRACTS MODULE
+   ========================================================================== */
+async function loadFreelancerMilestones() {
+  const container = document.getElementById('fr-milestones-list');
+  if (!container) return;
+
+  try {
+    const res = await apiCall(`/api/freelancer/milestones?freelancer_id=${CURRENT_FREELANCER_ID}`);
+    ACTIVE_FREELANCER_MILESTONES = res.milestones || [];
+
+    if (ACTIVE_FREELANCER_MILESTONES.length === 0) {
+      container.innerHTML = `
+        <div style="background:var(--slate-50); border:1px dashed var(--slate-300); border-radius:var(--radius-lg); padding:36px; text-align:center;">
+          <div style="font-size:2.5rem; margin-bottom:10px;">📜</div>
+          <h4 style="font-family:var(--font-heading); font-size:1.1rem; color:var(--navy-900); font-weight:800; margin:0 0 6px;">No Milestones Configured</h4>
+          <p style="color:var(--slate-500); font-size:0.88rem; max-width:420px; margin:0 auto 16px;">
+            Milestone contracts ensure payments are held securely in escrow and released upon deliverable sign-off.
+          </p>
+          <button class="btn btn-emerald" onclick="openCreateMilestoneModal()">+ Create First Milestone</button>
+        </div>
+      `;
       return;
     }
 
-    container.innerHTML = disputes.map(d => {
-      let statusBadge = `<span class="badge badge-amber">${d.status.toUpperCase()}</span>`;
-      if (d.status === 'resolved') statusBadge = `<span class="badge badge-emerald">RESOLVED</span>`;
+    container.innerHTML = ACTIVE_FREELANCER_MILESTONES.map(m => {
+      let statusBadge = `<span class="badge badge-slate">${m.status.toUpperCase()}</span>`;
+      if (m.status === 'in_progress') statusBadge = `<span class="badge badge-amber">⚙️ IN PROGRESS</span>`;
+      if (m.status === 'submitted') statusBadge = `<span class="badge badge-blue">⏳ SUBMITTED</span>`;
+      if (m.status === 'approved') statusBadge = `<span class="badge badge-emerald">🟢 APPROVED</span>`;
+      if (m.status === 'paid') statusBadge = `<span class="badge badge-emerald">💰 ESCROW RELEASED</span>`;
 
       return `
-        <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:24px; box-shadow:var(--shadow-sm); margin-bottom:16px;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+        <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:22px; box-shadow:var(--shadow-sm); margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
             <div>
-              <div style="font-size:0.75rem; font-weight:800; color:var(--emerald-600); text-transform:uppercase;">Claim Ref: ${d.id} • ${new Date(d.created_at).toLocaleDateString()}</div>
-              <h4 style="font-family:var(--font-heading); font-size:1.15rem; color:var(--navy-900); font-weight:800; margin-top:2px;">${d.title}</h4>
-              <div style="font-size:0.85rem; color:var(--slate-600); margin-top:4px;">
-                Client / Company: <strong>${d.client_name} (${d.client_company})</strong> • Disputed Amount: <strong style="color:var(--emerald-600);">₱${d.amount_disputed.toLocaleString()}</strong>
-              </div>
+              <div style="font-size:0.75rem; font-weight:800; color:var(--purple-600); text-transform:uppercase;">Milestone Ref: ${m.id}</div>
+              <h4 style="font-family:var(--font-heading); font-size:1.15rem; color:var(--navy-900); font-weight:800; margin-top:2px;">${m.milestone_title}</h4>
+              <div style="font-size:0.85rem; color:var(--slate-600);">Contract: <strong>${m.project_title || 'Client Engagement'}</strong> • Due: <strong>${m.due_date || 'Target Schedule'}</strong></div>
             </div>
-            ${statusBadge}
+            <div style="text-align:right;">
+              <div style="font-size:1.3rem; font-weight:900; color:var(--emerald-600); font-family:var(--font-heading);">₱${(m.amount || 0).toLocaleString()}</div>
+              <div style="margin-top:4px;">${statusBadge}</div>
+            </div>
           </div>
 
-          <p style="font-size:0.88rem; color:var(--slate-600); line-height:1.5; margin-bottom:16px; background:var(--slate-50); padding:12px 16px; border-radius:var(--radius-md);">
-            "${d.description}"
+          <p style="font-size:0.88rem; color:var(--slate-600); line-height:1.5; margin-bottom:14px;">
+            ${m.description}
           </p>
 
-          ${d.resolution ? `
-            <div style="background:#ECFDF5; border-left:4px solid #10B981; padding:12px 16px; border-radius:4px; margin-bottom:16px;">
-              <div style="font-size:0.8rem; font-weight:800; color:#065F46; text-transform:uppercase;">Neutral Arbitrator Binding Resolution</div>
-              <div style="font-size:0.88rem; color:#047857; margin-top:2px;">${d.resolution}</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--slate-100); padding-top:12px;">
+            <div style="font-size:0.8rem; color:var(--slate-500);">Target Deliverables: <strong>${m.deliverables ? m.deliverables.join(', ') : 'Code and Assets'}</strong></div>
+            <div>
+              <button class="btn btn-outline" style="font-size:0.78rem; padding:4px 12px;" onclick="openSubmitWorkLogModal('${m.engagement_id}', '${m.id}')">
+                ⏱️ Log Work for Milestone
+              </button>
             </div>
-          ` : ''}
-
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="font-size:0.78rem; color:var(--slate-500);">Proof Documents in Vault: <strong>${d.evidence_count || 2} Files</strong></div>
-            <button class="btn btn-outline" style="font-size:0.8rem;" onclick="alert('Viewing protected evidence vault for dispute ${d.id}')">📂 Inspect Evidence Vault</button>
           </div>
         </div>
       `;
     }).join('');
 
   } catch (err) {
-    console.error('Failed to load disputes:', err);
+    console.error('Failed to load milestones:', err);
   }
 }
 
-async function loadFreelancerEngagements() {
+async function openCreateMilestoneModal(engagementId = '') {
   try {
     const res = await apiCall(`/api/freelancer/engagements?freelancer_id=${CURRENT_FREELANCER_ID}`);
-    const list = res.engagements;
-    const container = document.getElementById('fr-engagements-list');
-    if (!container) return;
+    ACTIVE_FREELANCER_ENGAGEMENTS = res.engagements || [];
 
-    if (list.length === 0) {
+    const engSelect = document.getElementById('mls-engagement-select');
+    if (engSelect) {
+      engSelect.innerHTML = '<option value="">-- Select Engagement --</option>' + 
+        ACTIVE_FREELANCER_ENGAGEMENTS.map(e => 
+          `<option value="${e.id}" ${e.id === engagementId ? 'selected' : ''}>${e.project_title} (${e.client_name})</option>`
+        ).join('');
+    }
+
+    document.getElementById('modal-create-milestone').style.display = 'flex';
+  } catch (err) {
+    alert('Failed to load engagements: ' + err.message);
+  }
+}
+
+function closeCreateMilestoneModal() {
+  document.getElementById('modal-create-milestone').style.display = 'none';
+}
+
+async function handleCreateMilestoneSubmit(e) {
+  e.preventDefault();
+  const engId = document.getElementById('mls-engagement-select').value;
+  const title = document.getElementById('mls-title').value;
+  const desc = document.getElementById('mls-desc').value;
+  const amt = parseFloat(document.getElementById('mls-amount').value) || 0;
+  const dueDate = document.getElementById('mls-due-date').value;
+
+  try {
+    const res = await apiCall('/api/freelancer/milestones', 'POST', {
+      engagement_id: engId,
+      milestone_title: title,
+      description: desc,
+      amount: amt,
+      due_date: dueDate,
+      deliverables: ['Production deliverables and code review']
+    });
+
+    closeCreateMilestoneModal();
+    alert(`✓ Milestone created successfully! Reference ID: ${res.milestone_id}`);
+    loadFreelancerMilestones();
+  } catch (err) {
+    alert('Error creating milestone: ' + err.message);
+  }
+}
+
+/* ==========================================================================
+   ENGAGEMENTS MODULE
+   ========================================================================== */
+async function loadFreelancerEngagements() {
+  const container = document.getElementById('fr-engagements-list');
+  if (!container) return;
+
+  try {
+    const res = await apiCall(`/api/freelancer/engagements?freelancer_id=${CURRENT_FREELANCER_ID}`);
+    ACTIVE_FREELANCER_ENGAGEMENTS = res.engagements || [];
+
+    if (ACTIVE_FREELANCER_ENGAGEMENTS.length === 0) {
       container.innerHTML = `<div style="background:var(--slate-50); padding:28px; border-radius:var(--radius-lg); text-align:center; color:var(--slate-500);">No work engagements logged. Log new client milestone contracts to build verified history.</div>`;
       return;
     }
 
-    container.innerHTML = list.map(e => `
+    container.innerHTML = ACTIVE_FREELANCER_ENGAGEMENTS.map(e => `
       <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:24px; box-shadow:var(--shadow-sm); margin-bottom:16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <h4 style="font-family:var(--font-heading); font-size:1.1rem; color:var(--navy-900); font-weight:800;">${e.project_title}</h4>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+          <div>
+            <div style="font-size:0.75rem; font-weight:800; color:var(--emerald-600); text-transform:uppercase;">Contract ID: ${e.id}</div>
+            <h4 style="font-family:var(--font-heading); font-size:1.15rem; color:var(--navy-900); font-weight:800; margin-top:2px;">${e.project_title}</h4>
+          </div>
           <span class="badge badge-emerald">${e.status.toUpperCase()}</span>
         </div>
         <div style="font-size:0.85rem; color:var(--slate-600); margin-bottom:12px;">
-          Client: <strong>${e.client_name}</strong> (${e.client_email}) • Contract Amount: <strong>₱${e.agreed_amount.toLocaleString()}</strong>
+          Client: <strong>${e.client_name}</strong> (${e.client_email}) • Contract Amount: <strong style="color:var(--emerald-600);">₱${(e.agreed_amount || 0).toLocaleString()}</strong>
         </div>
-        <div style="font-size:0.82rem; color:var(--slate-500);">
-          Agreed Timeline: ${e.start_date} to ${e.end_date || 'Ongoing'} • Payment Terms: <strong>${e.payment_terms}</strong>
+        <div style="font-size:0.82rem; color:var(--slate-500); margin-bottom:14px;">
+          Timeline: ${e.start_date} to ${e.end_date || 'Ongoing'} • Payment Terms: <strong>${e.payment_terms}</strong>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-outline" style="font-size:0.78rem; padding:4px 12px;" onclick="openSubmitWorkLogModal('${e.id}')">+ Log Hours</button>
+          <button class="btn btn-outline" style="font-size:0.78rem; padding:4px 12px;" onclick="openCreateMilestoneModal('${e.id}')">+ Add Milestone</button>
+          <button class="btn btn-emerald" style="font-size:0.78rem; padding:4px 12px;" onclick="openGenerateInvoiceModal('${e.id}')">🧾 Generate Invoice</button>
         </div>
       </div>
     `).join('');
@@ -11368,138 +13344,882 @@ async function loadFreelancerEngagements() {
   }
 }
 
+/* ==========================================================================
+   FORMAL INVOICING & BIR COMPLIANCE MODULE
+   ========================================================================== */
 async function loadFreelancerInvoices() {
   const container = document.getElementById('fr-invoices-list');
   if (!container) return;
+
+  try {
+    const res = await apiCall(`/api/freelancer/invoices?freelancer_id=${CURRENT_FREELANCER_ID}`);
+    ACTIVE_FREELANCER_INVOICES = res.invoices || [];
+
+    if (ACTIVE_FREELANCER_INVOICES.length === 0) {
+      container.innerHTML = `
+        <div style="background:var(--slate-50); border:1px dashed var(--slate-300); border-radius:var(--radius-lg); padding:36px; text-align:center;">
+          <div style="font-size:2.5rem; margin-bottom:10px;">🧾</div>
+          <h4 style="font-family:var(--font-heading); font-size:1.1rem; color:var(--navy-900); font-weight:800; margin:0 0 6px;">No Formal Invoices Generated</h4>
+          <p style="color:var(--slate-500); font-size:0.88rem; max-width:420px; margin:0 auto 16px;">
+            Convert approved work logs or milestone deliverables into BIR-compliant PDF invoices sent to clients.
+          </p>
+          <button class="btn btn-emerald" onclick="openGenerateInvoiceModal()">+ Generate New Invoice</button>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <table style="width:100%; border-collapse:collapse; font-size:0.88rem;">
+        <thead>
+          <tr style="background:var(--slate-100); text-transform:uppercase; font-size:0.75rem; color:var(--slate-600);">
+            <th style="padding:12px; text-align:left;">Invoice #</th>
+            <th style="padding:12px; text-align:left;">Client Name</th>
+            <th style="padding:12px; text-align:left;">Billed Title</th>
+            <th style="padding:12px; text-align:left;">Amount Due</th>
+            <th style="padding:12px; text-align:left;">Status</th>
+            <th style="padding:12px; text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${ACTIVE_FREELANCER_INVOICES.map(inv => {
+            let statusBadge = `<span class="badge badge-amber">${inv.status.toUpperCase()}</span>`;
+            if (inv.status === 'approved') statusBadge = `<span class="badge badge-blue">APPROVED</span>`;
+            if (inv.status === 'paid') statusBadge = `<span class="badge badge-emerald">PAID & SETTLED</span>`;
+
+            return `
+              <tr style="border-bottom:1px solid var(--slate-200);">
+                <td style="padding:12px; font-weight:800; color:var(--navy-900);">${inv.invoice_number || inv.id}</td>
+                <td style="padding:12px;">${inv.client_name || 'Client'}</td>
+                <td style="padding:12px; font-size:0.82rem; color:var(--slate-700);">${inv.title || 'Freelance Services'}</td>
+                <td style="padding:12px; font-weight:800; color:var(--emerald-600);">₱${(inv.total_amount || inv.amount || 0).toLocaleString()}</td>
+                <td style="padding:12px;">${statusBadge}</td>
+                <td style="padding:12px; text-align:right; white-space:nowrap;">
+                  <button class="btn btn-outline" style="padding:4px 10px; font-size:0.75rem; margin-right:4px;" onclick="viewInvoiceModal('${inv.id}')">📄 View Invoice</button>
+                  ${inv.status === 'paid' ? `
+                    <button class="btn btn-emerald" style="padding:4px 10px; font-size:0.75rem;" onclick="viewReceiptModal('${inv.id}')">🧾 Receipt</button>
+                  ` : ''}
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+
+  } catch (err) {
+    console.error('Failed to load invoices:', err);
+  }
+}
+
+async function openGenerateInvoiceModal(presetEngagementId = '') {
+  try {
+    const res = await apiCall(`/api/freelancer/engagements?freelancer_id=${CURRENT_FREELANCER_ID}`);
+    ACTIVE_FREELANCER_ENGAGEMENTS = res.engagements || [];
+
+    const engSelect = document.getElementById('inv-gen-engagement-select');
+    if (engSelect) {
+      engSelect.innerHTML = '<option value="">-- Select Client Engagement --</option>' + 
+        ACTIVE_FREELANCER_ENGAGEMENTS.map(e => 
+          `<option value="${e.id}" ${e.id === presetEngagementId ? 'selected' : ''}>${e.project_title} (${e.client_name})</option>`
+        ).join('');
+    }
+
+    if (presetEngagementId) {
+      await onInvoiceEngagementChange(presetEngagementId);
+    }
+
+    document.getElementById('modal-generate-invoice').style.display = 'flex';
+  } catch (err) {
+    alert('Failed to load engagements: ' + err.message);
+  }
+}
+
+function closeGenerateInvoiceModal() {
+  document.getElementById('modal-generate-invoice').style.display = 'none';
+}
+
+async function onInvoiceEngagementChange(engagementId) {
+  const container = document.getElementById('inv-gen-worklogs-checkboxes');
+  if (!container) return;
+
+  if (!engagementId) {
+    container.innerHTML = '<div style="font-size:0.82rem; color:var(--slate-500);">Select a contract above to populate work items...</div>';
+    updateInvoiceGenerationCalculations();
+    return;
+  }
+
+  try {
+    const res = await apiCall(`/api/freelancer/work-logs?engagement_id=${engagementId}`);
+    const logs = res.work_logs || [];
+
+    if (logs.length === 0) {
+      container.innerHTML = '<div style="font-size:0.82rem; color:var(--slate-500);">No work logs recorded for this contract. You can still create an invoice using custom milestones.</div>';
+      updateInvoiceGenerationCalculations();
+      return;
+    }
+
+    container.innerHTML = logs.map(l => `
+      <label style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--slate-100); font-size:0.85rem; cursor:pointer;">
+        <div>
+          <input type="checkbox" name="inv_worklog_chk" value="${l.id}" data-amount="${l.calculated_amount || 0}" checked onchange="updateInvoiceGenerationCalculations()" style="margin-right:8px;">
+          <strong>${l.task_title}</strong> (${l.hours_spent || 0} hrs)
+        </div>
+        <span style="font-weight:800; color:var(--navy-900);">₱${(l.calculated_amount || 0).toLocaleString()}</span>
+      </label>
+    `).join('');
+
+    updateInvoiceGenerationCalculations();
+  } catch (err) {
+    container.innerHTML = `<div style="font-size:0.82rem; color:#DC2626;">Failed to load work logs: ${err.message}</div>`;
+  }
+}
+
+function updateInvoiceGenerationCalculations() {
+  let subtotal = 0;
+  const checkboxes = document.querySelectorAll('input[name="inv_worklog_chk"]:checked');
+  checkboxes.forEach(chk => {
+    subtotal += parseFloat(chk.getAttribute('data-amount')) || 0;
+  });
+
+  if (checkboxes.length === 0) {
+    subtotal = 24000; // default preset for manual invoice
+  }
+
+  const tax = subtotal * 0.02; // 2% creditable withholding tax Form 2307
+  const net = subtotal - tax;
+
+  const subDisplay = document.getElementById('inv-gen-subtotal-display');
+  const taxDisplay = document.getElementById('inv-gen-tax-display');
+  const totalDisplay = document.getElementById('inv-gen-total-display');
+
+  if (subDisplay) subDisplay.innerText = `₱${subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  if (taxDisplay) taxDisplay.innerText = `- ₱${tax.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  if (totalDisplay) totalDisplay.innerText = `₱${net.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+}
+
+async function handleGenerateInvoiceSubmit(e) {
+  e.preventDefault();
+  const engId = document.getElementById('inv-gen-engagement-select').value;
+  const title = document.getElementById('inv-gen-title').value;
+  const dueDate = document.getElementById('inv-gen-due-date').value;
+  const terms = document.getElementById('inv-gen-terms').value;
+  const notes = document.getElementById('inv-gen-notes').value;
+
+  const selectedLogIds = Array.from(document.querySelectorAll('input[name="inv_worklog_chk"]:checked')).map(c => c.value);
+
+  let subtotal = 0;
+  document.querySelectorAll('input[name="inv_worklog_chk"]:checked').forEach(c => {
+    subtotal += parseFloat(c.getAttribute('data-amount')) || 0;
+  });
+  if (subtotal === 0) subtotal = 24000;
+
+  const tax = subtotal * 0.02;
+  const net = subtotal - tax;
+
+  try {
+    const res = await apiCall('/api/freelancer/invoices', 'POST', {
+      freelancer_id: CURRENT_FREELANCER_ID,
+      engagement_id: engId,
+      title: title,
+      work_log_ids: selectedLogIds,
+      amount: net,
+      subtotal_amount: subtotal,
+      tax_amount: tax,
+      due_date: dueDate,
+      payment_terms: terms,
+      notes: notes
+    });
+
+    closeGenerateInvoiceModal();
+    alert(`✓ Formal Invoice generated and transmitted to client!\nInvoice Number: ${res.invoice_number}`);
+    loadFreelancerInvoices();
+    loadFreelancerWorkLogs();
+  } catch (err) {
+    alert('Error generating invoice: ' + err.message);
+  }
+}
+
+async function viewInvoiceModal(invoiceId) {
+  try {
+    const res = await apiCall(`/api/freelancer/invoices/${invoiceId}`);
+    const inv = res.invoice;
+    ACTIVE_INVOICE_DATA = inv;
+
+    const viewport = document.getElementById('invoice-modal-content-viewport');
+    if (!viewport) return;
+
+    let statusBadge = `<span class="badge badge-amber">${(inv.status || 'SENT').toUpperCase()}</span>`;
+    if (inv.status === 'paid') statusBadge = `<span class="badge badge-emerald">PAID & SETTLED</span>`;
+
+    viewport.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
+        <div>
+          <div style="font-size:0.8rem; font-weight:800; color:var(--emerald-600); text-transform:uppercase;">Official Invoice</div>
+          <h2 style="font-family:var(--font-heading); font-size:1.8rem; color:var(--navy-900); font-weight:900; margin:4px 0;">${inv.invoice_number || inv.id}</h2>
+          <div style="font-size:0.85rem; color:var(--slate-500);">Issue Date: <strong>${new Date(inv.created_at || Date.now()).toLocaleDateString()}</strong> • Due: <strong>${inv.due_date || 'Net 15'}</strong></div>
+        </div>
+        <div style="text-align:right;">
+          ${statusBadge}
+          <div style="font-size:0.82rem; color:var(--slate-500); margin-top:6px;">BIR Registered TIN: <strong>489-201-842-000</strong></div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:18px; margin-bottom:24px; font-size:0.85rem;">
+        <div>
+          <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase; margin-bottom:4px;">Billed From (Freelancer):</div>
+          <strong style="font-size:0.95rem; color:var(--navy-900);">${inv.freelancer_name || 'Marco Antonio Reyes'}</strong>
+          <div style="color:var(--slate-600); margin-top:2px;">ID: ${inv.freelancer_id || CURRENT_FREELANCER_ID}</div>
+          <div style="color:var(--slate-600);">Quezon City, Metro Manila, Philippines</div>
+        </div>
+        <div>
+          <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase; margin-bottom:4px;">Billed To (Client):</div>
+          <strong style="font-size:0.95rem; color:var(--navy-900);">${inv.client_name || 'Nexus Digital Media Inc'}</strong>
+          <div style="color:var(--slate-600); margin-top:2px;">${inv.client_company || 'Corporate Client'}</div>
+          <div style="color:var(--slate-600);">${inv.client_email || 'billing@nexus.ph'}</div>
+        </div>
+      </div>
+
+      <table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size:0.88rem;">
+        <thead>
+          <tr style="background:var(--slate-100); text-transform:uppercase; font-size:0.75rem; color:var(--slate-600);">
+            <th style="padding:10px 12px; text-align:left;">Item & Deliverable Description</th>
+            <th style="padding:10px 12px; text-align:right;">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--slate-200);">
+            <td style="padding:12px;">
+              <strong>${inv.title || 'Contract Deliverable Execution'}</strong>
+              <div style="font-size:0.8rem; color:var(--slate-500); margin-top:2px;">Verified tasks and approved deliverables under contract milestone.</div>
+            </td>
+            <td style="padding:12px; text-align:right; font-weight:800; color:var(--navy-900);">₱${(inv.subtotal_amount || inv.amount || 24000).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="display:flex; justify-content:flex-end; margin-bottom:24px;">
+        <div style="width:280px; font-size:0.88rem;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span>Subtotal:</span>
+            <strong>₱${(inv.subtotal_amount || inv.amount || 24000).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:var(--slate-600); font-size:0.82rem;">
+            <span>BIR 2% Withholding Tax:</span>
+            <span>- ₱${(inv.tax_amount || (inv.amount * 0.02) || 480).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; border-top:2px solid var(--slate-300); padding-top:8px; font-size:1.1rem; color:var(--emerald-600); font-weight:900;">
+            <span>Total Net Due:</span>
+            <span>₱${(inv.total_amount || inv.amount || 23520).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:var(--radius-md); padding:14px; font-size:0.82rem; color:#166534;">
+        🔒 <strong>VeriPinoy Guaranteed Escrow:</strong> Payment is held in insured escrow under Republic Act 8792 (E-Commerce Act of the Philippines).
+      </div>
+    `;
+
+    document.getElementById('modal-view-invoice').style.display = 'flex';
+  } catch (err) {
+    alert('Failed to inspect invoice: ' + err.message);
+  }
+}
+
+function closeViewInvoiceModal() {
+  document.getElementById('modal-view-invoice').style.display = 'none';
+}
+
+function printActiveInvoice() {
+  window.print();
+}
+
+function downloadActiveInvoicePDF() {
+  if (!ACTIVE_INVOICE_DATA) return;
+  const inv = ACTIVE_INVOICE_DATA;
+  const headers = ['Item Description', 'Amount (PHP)'];
+  const rows = [
+    [inv.title || 'Contract Deliverable Services', `PHP ${(inv.total_amount || inv.amount || 0).toLocaleString()}`]
+  ];
+  exportToPDF(
+    `Invoice_${inv.invoice_number || inv.id}.pdf`,
+    `Electronic Invoice: ${inv.invoice_number || inv.id}`,
+    `Client: ${inv.client_name || 'Client'} | Freelancer: ${inv.freelancer_name || 'Marco Antonio Reyes'}`,
+    headers,
+    rows,
+    `Total Net Amount Due: PHP ${(inv.total_amount || inv.amount || 0).toLocaleString()}`
+  );
+}
+
+/* ==========================================================================
+   REVIEWER DECISION DASHBOARD (FEATURE 1 - CLIENT / REVIEWER INTERFACE)
+   ========================================================================== */
+let ACTIVE_REVIEWER_WORK_LOGS = [];
+let ACTIVE_REVIEWER_INVOICES = [];
+let ACTIVE_DECISION_WORK_LOG_ID = null;
+
+async function loadReviewerDecisionsDashboard() {
+  try {
+    const logsRes = await apiCall('/api/reviewer/work-logs');
+    ACTIVE_REVIEWER_WORK_LOGS = logsRes.work_logs || [];
+
+    const invRes = await apiCall('/api/reviewer/invoices');
+    ACTIVE_REVIEWER_INVOICES = invRes.invoices || [];
+
+    // Calculate metrics
+    const pendingCount = ACTIVE_REVIEWER_WORK_LOGS.filter(l => l.status === 'pending_review' || l.status === 'logged').length;
+    const changesCount = ACTIVE_REVIEWER_WORK_LOGS.filter(l => l.status === 'changes_requested').length;
+    const approvedInvAmt = ACTIVE_REVIEWER_INVOICES.filter(i => i.status === 'approved' || i.status === 'sent').reduce((acc, cur) => acc + (cur.total_amount || cur.amount || 0), 0);
+    const paidEscrowAmt = ACTIVE_REVIEWER_INVOICES.filter(i => i.status === 'paid').reduce((acc, cur) => acc + (cur.total_amount || cur.amount || 0), 0);
+
+    const elPending = document.getElementById('rev-stat-pending-logs');
+    const elChanges = document.getElementById('rev-stat-changes-logs');
+    const elApproved = document.getElementById('rev-stat-approved-invs');
+    const elPaid = document.getElementById('rev-stat-escrow-paid');
+
+    if (elPending) elPending.innerText = `${pendingCount} Logs`;
+    if (elChanges) elChanges.innerText = `${changesCount} Items`;
+    if (elApproved) elApproved.innerText = `₱${approvedInvAmt.toLocaleString()}`;
+    if (elPaid) elPaid.innerText = `₱${paidEscrowAmt.toLocaleString()}`;
+
+    renderReviewerWorkLogsQueue(ACTIVE_REVIEWER_WORK_LOGS);
+    renderReviewerInvoicesQueue(ACTIVE_REVIEWER_INVOICES);
+  } catch (err) {
+    console.error('Failed to load reviewer dashboard:', err);
+  }
+}
+
+function renderReviewerWorkLogsQueue(logs) {
+  const container = document.getElementById('rev-worklogs-queue');
+  if (!container) return;
+
+  if (!logs || logs.length === 0) {
+    container.innerHTML = `<div style="background:var(--slate-50); padding:28px; border-radius:var(--radius-lg); text-align:center; color:var(--slate-500);">No work logs awaiting review in the queue. All submissions processed!</div>`;
+    return;
+  }
+
+  container.innerHTML = logs.map(l => {
+    let statusBadge = `<span class="badge badge-amber">⏳ PENDING INSPECTION</span>`;
+    if (l.status === 'approved') statusBadge = `<span class="badge badge-emerald">🟢 APPROVED</span>`;
+    if (l.status === 'changes_requested') statusBadge = `<span class="badge badge-blue">✏️ CHANGES REQUESTED</span>`;
+    if (l.status === 'rejected') statusBadge = `<span class="badge badge-red">❌ REJECTED</span>`;
+    if (l.status === 'invoiced') statusBadge = `<span class="badge badge-purple">🧾 INVOICED</span>`;
+    if (l.status === 'paid') statusBadge = `<span class="badge badge-emerald">💰 PAID</span>`;
+
+    const links = (l.deliverable_links || []).map(link => 
+      `<a href="${link}" target="_blank" rel="noopener noreferrer" style="color:var(--emerald-600); font-weight:700; text-decoration:underline; margin-right:12px; font-size:0.82rem;">🔗 ${link}</a>`
+    ).join('');
+
+    return `
+      <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:22px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="font-size:0.75rem; font-weight:800; color:var(--emerald-600); text-transform:uppercase;">
+              Submission Ref: ${l.id} • ${new Date(l.logged_at).toLocaleDateString()}
+            </div>
+            <h4 style="font-family:var(--font-heading); font-size:1.2rem; color:var(--navy-900); font-weight:800; margin-top:2px;">
+              ${l.task_title}
+            </h4>
+            <div style="font-size:0.85rem; color:var(--slate-600); margin-top:2px;">
+              Freelancer: <strong>${l.freelancer_name || 'Marco Antonio Reyes'}</strong> (${l.freelancer_id || 'VP-FR-10284'}) • Contract: <strong>${l.project_title || 'Client Project'}</strong>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:1.3rem; font-weight:900; color:var(--navy-900); font-family:var(--font-heading);">
+              ₱${(l.calculated_amount || 0).toLocaleString()}
+            </div>
+            <div style="font-size:0.75rem; color:var(--slate-500);">${l.hours_spent || 0} hrs @ ₱${(l.hourly_rate || 0).toLocaleString()}/hr</div>
+            <div style="margin-top:4px;">${statusBadge}</div>
+          </div>
+        </div>
+
+        <p style="font-size:0.88rem; color:var(--slate-700); line-height:1.6; margin-bottom:14px; background:var(--white); padding:14px; border:1px solid var(--slate-200); border-radius:var(--radius-md);">
+          ${l.description}
+        </p>
+
+        ${links ? `
+          <div style="margin-bottom:14px; padding:10px 14px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:var(--radius-md);">
+            <span style="font-size:0.75rem; font-weight:800; color:#166534; text-transform:uppercase; display:block; margin-bottom:4px;">Proof of Work & Deliverable Assets:</span>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">${links}</div>
+          </div>
+        ` : ''}
+
+        ${l.review_feedback ? `
+          <div style="background:#FEF3C7; border-left:4px solid #F59E0B; padding:10px 14px; border-radius:0 var(--radius-md) var(--radius-md) 0; margin-bottom:14px; font-size:0.85rem;">
+            <strong>Previous Review Feedback:</strong> "${l.review_feedback}"
+          </div>
+        ` : ''}
+
+        <!-- REVIEWER DECISION ACTION CONTROLS -->
+        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--slate-200); padding-top:14px; flex-wrap:wrap; gap:10px;">
+          <div style="font-size:0.8rem; color:var(--slate-500);">
+            Compliance Officer: <strong>Atty. Roberto Tan (REV-MNL-201)</strong>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-emerald" style="padding:6px 16px; font-size:0.82rem; font-weight:800;" onclick="openReviewDecisionModal('${l.id}', 'approved')">
+              ✓ Approve Work
+            </button>
+            <button class="btn btn-outline" style="padding:6px 14px; font-size:0.82rem; color:#D97706; border-color:#FDE68A;" onclick="openReviewDecisionModal('${l.id}', 'changes_requested')">
+              ✏️ Request Changes
+            </button>
+            <button class="btn btn-outline" style="padding:6px 14px; font-size:0.82rem; color:#DC2626; border-color:#FECDD3;" onclick="openReviewDecisionModal('${l.id}', 'rejected')">
+              ❌ Reject
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderReviewerInvoicesQueue(invoices) {
+  const container = document.getElementById('rev-invoices-queue');
+  if (!container) return;
+
+  if (!invoices || invoices.length === 0) {
+    container.innerHTML = `<div style="background:var(--slate-50); padding:28px; border-radius:var(--radius-lg); text-align:center; color:var(--slate-500);">No milestone invoices registered in the queue.</div>`;
+    return;
+  }
 
   container.innerHTML = `
     <table style="width:100%; border-collapse:collapse; font-size:0.88rem;">
       <thead>
         <tr style="background:var(--slate-100); text-transform:uppercase; font-size:0.75rem; color:var(--slate-600);">
           <th style="padding:12px; text-align:left;">Invoice #</th>
-          <th style="padding:12px; text-align:left;">Client Name</th>
-          <th style="padding:12px; text-align:left;">Amount</th>
+          <th style="padding:12px; text-align:left;">Freelancer / Beneficiary</th>
+          <th style="padding:12px; text-align:left;">Billed Deliverables</th>
+          <th style="padding:12px; text-align:left;">Net Escrow (₱)</th>
           <th style="padding:12px; text-align:left;">Status</th>
-          <th style="padding:12px; text-align:right;">Actions</th>
+          <th style="padding:12px; text-align:right;">Escrow Actions</th>
         </tr>
       </thead>
       <tbody>
-        <tr style="border-bottom:1px solid var(--slate-200);">
-          <td style="padding:12px; font-weight:700;">INV-2026-0891</td>
-          <td style="padding:12px;">Nexus Digital Media Inc</td>
-          <td style="padding:12px; font-weight:800; color:var(--emerald-600);">₱45,000</td>
-          <td style="padding:12px;"><span class="badge badge-emerald">PAID</span></td>
-          <td style="padding:12px; text-align:right;"><button class="btn btn-outline" style="padding:2px 8px; font-size:0.75rem;" onclick="alert('Downloading PDF Invoice INV-2026-0891')">PDF</button></td>
-        </tr>
+        ${invoices.map(inv => {
+          let statusBadge = `<span class="badge badge-amber">${inv.status.toUpperCase()}</span>`;
+          if (inv.status === 'approved') statusBadge = `<span class="badge badge-blue">READY FOR PAYOUT</span>`;
+          if (inv.status === 'paid') statusBadge = `<span class="badge badge-emerald">PAID & SETTLED</span>`;
+
+          return `
+            <tr style="border-bottom:1px solid var(--slate-200);">
+              <td style="padding:12px; font-weight:800; color:var(--navy-900);">${inv.invoice_number || inv.id}</td>
+              <td style="padding:12px;">
+                <div style="font-weight:700;">${inv.freelancer_name || 'Marco Antonio Reyes'}</div>
+                <div style="font-size:0.75rem; color:var(--slate-500);">${inv.freelancer_id || 'VP-FR-10284'}</div>
+              </td>
+              <td style="padding:12px; font-size:0.82rem; color:var(--slate-700);">${inv.title || 'Milestone Deliverable'}</td>
+              <td style="padding:12px; font-weight:900; color:var(--emerald-600);">₱${(inv.total_amount || inv.amount || 0).toLocaleString()}</td>
+              <td style="padding:12px;">${statusBadge}</td>
+              <td style="padding:12px; text-align:right; white-space:nowrap;">
+                <button class="btn btn-outline" style="padding:4px 10px; font-size:0.75rem; margin-right:4px;" onclick="viewInvoiceModal('${inv.id}')">📄 Inspect Invoice</button>
+                ${inv.status !== 'paid' ? `
+                  <button class="btn btn-emerald" style="padding:4px 12px; font-size:0.75rem; font-weight:800;" onclick="openApproveAndPayModal('${inv.id}')">
+                    💸 Approve & Pay (Release Escrow)
+                  </button>
+                ` : `
+                  <button class="btn btn-outline" style="padding:4px 10px; font-size:0.75rem;" onclick="viewReceiptModal('${inv.id}')">🧾 View Receipt</button>
+                `}
+              </td>
+            </tr>
+          `;
+        }).join('')}
       </tbody>
     </table>
   `;
 }
 
-function openCreateDisputeModal() {
-  const clientName = prompt("Enter Client / Company Name:", "Nexus Digital Media");
-  if (!clientName) return;
-  const title = prompt("Enter Dispute Title / Nature of Dispute:", "Non-Payment of Milestone 2 (₱45,000)");
-  if (!title) return;
-  const amt = prompt("Enter Disputed Amount (₱):", "45000");
-  const desc = prompt("Enter Dispute Description / Details:", "Client stopped responding after final deliverable submission. All source code was delivered on schedule.");
+function filterReviewerWorkLogsQueue(status, btn) {
+  document.querySelectorAll('#page-reviewer-decisions button').forEach(b => {
+    if (b.innerText === btn.innerText) {
+      b.style.background = 'var(--navy-900)';
+      b.style.color = 'white';
+    }
+  });
 
-  apiCall('/api/freelancer/disputes', 'POST', {
-    freelancer_id: CURRENT_FREELANCER_ID,
-    client_name: clientName,
-    client_company: clientName,
-    dispute_category: 'non_payment',
-    title: title,
-    amount_disputed: parseFloat(amt) || 0,
-    description: desc || title
-  }).then(res => {
-    alert("Neutral dispute claim filed successfully! Reference ID: " + res.dispute_id);
-    loadFreelancerDisputes();
-  }).catch(err => alert(err.message));
+  if (status === 'all') {
+    renderReviewerWorkLogsQueue(ACTIVE_REVIEWER_WORK_LOGS);
+  } else {
+    const filtered = ACTIVE_REVIEWER_WORK_LOGS.filter(l => l.status === status);
+    renderReviewerWorkLogsQueue(filtered);
+  }
 }
 
-function openCreateEngagementModal() {
-  const project = prompt("Enter Project Title:", "E-Commerce Web Portal Development");
-  if (!project) return;
-  const client = prompt("Enter Client Name:", "Nexus Digital");
-  if (!client) return;
-  const amt = prompt("Enter Contract Amount (₱):", "85000");
+function openReviewDecisionModal(workLogId, defaultDecision = 'approved') {
+  ACTIVE_DECISION_WORK_LOG_ID = workLogId;
+  const log = ACTIVE_REVIEWER_WORK_LOGS.find(l => l.id === workLogId);
 
-  apiCall('/api/freelancer/engagements', 'POST', {
-    freelancer_id: CURRENT_FREELANCER_ID,
-    project_title: project,
-    client_name: client,
-    client_email: 'client@nexus.ph',
-    agreed_amount: parseFloat(amt) || 0,
-    start_date: new Date().toISOString().split('T')[0],
-    payment_terms: '50% Upfront, 50% Milestone Completion'
-  }).then(res => {
-    alert("Work engagement contract logged!");
-    loadFreelancerEngagements();
-  }).catch(err => alert(err.message));
+  document.getElementById('rev-modal-log-id').value = workLogId;
+  if (log) {
+    document.getElementById('rev-modal-log-title').innerText = `Work Log: ${log.task_title}`;
+    document.getElementById('rev-modal-log-meta').innerText = `Freelancer: ${log.freelancer_name || 'Marco Reyes'} • Hours: ${log.hours_spent || 0} hrs • Amount: ₱${(log.calculated_amount || 0).toLocaleString()}`;
+  }
+
+  const radio = document.querySelector(`input[name="rev_decision_radio"][value="${defaultDecision}"]`);
+  if (radio) radio.checked = true;
+
+  const defaultFeedback = defaultDecision === 'approved' 
+    ? 'All deliverables, unit tests, and PR artifacts inspected and approved under VeriPinoy escrow standards.'
+    : (defaultDecision === 'changes_requested' ? 'Please address the code styling remarks in PR #18 and include end-to-end webhook verification test output.' : 'Deliverable scope does not meet contract requirements.');
+  
+  document.getElementById('rev-modal-feedback').value = defaultFeedback;
+  document.getElementById('modal-reviewer-decision').style.display = 'flex';
 }
 
-async function handleSaveFreelancerProfileSubmit(e) {
+function closeReviewDecisionModal() {
+  document.getElementById('modal-reviewer-decision').style.display = 'none';
+}
+
+async function handleReviewDecisionSubmit(e) {
   e.preventDefault();
-  const fullName = document.getElementById('fr-input-fullname').value;
-  const proName = document.getElementById('fr-input-proname').value;
-  const category = document.getElementById('fr-input-category').value;
-  const years = parseInt(document.getElementById('fr-input-exp').value);
-  const skills = document.getElementById('fr-input-skills').value.split(',').map(s => s.trim());
-  const location = document.getElementById('fr-input-location').value;
-  const portfolio = document.getElementById('fr-input-portfolio').value.split(',').map(p => p.trim());
+  const logId = document.getElementById('rev-modal-log-id').value || ACTIVE_DECISION_WORK_LOG_ID;
+  const decision = document.querySelector('input[name="rev_decision_radio"]:checked').value;
+  const feedback = document.getElementById('rev-modal-feedback').value;
 
   try {
-    await apiCall(`/api/freelancer/profile/${CURRENT_FREELANCER_ID}`, 'PUT', {
-      full_name: fullName,
-      professional_name: proName,
-      category,
-      years_experience: years,
-      skills,
-      location,
-      portfolio_links: portfolio
+    const res = await apiCall(`/api/reviewer/work-logs/${logId}/decision`, 'POST', {
+      decision: decision,
+      feedback: feedback,
+      reviewer_id: CURRENT_REVIEWER.id,
+      reviewer_name: CURRENT_REVIEWER.name
     });
-    alert("Verified Freelancer profile updated successfully!");
-    loadFreelancerPortal();
+
+    closeReviewDecisionModal();
+    alert(`✓ Reviewer Decision recorded: ${decision.toUpperCase()}!\nAudit trail logged successfully.`);
+    loadReviewerDecisionsDashboard();
   } catch (err) {
-    alert(err.message);
+    alert('Failed to save decision: ' + err.message);
   }
 }
 
-async function openPublicFreelancerProfile(freelancerId) {
-  try {
-    const data = await apiCall(`/api/freelancer/public/${freelancerId}`);
-    const p = data.profile || data;
+function openApproveAndPayModal(invoiceId) {
+  const inv = ACTIVE_REVIEWER_INVOICES.find(i => i.id === invoiceId);
+  document.getElementById('pay-modal-invoice-id').value = invoiceId;
 
-    const photo = p.photo_url || p.profilePhoto || p.profile_photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80';
-    const name = p.verifiedName || p.professional_name || p.full_name || 'Verified Freelancer';
-    const category = p.professionalCategory || p.category || p.professional_category || 'Web & Software Development';
-    const location = p.location || 'Metro Manila, Philippines';
-    const dateVerified = p.dateVerified || p.date_verified;
-    const yearsExp = p.yearsOfExperience || p.years_experience || p.yearsExperience || 1;
-    const skills = Array.isArray(p.skills) ? p.skills : [];
-    const portfolioLinks = Array.isArray(p.portfolioLinks) ? p.portfolioLinks : (Array.isArray(p.portfolio_links) ? p.portfolio_links : []);
-
-    document.getElementById('pub-fr-photo').src = photo;
-    document.getElementById('pub-fr-name').innerText = name;
-    document.getElementById('pub-fr-category').innerText = category;
-    document.getElementById('pub-fr-location').innerText = location;
-    document.getElementById('pub-fr-date').innerText = dateVerified ? new Date(dateVerified).toLocaleDateString() : 'March 2026';
-    document.getElementById('pub-fr-exp').innerText = `${yearsExp} Years`;
-
-    const skillsContainer = document.getElementById('pub-fr-skills');
-    skillsContainer.innerHTML = skills.map(s => `<span class="badge badge-blue" style="font-size:0.82rem; padding:4px 12px;">${s}</span>`).join('');
-
-    const linksContainer = document.getElementById('pub-fr-portfolio');
-    linksContainer.innerHTML = portfolioLinks.map(l => `
-      <a href="${l}" target="_blank" style="color:var(--emerald-600); font-weight:700; text-decoration:underline; font-size:0.9rem;">🔗 ${l}</a>
-    `).join('');
-
-    route('freelancer-public');
-  } catch (err) {
-    console.error('Error loading public freelancer profile:', err);
-    alert("Failed to load public freelancer profile");
+  if (inv) {
+    document.getElementById('pay-modal-freelancer-name').innerText = `${inv.freelancer_name || 'Marco Antonio Reyes'} (${inv.freelancer_id || 'VP-FR-10284'})`;
+    document.getElementById('pay-modal-amount').innerText = `₱${(inv.total_amount || inv.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} PHP`;
   }
+
+  document.getElementById('modal-approve-pay').style.display = 'flex';
+}
+
+function closeApproveAndPayModal() {
+  document.getElementById('modal-approve-pay').style.display = 'none';
+}
+
+async function handleApproveAndPaySubmit(e) {
+  e.preventDefault();
+  const invoiceId = document.getElementById('pay-modal-invoice-id').value;
+  const channel = document.getElementById('pay-modal-channel').value;
+  const note = document.getElementById('pay-modal-note').value;
+
+  try {
+    const res = await apiCall(`/api/reviewer/invoices/${invoiceId}/pay`, 'POST', {
+      payout_channel: channel,
+      disbursement_note: note,
+      reviewer_id: CURRENT_REVIEWER.id,
+      reviewer_name: CURRENT_REVIEWER.name
+    });
+
+    closeApproveAndPayModal();
+    alert(`✓ Escrow Payment Authorized & Released!\nTransaction Reference: ${res.transaction_id || res.id}\nBeneficiary has been notified.`);
+    loadReviewerDecisionsDashboard();
+    viewReceiptModal(invoiceId);
+  } catch (err) {
+    alert('Payment disbursement failed: ' + err.message);
+  }
+}
+
+async function viewReceiptModal(invoiceId) {
+  try {
+    const res = await apiCall(`/api/freelancer/invoices/${invoiceId}`);
+    const inv = res.invoice;
+
+    const viewport = document.getElementById('receipt-modal-content-viewport');
+    if (!viewport) return;
+
+    viewport.innerHTML = `
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-size:1.6rem; font-weight:900; color:var(--emerald-600); font-family:var(--font-heading);">
+          ₱${(inv.total_amount || inv.amount || 24000).toLocaleString('en-US', { minimumFractionDigits: 2 })} PHP
+        </div>
+        <div style="font-size:0.8rem; color:var(--slate-500);">Settled via VeriPinoy Escrow Ledger</div>
+      </div>
+
+      <div style="border-top:1px solid var(--slate-200); padding-top:12px; font-size:0.85rem; display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:var(--slate-500);">Transaction Ref:</span>
+          <strong>TXN-2026-${Math.floor(100000 + Math.random() * 900000)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:var(--slate-500);">Invoice Ref:</span>
+          <strong>${inv.invoice_number || inv.id}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:var(--slate-500);">Beneficiary:</span>
+          <strong>${inv.freelancer_name || 'Marco Antonio Reyes'}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:var(--slate-500);">Reviewer Authorization:</span>
+          <strong>Atty. Roberto Tan (REV-MNL-201)</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:var(--slate-500);">Disbursement Date:</span>
+          <strong>${new Date().toLocaleString()}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:var(--slate-500);">Compliance Hash:</span>
+          <code style="font-size:0.75rem; color:var(--emerald-700);">sha256-7f89a2b910e...</code>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('modal-view-receipt').style.display = 'flex';
+  } catch (err) {
+    alert('Failed to view receipt: ' + err.message);
+  }
+}
+
+function closeViewReceiptModal() {
+  document.getElementById('modal-view-receipt').style.display = 'none';
+}
+
+function printActiveReceipt() {
+  window.print();
+}
+
+/* ==========================================================================
+   FEATURE 2: MULTI-FORMAT REPORT EXPORT ENGINE (XLSX, CSV, PDF)
+   ========================================================================== */
+
+function toggleExportMenu(btn) {
+  const parent = btn.closest('.export-dropdown');
+  if (!parent) return;
+  const menu = parent.querySelector('.export-menu');
+  if (!menu) return;
+
+  const isVisible = menu.classList.contains('show');
+  document.querySelectorAll('.export-menu').forEach(m => m.classList.remove('show'));
+  if (!isVisible) menu.classList.add('show');
+}
+
+// Global click handler to dismiss export dropdowns
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.export-dropdown')) {
+    document.querySelectorAll('.export-menu').forEach(m => m.classList.remove('show'));
+  }
+});
+
+async function handleExportReport(reportType, format) {
+  document.querySelectorAll('.export-menu').forEach(m => m.classList.remove('show'));
+
+  try {
+    let filename = '';
+    let headers = [];
+    let rows = [];
+    let title = '';
+    let subtitle = '';
+    let summary = '';
+
+    if (reportType === 'worklogs') {
+      const res = await apiCall(`/api/freelancer/work-logs?freelancer_id=${CURRENT_FREELANCER_ID}`);
+      const logs = res.work_logs || [];
+      filename = `Freelancer_Work_Logs_${Date.now()}`;
+      title = 'VeriPinoy Freelancer Work Logs & Deliverables Report';
+      subtitle = `Freelancer: Marco Antonio Reyes (VP-FR-10284) | Exported: ${new Date().toLocaleDateString()}`;
+      headers = ['Log ID', 'Task Title', 'Contract', 'Milestone', 'Hours', 'Rate (PHP)', 'Total (PHP)', 'Status', 'Date'];
+      rows = logs.map(l => [
+        l.id,
+        l.task_title,
+        l.project_title || 'N/A',
+        l.milestone_title || 'General Task',
+        l.hours_spent || 0,
+        l.hourly_rate || 0,
+        l.calculated_amount || 0,
+        (l.status || '').toUpperCase(),
+        new Date(l.logged_at).toLocaleDateString()
+      ]);
+      const totalHours = logs.reduce((acc, cur) => acc + (cur.hours_spent || 0), 0);
+      const totalAmt = logs.reduce((acc, cur) => acc + (cur.calculated_amount || 0), 0);
+      summary = `Total Logged Hours: ${totalHours} hrs | Gross Value: PHP ${totalAmt.toLocaleString()}`;
+    } else if (reportType === 'milestones') {
+      const res = await apiCall(`/api/freelancer/milestones?freelancer_id=${CURRENT_FREELANCER_ID}`);
+      const mls = res.milestones || [];
+      filename = `Milestone_Contracts_${Date.now()}`;
+      title = 'VeriPinoy Milestone Escrow Contracts Report';
+      subtitle = `Freelancer: Marco Antonio Reyes (VP-FR-10284) | Exported: ${new Date().toLocaleDateString()}`;
+      headers = ['Milestone ID', 'Milestone Title', 'Contract Title', 'Amount (PHP)', 'Due Date', 'Status'];
+      rows = mls.map(m => [
+        m.id,
+        m.milestone_title,
+        m.project_title || 'Client Project',
+        m.amount || 0,
+        m.due_date || 'N/A',
+        (m.status || '').toUpperCase()
+      ]);
+      const totalAmt = mls.reduce((acc, cur) => acc + (cur.amount || 0), 0);
+      summary = `Total Milestone Value: PHP ${totalAmt.toLocaleString()}`;
+    } else if (reportType === 'invoices') {
+      const res = await apiCall(`/api/freelancer/invoices?freelancer_id=${CURRENT_FREELANCER_ID}`);
+      const invs = res.invoices || [];
+      filename = `Freelancer_Invoices_${Date.now()}`;
+      title = 'VeriPinoy Freelancer Electronic Invoices Report';
+      subtitle = `Freelancer: Marco Antonio Reyes (VP-FR-10284) | Exported: ${new Date().toLocaleDateString()}`;
+      headers = ['Invoice #', 'Client Name', 'Title', 'Subtotal (PHP)', 'Withholding Tax', 'Net Due (PHP)', 'Status', 'Date'];
+      rows = invs.map(i => [
+        i.invoice_number || i.id,
+        i.client_name || 'Client',
+        i.title || 'Services',
+        i.subtotal_amount || i.amount || 0,
+        i.tax_amount || 0,
+        i.total_amount || i.amount || 0,
+        (i.status || '').toUpperCase(),
+        new Date(i.created_at || Date.now()).toLocaleDateString()
+      ]);
+      const totalNet = invs.reduce((acc, cur) => acc + (cur.total_amount || cur.amount || 0), 0);
+      summary = `Total Net Billed: PHP ${totalNet.toLocaleString()}`;
+    } else if (reportType === 'reviewer' || reportType === 'reviewer_invoices') {
+      const resLogs = await apiCall('/api/reviewer/work-logs');
+      const logs = resLogs.work_logs || [];
+      filename = `Reviewer_Audit_Decisions_${Date.now()}`;
+      title = 'VeriPinoy Reviewer Decision & Escrow Audit Report';
+      subtitle = `Officer: Atty. Roberto Tan (REV-MNL-201) | Date: ${new Date().toLocaleDateString()}`;
+      headers = ['Submission ID', 'Freelancer', 'Task Title', 'Contract', 'Amount (PHP)', 'Decision Status', 'Reviewer Feedback'];
+      rows = logs.map(l => [
+        l.id,
+        l.freelancer_name || 'Freelancer',
+        l.task_title,
+        l.project_title || 'Project',
+        l.calculated_amount || 0,
+        (l.status || '').toUpperCase(),
+        l.review_feedback || 'No remarks recorded'
+      ]);
+      summary = `Total Deliverable Items Audited: ${logs.length}`;
+    }
+
+    if (format === 'xlsx') {
+      exportToExcel(filename + '.xlsx', 'Audit Report', headers, rows);
+    } else if (format === 'csv') {
+      exportToCSV(filename + '.csv', headers, rows);
+    } else if (format === 'pdf') {
+      exportToPDF(filename + '.pdf', title, subtitle, headers, rows, summary);
+    }
+  } catch (err) {
+    console.error('Export error:', err);
+    alert('Failed to generate export report: ' + err.message);
+  }
+}
+
+function exportToExcel(filename, sheetName, headers, rows) {
+  if (typeof XLSX === 'undefined') {
+    alert('Excel library not loaded. Falling back to CSV.');
+    exportToCSV(filename.replace('.xlsx', '.csv'), headers, rows);
+    return;
+  }
+
+  const data = [headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Report');
+  XLSX.writeFile(wb, filename);
+}
+
+function exportToCSV(filename, headers, rows) {
+  const escapeCsv = (val) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const csvContent = [
+    headers.map(escapeCsv).join(','),
+    ...rows.map(row => row.map(escapeCsv).join(','))
+  ].join('\r\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function exportToPDF(filename, title, subtitle, headers, rows, summary) {
+  const { jsPDF } = window.jspdf || {};
+  if (!jsPDF) {
+    alert('PDF library not ready. Please try again.');
+    return;
+  }
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  // Branding Header
+  doc.setFillColor(15, 23, 42); // Navy 900
+  doc.rect(0, 0, 210, 26, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('VeriPinoy — Tatak Pinoy Trust & Escrow Architecture', 14, 12);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(167, 243, 208); // Emerald
+  doc.text('Official BIR/DTI Electronic Deliverable & Compliance Ledger', 14, 18);
+
+  // Document Title
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(title, 14, 34);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text(subtitle, 14, 40);
+
+  // Render Table
+  if (doc.autoTable) {
+    doc.autoTable({
+      startY: 46,
+      head: [headers],
+      body: rows,
+      theme: 'grid',
+      styles: {
+        fontSize: 8,
+        cellPadding: 2.5,
+        textColor: [30, 41, 59]
+      },
+      headStyles: {
+        fillColor: [15, 23, 42],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold'
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      }
+    });
+
+    const finalY = doc.lastAutoTable.finalY + 10;
+    if (summary) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(5, 150, 105);
+      doc.text(summary, 14, finalY);
+    }
+
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Generated electronically via VeriPinoy. Protected under PH Data Privacy Act 2012.', 14, 285);
+  }
+
+  doc.save(filename);
 }
 
 function copyFreelancerPublicLink() {

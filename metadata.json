@@ -1,6 +1,6 @@
 {
   "name": "VeriPinoy",
-  "description": "BBB-style business authentication architecture built exclusively for the Philippines with Tatak Pinoy trust verification.",
+  "description": "Philippine trust and verification registry featuring verified merchants, freelancer milestone contracts, work logging & invoicing workflows, reviewer decision dashboards, and multi-format report exports.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
