@@ -32,15 +32,13 @@ export function generateSecureToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-/* Save SQLite Database file to disk atomically */
+/* Save SQLite Database file to disk */
 export function saveDatabase() {
   if (!db) return;
   try {
     const data = db.export();
     const buffer = Buffer.from(data);
-    const tempFile = `${DB_FILE}.tmp`;
-    fs.writeFileSync(tempFile, buffer);
-    fs.renameSync(tempFile, DB_FILE);
+    fs.writeFileSync(DB_FILE, buffer);
   } catch (err) {
     console.error("Error saving database to disk:", err.message);
   }
@@ -1341,13 +1339,11 @@ function seedDatabaseIfEmpty() {
 
   const now = new Date().toISOString();
 
-  // Always ensure all pricing plans and aliases are seeded/updated
+  // Always ensure all pricing plans, security data, and freelancer profiles are seeded/updated
   seedPricingPlans(now);
   seedSecurityData(now);
-
-  if (!freelancerCheck || freelancerCheck.count === 0) {
-    seedFreelancerData(now);
-  }
+  seedFreelancerData(now);
+  seedDiscoveryMasterData(now);
 
   if (userCheck && userCheck.count > 0) return; // Main tables already seeded
 
@@ -2043,9 +2039,6 @@ function seedPricingPlans(now = new Date().toISOString()) {
 }
 
 function seedFreelancerData(now = new Date().toISOString()) {
-  const check = queryOne('SELECT COUNT(*) as count FROM freelancer_profiles');
-  if (check && check.count > 0) return;
-
   /* PORTAL USERS SEED DATA */
   const custPass = hashPassword('Password123!');
   const bizPass = hashPassword('Password123!');
@@ -2053,58 +2046,58 @@ function seedFreelancerData(now = new Date().toISOString()) {
 
   // Seed Customer User & Profile
   executeRun(
-    `INSERT INTO users (id, email, password_hash, full_name, mobile_number, user_type, account_status, email_verified, created_at, updated_at)
+    `INSERT OR IGNORE INTO users (id, email, password_hash, full_name, mobile_number, user_type, account_status, email_verified, created_at, updated_at)
      VALUES ('USR-CUST-1001', 'customer@veripinoy.ph', ?, 'Maria Clara De Los Santos', '09171234567', 'customer', 'active', 1, ?, ?)`,
     [custPass.hash, now, now]
   );
 
   executeRun(
-    `INSERT INTO customer_profiles (id, user_id, first_name, last_name, country, kyc_status, created_at, updated_at)
+    `INSERT OR IGNORE INTO customer_profiles (id, user_id, first_name, last_name, country, kyc_status, created_at, updated_at)
      VALUES ('CUST-1001', 'USR-CUST-1001', 'Maria Clara', 'De Los Santos', 'Philippines', 'unverified', ?, ?)`,
     [now, now]
   );
 
   // Seed Business User, Business & Business Team
   executeRun(
-    `INSERT INTO users (id, email, password_hash, full_name, mobile_number, user_type, account_status, email_verified, created_at, updated_at)
+    `INSERT OR IGNORE INTO users (id, email, password_hash, full_name, mobile_number, user_type, account_status, email_verified, created_at, updated_at)
      VALUES ('USR-BIZ-2001', 'owner@manilabakery.ph', ?, 'Juan Dela Cruz', '09189876543', 'business', 'active', 1, ?, ?)`,
     [bizPass.hash, now, now]
   );
 
   executeRun(
-    `INSERT INTO businesses (id, user_id, business_name, business_email, business_phone, business_type, industry, country, business_address, website, social_media, authorized_representative, account_status, verification_status, rating, review_count, created_at, updated_at)
+    `INSERT OR IGNORE INTO businesses (id, user_id, business_name, business_email, business_phone, business_type, industry, country, business_address, website, social_media, authorized_representative, account_status, verification_status, rating, review_count, created_at, updated_at)
      VALUES ('BIZ-2001', 'USR-BIZ-2001', 'Manila Artisan Bakery & Cafe', 'contact@manilabakery.ph', '09189876543', 'Corporation', 'Food & Dining', 'Philippines', '123 Katipunan Ave, Quezon City', 'https://manilabakery.ph', '@manilabakery', 'Juan Dela Cruz', 'active', 'verified', 4.9, 128, ?, ?)`,
     [now, now]
   );
 
   executeRun(
-    `INSERT INTO business_users (id, business_id, user_id, name, email, role, status, created_at, updated_at)
+    `INSERT OR IGNORE INTO business_users (id, business_id, user_id, name, email, role, status, created_at, updated_at)
      VALUES ('BUSR-1', 'BIZ-2001', 'USR-BIZ-2001', 'Juan Dela Cruz', 'owner@manilabakery.ph', 'owner', 'active', ?, ?)`,
     [now, now]
   );
 
   executeRun(
-    `INSERT INTO business_users (id, business_id, user_id, name, email, role, status, created_at, updated_at)
+    `INSERT OR IGNORE INTO business_users (id, business_id, user_id, name, email, role, status, created_at, updated_at)
      VALUES ('BUSR-2', 'BIZ-2001', 'USR-BIZ-2002', 'Ana Reyes', 'manager@manilabakery.ph', 'admin', 'active', ?, ?)`,
     [now, now]
   );
 
   executeRun(
-    `INSERT INTO business_users (id, business_id, user_id, name, email, role, status, created_at, updated_at)
+    `INSERT OR IGNORE INTO business_users (id, business_id, user_id, name, email, role, status, created_at, updated_at)
      VALUES ('BUSR-3', 'BIZ-2001', 'USR-BIZ-2003', 'Carlos Tan', 'staff@manilabakery.ph', 'staff', 'active', ?, ?)`,
     [now, now]
   );
 
   // Seed Freelancer User
   executeRun(
-    `INSERT INTO users (id, email, password_hash, full_name, mobile_number, user_type, account_status, email_verified, created_at, updated_at)
+    `INSERT OR IGNORE INTO users (id, email, password_hash, full_name, mobile_number, user_type, account_status, email_verified, created_at, updated_at)
      VALUES ('USER-FR-10284', 'freelancer@marcoreyes.dev', ?, 'Marco Antonio Reyes', '09191112233', 'freelancer', 'active', 1, ?, ?)`,
     [frPass.hash, now, now]
   );
 
   /* FREELANCER PROFILES SEED DATA */
   executeRun(
-    `INSERT INTO freelancer_profiles (id, user_id, full_name, professional_name, profile_photo, professional_category, skills, location, years_of_experience, portfolio_links, website_social_links, verification_status, kyc_verification_status, date_verified, profile_status, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_profiles (id, user_id, full_name, professional_name, profile_photo, professional_category, skills, location, years_of_experience, portfolio_links, website_social_links, verification_status, kyc_verification_status, date_verified, profile_status, created_at, updated_at)
      VALUES ('VP-FR-10284', 'USER-FR-10284', 'Marco Antonio Reyes', 'Marco Reyes | Senior Full-Stack Web Developer', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80', 'Web & Software Development', ?, 'Quezon City, Metro Manila, Philippines', 7, ?, ?, 'verified', 'verified', ?, 'active', ?, ?)`,
     [
       JSON.stringify(['React.js', 'Node.js', 'TypeScript', 'Tailwind CSS', 'Database Architecture', 'API Design']),
@@ -2118,14 +2111,14 @@ function seedFreelancerData(now = new Date().toISOString()) {
 
   /* FREELANCER VERIFICATION APPLICATION */
   executeRun(
-    `INSERT INTO freelancer_verifications (id, freelancer_id, kyc_application_id, reviewer_id, reviewer_notes, verification_status, submitted_at, reviewed_at)
+    `INSERT OR IGNORE INTO freelancer_verifications (id, freelancer_id, kyc_application_id, reviewer_id, reviewer_notes, verification_status, submitted_at, reviewed_at)
      VALUES ('FR-VER-8801', 'VP-FR-10284', 'KYC-10452', 'STF-107', 'Philippine National ID verified. Portfolio links and identity matched successfully.', 'approved', ?, ?)`,
     [now, now]
   );
 
   /* FREELANCER ENGAGEMENTS */
   executeRun(
-    `INSERT INTO freelancer_engagements (id, freelancer_id, client_identifier, project_name, project_description, contract_ref, agreed_amount, currency, payment_terms, start_date, expected_completion_date, completion_status, payment_status, supporting_documents, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_engagements (id, freelancer_id, client_identifier, project_name, project_description, contract_ref, agreed_amount, currency, payment_terms, start_date, expected_completion_date, completion_status, payment_status, supporting_documents, created_at, updated_at)
      VALUES ('ENG-901', 'VP-FR-10284', 'ABC Company (Metro Manila Retail)', 'E-Commerce Web Portal Development', 'Full-stack online store with inventory synchronization, payment gateway integration, and customer order management.', 'CTR-2026-8819', 50000, 'PHP', '50% upfront / 50% upon milestone completion', '2026-07-01', '2026-07-30', 'delivered', 'in_dispute', ?, ?, ?)`,
     [
       JSON.stringify([{ name: 'Statement_of_Work_SOW_Signed.pdf', path: '/docs/SOW_ABC_Company.pdf' }]),
@@ -2135,7 +2128,7 @@ function seedFreelancerData(now = new Date().toISOString()) {
   );
 
   executeRun(
-    `INSERT INTO freelancer_engagements (id, freelancer_id, client_identifier, project_name, project_description, contract_ref, agreed_amount, currency, payment_terms, start_date, expected_completion_date, completion_status, payment_status, supporting_documents, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_engagements (id, freelancer_id, client_identifier, project_name, project_description, contract_ref, agreed_amount, currency, payment_terms, start_date, expected_completion_date, completion_status, payment_status, supporting_documents, created_at, updated_at)
      VALUES ('ENG-902', 'VP-FR-10284', 'Nexus Digital Media Inc', 'Mobile Fintech App UI & Secure API Architecture', 'React Native mobile application frontend paired with high-concurrency Node.js REST APIs and real-time transaction ledger.', 'CTR-2026-9042', 85000, 'PHP', 'Milestone-based (3 Milestones)', '2026-08-01', '2026-09-15', 'in_progress', 'partially_paid', ?, ?, ?)`,
     [
       JSON.stringify([{ name: 'Master_Services_Agreement_MSA.pdf', path: '/docs/MSA_Nexus_Digital.pdf' }]),
@@ -2145,7 +2138,7 @@ function seedFreelancerData(now = new Date().toISOString()) {
   );
 
   executeRun(
-    `INSERT INTO freelancer_engagements (id, freelancer_id, client_identifier, project_name, project_description, contract_ref, agreed_amount, currency, payment_terms, start_date, expected_completion_date, completion_status, payment_status, supporting_documents, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_engagements (id, freelancer_id, client_identifier, project_name, project_description, contract_ref, agreed_amount, currency, payment_terms, start_date, expected_completion_date, completion_status, payment_status, supporting_documents, created_at, updated_at)
      VALUES ('ENG-903', 'VP-FR-10284', 'Bahay Kubo Enterprise', 'Cloud Inventory Synchronization Engine', 'Automated webhook engine syncing POS terminal orders with cloud inventory databases and automated supplier re-orders.', 'CTR-2026-9110', 35000, 'PHP', 'Hourly rate (₱1,500/hr) capped at ₱35,000', '2026-08-10', '2026-08-28', 'in_progress', 'invoiced', ?, ?, ?)`,
     [
       JSON.stringify([{ name: 'Inventory_Sync_Spec_Signed.pdf', path: '/docs/Spec_BahayKubo.pdf' }]),
@@ -2156,38 +2149,38 @@ function seedFreelancerData(now = new Date().toISOString()) {
 
   /* FREELANCER MILESTONES */
   executeRun(
-    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
      VALUES ('MLS-901-1', 'ENG-901', 'VP-FR-10284', 'Milestone 1: Database Architecture & Core API Wireframes', 'Database ERD schemas, secure API routing, and backend auth integration.', 25000, 'PHP', '2026-07-15', 'paid', ?, ?)`,
     [now, now]
   );
 
   executeRun(
-    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
      VALUES ('MLS-901-2', 'ENG-901', 'VP-FR-10284', 'Milestone 2: Payment Gateway, Storefront Delivery & UAT Signoff', 'Final store delivery, payment gateway testing, and signed UAT.', 25000, 'PHP', '2026-07-30', 'disputed', ?, ?)`,
     [now, now]
   );
 
   executeRun(
-    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
      VALUES ('MLS-902-1', 'ENG-902', 'VP-FR-10284', 'Milestone 1: UI Component Design System & State Management', 'High-fidelity Figma implementation, reusable tokenized UI components, and state store architecture.', 30000, 'PHP', '2026-08-10', 'paid', ?, ?)`,
     [now, now]
   );
 
   executeRun(
-    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
      VALUES ('MLS-902-2', 'ENG-902', 'VP-FR-10284', 'Milestone 2: Secure API Integration & Deliverable Testing', 'REST API client endpoints, OAuth2 token refresh, and integration test suite.', 35000, 'PHP', '2026-08-25', 'pending_review', ?, ?)`,
     [now, now]
   );
 
   executeRun(
-    `INSERT INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_milestones (id, engagement_id, freelancer_id, milestone_title, milestone_description, amount, currency, due_date, status, created_at, updated_at)
      VALUES ('MLS-902-3', 'ENG-902', 'VP-FR-10284', 'Milestone 3: Production Deployment, CI/CD Pipeline & Audit Logs', 'Cloud Run deployment pipeline, SSL pinning, and DPA audit log compliance.', 20000, 'PHP', '2026-09-15', 'in_progress', ?, ?)`,
     [now, now]
   );
 
   /* FREELANCER WORK LOGS */
   executeRun(
-    `INSERT INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
      VALUES ('WLOG-101', 'VP-FR-10284', 'ENG-902', 'MLS-902-1', 'milestone', 'Completed UI Component Design System & Navigation Engine', 'Built responsive screens, dark/light theme tokens, and biometric login authentication screen flows.', 0, 0, 30000, ?, ?, 'paid', 'Excellent execution and clean codebase. Approved for payment release.', 'Nexus Reviewer (Sarah Lim)', '2026-08-12 11:30:00', 'INV-FR-301', ?, ?)`,
     [
       JSON.stringify(['https://github.com/marcoreyes-dev/nexus-fintech-ui', 'https://nexus-demo-staging.app.ph']),
@@ -2198,7 +2191,7 @@ function seedFreelancerData(now = new Date().toISOString()) {
   );
 
   executeRun(
-    `INSERT INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
      VALUES ('WLOG-102', 'VP-FR-10284', 'ENG-902', 'MLS-902-2', 'milestone', 'Implemented Encrypted API Endpoints & Transaction Engine', 'Completed AES-256 payload encryption, webhook listeners, and comprehensive automated test suites.', 0, 0, 35000, ?, ?, 'pending_review', NULL, NULL, NULL, NULL, ?, ?)`,
     [
       JSON.stringify(['https://github.com/marcoreyes-dev/nexus-fintech-core/pull/18', 'https://api-staging.nexus.ph/docs']),
@@ -2209,7 +2202,7 @@ function seedFreelancerData(now = new Date().toISOString()) {
   );
 
   executeRun(
-    `INSERT INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
      VALUES ('WLOG-103', 'VP-FR-10284', 'ENG-903', NULL, 'hourly', 'Real-Time Webhook Synchronization & POS Queue Worker', 'Engineered robust retry backoff algorithms for POS intermittent network drops and SQLite transaction syncing.', 16, 1500, 24000, ?, ?, 'approved', 'Verified POS load test results. Approved for invoice generation.', 'Bahay Kubo Tech Lead', '2026-08-18 16:00:00', 'INV-FR-303', ?, ?)`,
     [
       JSON.stringify(['https://github.com/marcoreyes-dev/bahay-kubo-sync/tree/main/workers']),
@@ -2220,7 +2213,7 @@ function seedFreelancerData(now = new Date().toISOString()) {
   );
 
   executeRun(
-    `INSERT INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_work_logs (id, freelancer_id, engagement_id, milestone_id, log_type, title, description, hours_logged, hourly_rate, total_amount, deliverable_links, attachments, status, reviewer_feedback, reviewed_by, reviewed_at, invoice_id, created_at, updated_at)
      VALUES ('WLOG-104', 'VP-FR-10284', 'ENG-903', NULL, 'hourly', 'Inventory Alert Notifications & Email Digest Automation', 'Scheduled background cron workers for stock depletion alerts and automated nightly reconciliation logs.', 6, 1500, 9000, ?, ?, 'changes_requested', 'Please add support for SMS alert dispatch via Semaphore/Twilio API before approving.', 'Bahay Kubo Tech Lead', '2026-08-19 14:15:00', NULL, ?, ?)`,
     [
       JSON.stringify(['https://github.com/marcoreyes-dev/bahay-kubo-sync/pull/4']),
@@ -2232,7 +2225,7 @@ function seedFreelancerData(now = new Date().toISOString()) {
 
   /* FREELANCER INVOICES & PAYMENTS */
   executeRun(
-    `INSERT INTO freelancer_invoices (id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number, client_identifier, client_email, amount, currency, due_date, status, payment_method, paid_at, receipt_number, notes, history, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_invoices (id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number, client_identifier, client_email, amount, currency, due_date, status, payment_method, paid_at, receipt_number, notes, history, created_at, updated_at)
      VALUES ('INV-FR-301', 'VP-FR-10284', 'ENG-902', 'MLS-902-1', ?, 'INV-2026-0891', 'Nexus Digital Media Inc', 'billing@nexusdigital.ph', 30000, 'PHP', '2026-08-15', 'paid', 'GCash Verified Gateway', '2026-08-15T14:30:00Z', 'RCP-2026-9901', 'Milestone 1: UI Component Design System & Navigation', ?, ?, ?)`,
     [
       JSON.stringify(['WLOG-101']),
@@ -2247,7 +2240,7 @@ function seedFreelancerData(now = new Date().toISOString()) {
   );
 
   executeRun(
-    `INSERT INTO freelancer_invoices (id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number, client_identifier, client_email, amount, currency, due_date, status, payment_method, paid_at, receipt_number, notes, history, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_invoices (id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number, client_identifier, client_email, amount, currency, due_date, status, payment_method, paid_at, receipt_number, notes, history, created_at, updated_at)
      VALUES ('INV-FR-302', 'VP-FR-10284', 'ENG-901', 'MLS-901-2', ?, 'INV-2026-0089', 'ABC Company (Metro Manila Retail)', 'finance@abcretail.ph', 25000, 'PHP', '2026-08-01', 'disputed', NULL, NULL, NULL, 'Final 50% delivery milestone payment', ?, ?, ?)`,
     [
       JSON.stringify([]),
@@ -2261,7 +2254,7 @@ function seedFreelancerData(now = new Date().toISOString()) {
   );
 
   executeRun(
-    `INSERT INTO freelancer_invoices (id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number, client_identifier, client_email, amount, currency, due_date, status, payment_method, paid_at, receipt_number, notes, history, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_invoices (id, freelancer_id, engagement_id, milestone_id, work_log_ids, invoice_number, client_identifier, client_email, amount, currency, due_date, status, payment_method, paid_at, receipt_number, notes, history, created_at, updated_at)
      VALUES ('INV-FR-303', 'VP-FR-10284', 'ENG-903', NULL, ?, 'INV-2026-0915', 'Bahay Kubo Enterprise', 'owner@bahaykubo.ph', 24000, 'PHP', '2026-09-05', 'approved', NULL, NULL, NULL, '16 Logged Hours: POS Webhook & Sync Architecture Engine', ?, ?, ?)`,
     [
       JSON.stringify(['WLOG-103']),
@@ -2276,35 +2269,35 @@ function seedFreelancerData(now = new Date().toISOString()) {
 
   /* FREELANCER PAYMENTS SEED */
   executeRun(
-    `INSERT INTO freelancer_payments (id, engagement_id, invoice_id, amount, currency, payment_date, payment_method, proof_file, status, created_at)
+    `INSERT OR IGNORE INTO freelancer_payments (id, engagement_id, invoice_id, amount, currency, payment_date, payment_method, proof_file, status, created_at)
      VALUES ('PAY-FR-801', 'ENG-902', 'INV-FR-301', 30000, 'PHP', '2026-08-15 14:30:00', 'GCash Direct Gateway', '/receipts/RCP-2026-9901.pdf', 'confirmed', ?)`,
     [now]
   );
 
   /* FREELANCER DISPUTE */
   executeRun(
-    `INSERT INTO freelancer_disputes (id, freelancer_id, client_identifier, engagement_id, dispute_category, amount_disputed, currency, description, contract_evidence, case_status, assigned_reviewer_id, reviewer_notes, resolution, resolution_date, created_at, updated_at)
+    `INSERT OR IGNORE INTO freelancer_disputes (id, freelancer_id, client_identifier, engagement_id, dispute_category, amount_disputed, currency, description, contract_evidence, case_status, assigned_reviewer_id, reviewer_notes, resolution, resolution_date, created_at, updated_at)
      VALUES ('FR-DISP-401', 'VP-FR-10284', 'ABC Company', 'ENG-901', 'Non-payment', 25000, 'PHP', 'Final 50% completion payment milestone past due by 12 days after successful store delivery, bug clearance, and signed UAT.', '/docs/SOW_ABC_Company.pdf', 'Client Responded', 'STF-107', 'Client uploaded bank transfer receipt inquiry. Reviewer inspecting timestamp match.', NULL, NULL, ?, ?)`,
     [now, now]
   );
 
   /* CLIENT RESPONSE */
   executeRun(
-    `INSERT INTO client_responses (id, dispute_id, client_identifier, response_text, payment_proof_info, submitted_at)
+    `INSERT OR IGNORE INTO client_responses (id, dispute_id, client_identifier, response_text, payment_proof_info, submitted_at)
      VALUES ('CR-1002', 'FR-DISP-401', 'ABC Company', 'We acknowledge delivery of the website. Remaining ₱25,000 balance is currently being processed by accounting following our standard 15-day vendor payment cycle.', 'Bank voucher ref #BDO-992015 issued August 10', ?)`,
     [now]
   );
 
   /* FREELANCER EVIDENCE */
   executeRun(
-    `INSERT INTO freelancer_evidence (id, case_id, uploader_type, uploader_id, file_name, file_type, file_size, description, file_storage_path, access_history, created_at)
+    `INSERT OR IGNORE INTO freelancer_evidence (id, case_id, uploader_type, uploader_id, file_name, file_type, file_size, description, file_storage_path, access_history, created_at)
      VALUES ('EVI-701', 'FR-DISP-401', 'freelancer', 'VP-FR-10284', 'Signed_UAT_Signoff_Receipt.pdf', 'application/pdf', '1.2 MB', 'User Acceptance Testing (UAT) signoff document signed by ABC Company project manager.', '/private/EVI-701.pdf', '[]', ?)`,
     [now]
   );
 
   /* FREELANCER INVOICE & PAYMENT */
   executeRun(
-    `INSERT INTO freelancer_invoices (id, freelancer_id, engagement_id, invoice_number, amount, currency, due_date, status, notes, created_at)
+    `INSERT OR IGNORE INTO freelancer_invoices (id, freelancer_id, engagement_id, invoice_number, amount, currency, due_date, status, notes, created_at)
      VALUES ('INV-FR-301', 'VP-FR-10284', 'ENG-901', 'INV-2026-0089', 25000, 'PHP', '2026-08-01', 'disputed', 'Final 50% delivery milestone payment', ?)`,
     [now]
   );

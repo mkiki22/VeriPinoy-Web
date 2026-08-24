@@ -10094,9 +10094,20 @@ async function apiCall(endpoint, method = 'GET', body = null) {
 
   try {
     const res = await fetch(endpoint, opts);
-    const data = await res.json();
+    const contentType = res.headers.get('content-type') || '';
+    let data;
+    if (contentType.includes('application/json')) {
+      data = await res.json();
+    } else {
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`HTTP ${res.status}: Server returned non-JSON response`);
+      }
+    }
     if (!res.ok) {
-      throw new Error(data.error || `HTTP ${res.status}: Action Failed`);
+      throw new Error(data?.error || `HTTP ${res.status}: Action Failed`);
     }
     return data;
   } catch (err) {
