@@ -14,6 +14,7 @@ import {
 } from './db.mjs';
 import { PaymentService, PaymentGateway } from './payment-service.mjs';
 import { SecurityService } from './security-service.mjs';
+import { performAIFakeReviewAudit, consultAIModerationAssistant } from './ai-moderation-service.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2515,6 +2516,477 @@ app.post('/api/admin/reviews/moderation-action', (req, res) => {
     success: true,
     message: `Moderation decision [${action}] recorded successfully.`
   });
+});
+
+/* ==========================================================================
+   AI-POWERED FAKE CUSTOMER REVIEW DETECTION & MODERATION API
+   ========================================================================== */
+
+// GET /api/admin/reviews/moderation-queue (Live Queue with Authenticity Sorting & Visual Signals)
+app.get('/api/admin/reviews/moderation-queue', (req, res) => {
+  const {
+    score_filter = 'all', // all, fake (<50), suspicious (50-79), genuine (80+)
+    status_filter = 'all', // all, under_review, flagged, published, removed
+    sort = 'risk_desc', // risk_desc (lowest score first), score_asc, score_desc, date_desc
+    search = ''
+  } = req.query;
+
+  let allReviews = queryAll(`SELECT * FROM customer_reviews ORDER BY created_at DESC`);
+
+  // Parse JSON fields
+  allReviews = allReviews.map(r => {
+    let parsedTags = [];
+    try {
+      parsedTags = typeof r.flag_reason_tags === 'string' ? JSON.parse(r.flag_reason_tags || '[]') : (r.flag_reason_tags || []);
+    } catch (e) {
+      parsedTags = [];
+    }
+
+    let parsedDetails = null;
+    try {
+      parsedDetails = typeof r.ai_analysis_details === 'string' ? JSON.parse(r.ai_analysis_details || '{}') : (r.ai_analysis_details || {});
+    } catch (e) {
+      parsedDetails = {};
+    }
+
+    const score = r.authenticity_score !== undefined && r.authenticity_score !== null ? Number(r.authenticity_score) : 85;
+    const classification = r.classification || (score >= 80 ? 'GENUINE' : score >= 50 ? 'SUSPICIOUS' : 'LIKELY_FAKE');
+    const recommendedAction = r.recommended_action || (score >= 80 ? 'APPROVE' : score >= 50 ? 'FLAG' : 'DELETE');
+
+    return {
+      ...r,
+      authenticity_score: score,
+      classification,
+      flag_reason_tags: parsedTags,
+      recommended_action: recommendedAction,
+      ai_analysis_details: parsedDetails
+    };
+  });
+
+  // Calculate Overall Queue Summary Metrics (before filters)
+  const totalCount = allReviews.length;
+  const fakeCount = allReviews.filter(r => r.authenticity_score < 50).length;
+  const suspiciousCount = allReviews.filter(r => r.authenticity_score >= 50 && r.authenticity_score < 80).length;
+  const genuineCount = allReviews.filter(r => r.authenticity_score >= 80).length;
+  const avgScore = totalCount > 0 ? Math.round(allReviews.reduce((sum, r) => sum + r.authenticity_score, 0) / totalCount) : 0;
+  const underReviewCount = allReviews.filter(r => r.review_status === 'under_review' || r.review_status === 'flagged').length;
+  const autoFlagRate = totalCount > 0 ? Math.round(((fakeCount + suspiciousCount) / totalCount) * 100) : 0;
+
+  // Filter: Score Tier
+  if (score_filter === 'fake') {
+    allReviews = allReviews.filter(r => r.authenticity_score < 50);
+  } else if (score_filter === 'suspicious') {
+    allReviews = allReviews.filter(r => r.authenticity_score >= 50 && r.authenticity_score < 80);
+  } else if (score_filter === 'genuine') {
+    allReviews = allReviews.filter(r => r.authenticity_score >= 80);
+  }
+
+  // Filter: Status
+  if (status_filter && status_filter !== 'all') {
+    allReviews = allReviews.filter(r => r.review_status === status_filter);
+  }
+
+  // Filter: Search Keyword
+  if (search && search.trim()) {
+    const q = search.toLowerCase().trim();
+    allReviews = allReviews.filter(r =>
+      (r.customer_name && r.customer_name.toLowerCase().includes(q)) ||
+      (r.business_name && r.business_name.toLowerCase().includes(q)) ||
+      (r.review_title && r.review_title.toLowerCase().includes(q)) ||
+      (r.review_content && r.review_content.toLowerCase().includes(q)) ||
+      (r.flag_reason && r.flag_reason.toLowerCase().includes(q)) ||
+      (r.id && r.id.toLowerCase().includes(q))
+    );
+  }
+
+  // Sorting
+  if (sort === 'risk_desc' || sort === 'score_asc') {
+    allReviews.sort((a, b) => a.authenticity_score - b.authenticity_score); // Lowest score / Highest risk first
+  } else if (sort === 'score_desc') {
+    allReviews.sort((a, b) => b.authenticity_score - a.authenticity_score); // Highest score first
+  } else if (sort === 'date_desc') {
+    allReviews.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  }
+
+  return res.json({
+    success: true,
+    metrics: {
+      total: totalCount,
+      fake_count: fakeCount,
+      suspicious_count: suspiciousCount,
+      genuine_count: genuineCount,
+      avg_score: avgScore,
+      under_review_count: underReviewCount,
+      auto_flag_rate: autoFlagRate
+    },
+    reviews: allReviews
+  });
+});
+
+// POST /api/admin/reviews/audit (Run Automated AI Authenticity Audit)
+app.post('/api/admin/reviews/audit', async (req, res) => {
+  try {
+    const { reviewId, reviewData } = req.body;
+    let targetData = reviewData;
+
+    if (reviewId && !targetData) {
+      const existing = queryOne('SELECT * FROM customer_reviews WHERE id = ?', [reviewId]);
+      if (!existing) {
+        return res.status(404).json({ error: 'Review not found' });
+      }
+      targetData = existing;
+    }
+
+    if (!targetData || (!targetData.review_content && !targetData.content)) {
+      return res.status(400).json({ error: 'Review content is required for authenticity analysis' });
+    }
+
+    // Execute AI Analysis Pipeline
+    const auditResult = await performAIFakeReviewAudit(targetData);
+    const now = new Date().toISOString();
+
+    // Persist result if review exists in DB
+    const effectiveId = targetData.id || reviewId;
+    if (effectiveId) {
+      const tagsJson = JSON.stringify(auditResult.flagReasonTags || []);
+      const detailsJson = JSON.stringify(auditResult.analysisDetails || {});
+
+      executeRun(
+        `UPDATE customer_reviews SET
+          authenticity_score = ?,
+          classification = ?,
+          flag_reason_tags = ?,
+          recommended_action = ?,
+          ai_analysis_details = ?,
+          updated_at = ?
+         WHERE id = ?`,
+        [
+          auditResult.authenticityScore,
+          auditResult.classification,
+          tagsJson,
+          auditResult.recommendedAction,
+          detailsJson,
+          now,
+          effectiveId
+        ]
+      );
+
+      // Log into review_audit_log
+      const auditLogId = `AUD-${Date.now()}`;
+      executeRun(
+        `INSERT INTO review_audit_log (
+          id, review_id, action, user_id, moderator_name, ai_assistant_used,
+          notes, previous_status, new_status, authenticity_score, classification,
+          metadata, created_at
+        ) VALUES (?, ?, 'RE_ANALYZE', 'SYSTEM_AI', 'VeriPinoy AI Engine (Gemini 3.7)', 'N', ?, NULL, NULL, ?, ?, ?, ?)`,
+        [
+          auditLogId,
+          effectiveId,
+          `Automated AI re-analysis completed: Score ${auditResult.authenticityScore}% (${auditResult.classification}). Tags: ${(auditResult.flagReasonTags || []).join(', ')}`,
+          auditResult.authenticityScore,
+          auditResult.classification,
+          detailsJson,
+          now
+        ]
+      );
+    }
+
+    return res.json({
+      success: true,
+      audit: auditResult
+    });
+  } catch (err) {
+    console.error('Error in review audit endpoint:', err);
+    return res.status(500).json({ error: 'AI Review Audit failed', message: err.message });
+  }
+});
+
+// POST /api/admin/reviews/consult (Embedded Forensic AI Moderation Assistant Chat)
+app.post('/api/admin/reviews/consult', async (req, res) => {
+  try {
+    const { reviewId, question, chatHistory = [], moderatorName = 'Review Moderator' } = req.body;
+
+    if (!question || !question.trim()) {
+      return res.status(400).json({ error: 'Question is required for AI consultation' });
+    }
+
+    let review = null;
+    if (reviewId) {
+      review = queryOne('SELECT * FROM customer_reviews WHERE id = ?', [reviewId]);
+    }
+
+    if (!review) {
+      review = {
+        id: reviewId || 'REV-PREVIEW',
+        customer_name: 'Sample Reviewer',
+        business_name: 'VeriPinoy Merchant',
+        rating: 5,
+        review_title: 'Review Audit',
+        review_content: question,
+        authenticity_score: 50,
+        classification: 'SUSPICIOUS',
+        flag_reason_tags: ['Forensic Inquiry']
+      };
+    }
+
+    const consultation = await consultAIModerationAssistant({
+      review,
+      question: question.trim(),
+      chatHistory,
+      moderatorName
+    });
+
+    // Log consultation in audit trail
+    if (review && review.id) {
+      const now = new Date().toISOString();
+      const logId = `AUD-CONSULT-${Date.now()}`;
+      executeRun(
+        `INSERT INTO review_audit_log (
+          id, review_id, action, user_id, moderator_name, ai_assistant_used,
+          notes, previous_status, new_status, authenticity_score, classification,
+          metadata, created_at
+        ) VALUES (?, ?, 'AI_CONSULTATION', 'MODERATOR', ?, 'Y', ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          logId,
+          review.id,
+          moderatorName,
+          `Moderator consulted AI Assistant: "${question.slice(0, 100)}..."`,
+          review.review_status,
+          review.review_status,
+          review.authenticity_score,
+          review.classification,
+          JSON.stringify({ question, model: consultation.model }),
+          now
+        ]
+      );
+    }
+
+    return res.json({
+      success: true,
+      answer: consultation.answer,
+      forensicContext: consultation.forensicContext,
+      model: consultation.model
+    });
+  } catch (err) {
+    console.error('Error in review consult endpoint:', err);
+    return res.status(500).json({ error: 'AI Assistant consultation failed', message: err.message });
+  }
+});
+
+// POST /api/admin/reviews/:id/decision (Manual Verification Workflow: Approve, Flag, Delete)
+app.post('/api/admin/reviews/:id/decision', (req, res) => {
+  const reviewId = req.params.id;
+  const { action, notes = '', moderatorName = 'Staff Moderator', moderatorId = 'STF-101' } = req.body;
+
+  const review = queryOne('SELECT * FROM customer_reviews WHERE id = ?', [reviewId]);
+  if (!review) {
+    return res.status(404).json({ error: 'Review record not found' });
+  }
+
+  const previousStatus = review.review_status;
+  let newStatus = previousStatus;
+  let auditAction = 'MANUAL_APPROVE';
+  const now = new Date().toISOString();
+
+  const act = (action || '').toUpperCase();
+  if (act === 'APPROVE') {
+    newStatus = 'published';
+    auditAction = 'MANUAL_APPROVE';
+    executeRun(
+      `UPDATE customer_reviews SET review_status = 'published', flagged_status = 0, updated_at = ? WHERE id = ?`,
+      [now, reviewId]
+    );
+  } else if (act === 'FLAG') {
+    newStatus = 'flagged';
+    auditAction = 'MANUAL_FLAG';
+    executeRun(
+      `UPDATE customer_reviews SET review_status = 'flagged', flagged_status = 1, flag_reason = ?, updated_at = ? WHERE id = ?`,
+      [notes || 'Flagged by Moderator for suspicious activity', now, reviewId]
+    );
+  } else if (act === 'DELETE' || act === 'REMOVE') {
+    newStatus = 'removed';
+    auditAction = 'MANUAL_DELETE';
+    executeRun(
+      `UPDATE customer_reviews SET review_status = 'removed', flagged_status = 1, updated_at = ? WHERE id = ?`,
+      [now, reviewId]
+    );
+  } else if (act === 'UNDER_REVIEW' || act === 'RESET') {
+    newStatus = 'under_review';
+    auditAction = 'MANUAL_FLAG';
+    executeRun(
+      `UPDATE customer_reviews SET review_status = 'under_review', updated_at = ? WHERE id = ?`,
+      [now, reviewId]
+    );
+  } else {
+    return res.status(400).json({ error: 'Invalid decision action. Must be APPROVE, FLAG, or DELETE' });
+  }
+
+  // Insert into review_audit_log
+  const logId = `AUD-${Date.now()}`;
+  executeRun(
+    `INSERT INTO review_audit_log (
+      id, review_id, action, user_id, moderator_name, ai_assistant_used,
+      notes, previous_status, new_status, authenticity_score, classification,
+      metadata, created_at
+    ) VALUES (?, ?, ?, ?, ?, 'N', ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      logId,
+      reviewId,
+      auditAction,
+      moderatorId,
+      moderatorName,
+      notes || `Decision executed: ${act}`,
+      previousStatus,
+      newStatus,
+      review.authenticity_score,
+      review.classification,
+      JSON.stringify({ executedAction: act, timestamp: now }),
+      now
+    ]
+  );
+
+  logAudit(req, {
+    actorName: moderatorName,
+    actorRole: 'Content Moderator',
+    action: `REVIEW_${act}`,
+    entityType: 'CUSTOMER_REVIEW',
+    entityId: reviewId,
+    details: `Moderator executed [${act}] on review ${reviewId}. Status changed from ${previousStatus} to ${newStatus}. Notes: ${notes}`,
+    success: true
+  });
+
+  const updatedReview = queryOne('SELECT * FROM customer_reviews WHERE id = ?', [reviewId]);
+
+  return res.json({
+    success: true,
+    message: `Review decision (${act}) recorded successfully.`,
+    review: updatedReview,
+    auditLogId: logId
+  });
+});
+
+// GET /api/admin/reviews/:id/audit-log (Chronological Audit Trail)
+app.get('/api/admin/reviews/:id/audit-log', (req, res) => {
+  const reviewId = req.params.id;
+  const logs = queryAll(
+    `SELECT * FROM review_audit_log WHERE review_id = ? ORDER BY created_at DESC`,
+    [reviewId]
+  );
+
+  return res.json({
+    success: true,
+    reviewId,
+    logs
+  });
+});
+
+// POST /api/public/reviews/submit (Real-Time Customer Review Submission with Instant AI Audit)
+app.post('/api/public/reviews/submit', async (req, res) => {
+  try {
+    const {
+      businessId = '3',
+      businessName = 'Bahay Kubo Restaurant',
+      customerName = 'Customer',
+      customerId = `CUST-${Math.floor(1000 + Math.random() * 9000)}`,
+      rating = 5,
+      reviewTitle = '',
+      reviewContent = '',
+      photoUrl = null,
+      submissionVelocitySeconds = 45,
+      accountAgeDays = 30
+    } = req.body;
+
+    if (!reviewContent || !reviewContent.trim()) {
+      return res.status(400).json({ error: 'Review content is required' });
+    }
+
+    const reviewId = `REV-${Math.floor(10000 + Math.random() * 90000)}`;
+    const now = new Date().toISOString();
+
+    // Trigger Instant Authenticity Audit
+    const auditPayload = {
+      id: reviewId,
+      customer_id: customerId,
+      customer_name: customerName,
+      business_id: businessId,
+      business_name: businessName,
+      rating: Number(rating),
+      review_title: reviewTitle,
+      review_content: reviewContent,
+      photo_url: photoUrl,
+      account_age_days: Number(accountAgeDays),
+      submission_velocity_seconds: Number(submissionVelocitySeconds)
+    };
+
+    const auditResult = await performAIFakeReviewAudit(auditPayload);
+
+    // Determine initial review publication status based on AI score
+    let initialStatus = 'published';
+    let flaggedStatus = 0;
+    let flagReason = null;
+
+    if (auditResult.classification === 'LIKELY_FAKE' || auditResult.authenticityScore < 50) {
+      initialStatus = 'under_review';
+      flaggedStatus = 1;
+      flagReason = `AI Automated Hold: ${auditResult.flagReasonTags.join(', ')}`;
+    } else if (auditResult.classification === 'SUSPICIOUS' || auditResult.authenticityScore < 80) {
+      initialStatus = 'under_review';
+      flaggedStatus = 1;
+      flagReason = `AI Moderation Queue: ${auditResult.flagReasonTags.join(', ')}`;
+    }
+
+    const tagsJson = JSON.stringify(auditResult.flagReasonTags || []);
+    const detailsJson = JSON.stringify(auditResult.analysisDetails || {});
+
+    executeRun(
+      `INSERT INTO customer_reviews (
+        id, customer_id, customer_name, business_id, business_name, rating,
+        review_title, review_content, review_status, flagged_status, flag_reason,
+        flagged_by_business, flagged_date, official_response, authenticity_score,
+        classification, flag_reason_tags, recommended_action, ai_analysis_details,
+        photo_url, account_age_days, submission_velocity_seconds, user_total_reviews,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      [
+        reviewId, customerId, customerName, businessId, businessName, Number(rating),
+        reviewTitle, reviewContent, initialStatus, flaggedStatus, flagReason,
+        flaggedStatus ? now : null, auditResult.authenticityScore, auditResult.classification,
+        tagsJson, auditResult.recommendedAction, detailsJson, photoUrl,
+        Number(accountAgeDays), Number(submissionVelocitySeconds), now, now
+      ]
+    );
+
+    // Initial Audit Log Entry
+    const logId = `AUD-${Date.now()}`;
+    executeRun(
+      `INSERT INTO review_audit_log (
+        id, review_id, action, user_id, moderator_name, ai_assistant_used,
+        notes, previous_status, new_status, authenticity_score, classification,
+        metadata, created_at
+      ) VALUES (?, ?, 'AI_CLASSIFY', 'SYSTEM_AI', 'VeriPinoy AI Engine (Gemini 3.7)', 'N', ?, NULL, ?, ?, ?, ?, ?)`,
+      [
+        logId,
+        reviewId,
+        `Submission audit completed: Authenticity Score ${auditResult.authenticityScore}% (${auditResult.classification}). Initial status: ${initialStatus}.`,
+        initialStatus,
+        auditResult.authenticityScore,
+        auditResult.classification,
+        detailsJson,
+        now
+      ]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: initialStatus === 'published' ? 'Review published successfully' : 'Review submitted and queued for AI-assisted authenticity verification',
+      reviewId,
+      status: initialStatus,
+      audit: auditResult
+    });
+  } catch (err) {
+    console.error('Error submitting review with AI audit:', err);
+    return res.status(500).json({ error: 'Failed to submit review', message: err.message });
+  }
 });
 
 // GET /api/customer/claims (Customer Claims Queue)

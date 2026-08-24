@@ -533,6 +533,25 @@ tr:hover td { background: var(--slate-50); }
   margin-top: 14px;
 }
 
+.quick-chip {
+  background: var(--white);
+  border: 1px solid #DDD6FE;
+  color: #4C1D95;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.quick-chip:hover {
+  background: #EDE9FE;
+  border-color: #8B5CF6;
+  color: #312E81;
+  transform: translateY(-1px);
+}
+
 /* === PRICING GRID === */
 .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 24px; margin-top: 36px; }
 .price-card {
@@ -3915,6 +3934,7 @@ input:checked + .slider:before { transform: translateX(22px); }
       <!-- WORKSPACE TABS -->
       <div style="display:flex; border-bottom:2px solid var(--slate-200); margin-bottom:28px; gap:8px; overflow-x:auto;">
         <button class="tab-btn active" id="tab-btn-queues" onclick="switchAdminTab('queues')">📥 Case Queues & Reviews</button>
+        <button class="tab-btn" id="tab-btn-ai-reviews" onclick="switchAdminTab('ai-reviews')">🤖 AI Review Moderation Queue <span class="badge badge-emerald" style="font-size:0.68rem; margin-left:4px;">Gemini 3.7</span></button>
         <button class="tab-btn" id="tab-btn-freelance-disputes" onclick="switchAdminTab('freelance-disputes')">💼 Freelancer Disputes & Verifications</button>
         <button class="tab-btn" id="tab-btn-billing" onclick="switchAdminTab('billing')">💳 Billing & Revenue Ledger</button>
         <button class="tab-btn" id="tab-btn-security" onclick="switchAdminTab('security')">🛡️ Security, Vault & Anti-Fraud</button>
@@ -4000,7 +4020,116 @@ input:checked + .slider:before { transform: translateX(22px); }
 
       </div>
 
-      <!-- TAB 1B: FREELANCER DISPUTES & VERIFICATIONS -->
+      <!-- TAB 1A: AI FAKE REVIEW DETECTION & MODERATION HUB -->
+      <div id="tab-content-ai-reviews" class="admin-tab-pane" style="display:none;">
+        
+        <!-- HEADER ACTION BAR -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; flex-wrap:wrap; gap:16px; background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:24px; box-shadow:var(--shadow-sm);">
+          <div>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+              <span class="badge badge-purple" style="font-weight:800; font-size:0.75rem;">🤖 REAL-TIME NEURAL MODERATION</span>
+              <span class="badge badge-emerald" style="font-size:0.75rem; font-weight:700;">● Gemini 3.7 Flash Engine Online</span>
+            </div>
+            <h3 style="font-family:var(--font-heading); font-size:1.4rem; font-weight:900; color:var(--navy-900); margin:0;">
+              AI-Powered Fake Customer Review Moderation Queue
+            </h3>
+            <p style="font-size:0.85rem; color:var(--slate-500); margin:6px 0 0; max-width:700px;">
+              Continuous automated forensic auditing of customer feedback using semantic NLP patterns, submission typing velocity, bot anomaly detection, account history skew, and multimodal validation.
+            </p>
+          </div>
+
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-outline" style="font-size:0.82rem; font-weight:700; padding:9px 14px;" onclick="openSimulateReviewModal()">
+              🧪 Simulate Test Review
+            </button>
+            <button class="btn btn-outline" style="font-size:0.82rem; font-weight:700; padding:9px 14px;" onclick="triggerBatchAIReAudit()">
+              ⚡ Batch AI Re-Audit
+            </button>
+            <button class="btn btn-emerald" style="font-size:0.82rem; font-weight:700; padding:9px 14px;" onclick="loadAIReviewModerationQueue()">
+              🔄 Refresh Queue
+            </button>
+          </div>
+        </div>
+
+        <!-- SUMMARY KPI METRIC CARDS -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:14px; margin-bottom:24px;">
+          <div class="metric-card" style="border-top:4px solid var(--navy-600); cursor:pointer;" onclick="filterAIReviewQueueByRisk('all')">
+            <div style="font-size:0.72rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Queue Volume</div>
+            <div style="font-family:var(--font-heading); font-size:1.9rem; font-weight:900; color:var(--navy-900); margin-top:2px;" id="ai-metric-total">0</div>
+            <div style="font-size:0.72rem; color:var(--slate-600); font-weight:600;">Total Monitored Reviews</div>
+          </div>
+
+          <div class="metric-card" style="border-top:4px solid #EF4444; background:#FEF2F2; cursor:pointer;" onclick="filterAIReviewQueueByRisk('likely_fake')">
+            <div style="font-size:0.72rem; font-weight:800; color:#991B1B; text-transform:uppercase;">🔴 Likely Fake (&lt;50%)</div>
+            <div style="font-family:var(--font-heading); font-size:1.9rem; font-weight:900; color:#DC2626; margin-top:2px;" id="ai-metric-fake">0</div>
+            <div style="font-size:0.72rem; color:#B91C1C; font-weight:700;">High Anomaly / Flagged</div>
+          </div>
+
+          <div class="metric-card" style="border-top:4px solid #F59E0B; background:#FFFBEB; cursor:pointer;" onclick="filterAIReviewQueueByRisk('suspicious')">
+            <div style="font-size:0.72rem; font-weight:800; color:#92400E; text-transform:uppercase;">🟡 Suspicious (50-79%)</div>
+            <div style="font-family:var(--font-heading); font-size:1.9rem; font-weight:900; color:#D97706; margin-top:2px;" id="ai-metric-suspicious">0</div>
+            <div style="font-size:0.72rem; color:#B45309; font-weight:700;">Requires Staff Review</div>
+          </div>
+
+          <div class="metric-card" style="border-top:4px solid #10B981; background:#ECFDF5; cursor:pointer;" onclick="filterAIReviewQueueByRisk('genuine')">
+            <div style="font-size:0.72rem; font-weight:800; color:#065F46; text-transform:uppercase;">🟢 Genuine (80-100%)</div>
+            <div style="font-family:var(--font-heading); font-size:1.9rem; font-weight:900; color:#059669; margin-top:2px;" id="ai-metric-genuine">0</div>
+            <div style="font-size:0.72rem; color:#047857; font-weight:700;">Authentic Shoppers</div>
+          </div>
+
+          <div class="metric-card" style="border-top:4px solid var(--blue-600);">
+            <div style="font-size:0.72rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Avg Authenticity</div>
+            <div style="font-family:var(--font-heading); font-size:1.9rem; font-weight:900; color:var(--blue-700); margin-top:2px;" id="ai-metric-avg-score">--</div>
+            <div style="font-size:0.72rem; color:var(--blue-600); font-weight:600;">Platform Health Index</div>
+          </div>
+
+          <div class="metric-card" style="border-top:4px solid #8B5CF6;">
+            <div style="font-size:0.72rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Auto-Flag Rate</div>
+            <div style="font-family:var(--font-heading); font-size:1.9rem; font-weight:900; color:#7C3AED; margin-top:2px;" id="ai-metric-flag-rate">--</div>
+            <div style="font-size:0.72rem; color:#6D28D9; font-weight:600;">AI Pre-screen Accuracy</div>
+          </div>
+        </div>
+
+        <!-- SEARCH AND FILTER CONTROLS BAR -->
+        <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:16px; margin-bottom:20px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+          <div style="flex:1; min-width:240px;">
+            <input type="text" id="ai-mod-search" placeholder="🔍 Search review text, business, customer, or flag reason tag..." style="width:100%; padding:9px 14px; border-radius:var(--radius-md); border:1px solid var(--slate-300); font-size:0.88rem;" oninput="applyAIReviewFilters()">
+          </div>
+
+          <div>
+            <select id="ai-mod-filter-risk" style="padding:9px 14px; border-radius:var(--radius-md); border:1px solid var(--slate-300); font-size:0.88rem; font-weight:600;" onchange="applyAIReviewFilters()">
+              <option value="all">All Risk Tiers</option>
+              <option value="likely_fake">🔴 Likely Fake (&lt;50%)</option>
+              <option value="suspicious">🟡 Suspicious (50-79%)</option>
+              <option value="genuine">🟢 Genuine (80-100%)</option>
+            </select>
+          </div>
+
+          <div>
+            <select id="ai-mod-filter-status" style="padding:9px 14px; border-radius:var(--radius-md); border:1px solid var(--slate-300); font-size:0.88rem; font-weight:600;" onchange="applyAIReviewFilters()">
+              <option value="all">All Statuses</option>
+              <option value="under_moderation">⏳ Under Moderation / Review</option>
+              <option value="flagged">🚩 Flagged</option>
+              <option value="approved">🟢 Approved / Published</option>
+              <option value="deleted">🗑️ Deleted / Removed</option>
+            </select>
+          </div>
+
+          <div>
+            <select id="ai-mod-filter-sort" style="padding:9px 14px; border-radius:var(--radius-md); border:1px solid var(--slate-300); font-size:0.88rem; font-weight:600;" onchange="applyAIReviewFilters()">
+              <option value="risk_desc">⚡ Lowest Authenticity Score (Highest Risk)</option>
+              <option value="score_asc">🟢 Highest Authenticity Score First</option>
+              <option value="newest">🕒 Newest Submissions First</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- REVIEWS MODERATION QUEUE CARDS CONTAINER -->
+        <div id="ai-reviews-queue-container" style="display:flex; flex-direction:column; gap:16px; margin-bottom:32px;">
+          <!-- Populated by loadAIReviewModerationQueue() -->
+        </div>
+
+      </div>
       <div id="tab-content-freelance-disputes" class="admin-tab-pane" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
           <div>
@@ -5956,6 +6085,353 @@ input:checked + .slider:before { transform: translateX(22px); }
       <button class="btn btn-outline" onclick="printActiveReceipt()">🖨️ Print Receipt</button>
       <button class="btn btn-emerald" onclick="closeViewReceiptModal()">Done</button>
     </div>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     MODAL: AI REVIEW FORENSIC INSPECTION & EMBEDDED AI ASSISTANT
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-ai-review-inspect" onclick="if(event.target === this) closeAIReviewInspectModal()" style="display:none; z-index:9999;">
+  <div class="modal-content" style="max-width:1160px; width:95vw; max-height:92vh; border-radius:var(--radius-xl); padding:28px; display:flex; flex-direction:column; overflow:hidden; box-shadow:var(--shadow-2xl);">
+    
+    <!-- MODAL HEADER -->
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid var(--slate-200); padding-bottom:16px; margin-bottom:16px; flex-shrink:0;">
+      <div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span class="badge badge-purple" style="font-weight:800; font-size:0.75rem;">🤖 FORENSIC AI AUDIT DECK</span>
+          <span id="inspect-modal-badge-classification" class="badge badge-red" style="font-weight:800; font-size:0.8rem;">LIKELY_FAKE</span>
+          <span id="inspect-modal-status-badge" class="badge badge-gold" style="font-size:0.75rem;">UNDER_REVIEW</span>
+        </div>
+        <h3 style="font-family:var(--font-heading); font-size:1.35rem; font-weight:900; color:var(--navy-900); margin:6px 0 2px;" id="inspect-modal-title">
+          Review Forensic Deep-Dive: #<span id="inspect-modal-review-id">--</span>
+        </h3>
+        <div style="font-size:0.82rem; color:var(--slate-500);">
+          Target Business: <strong id="inspect-modal-business-name" style="color:var(--navy-900);">--</strong> · Author: <strong id="inspect-modal-author-name" style="color:var(--navy-900);">--</strong> (<span id="inspect-modal-author-email">--</span>)
+        </div>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button class="btn btn-outline" style="font-size:0.8rem; padding:6px 12px; font-weight:700;" onclick="triggerInstantAIReviewAudit(ACTIVE_INSPECT_REVIEW_ID)">
+          ⚡ Re-Run AI Audit
+        </button>
+        <button class="btn btn-outline" style="font-size:1.2rem; padding:4px 10px; border:none;" onclick="closeAIReviewInspectModal()">✕</button>
+      </div>
+    </div>
+
+    <!-- 2-COLUMN MAIN BODY -->
+    <div style="display:grid; grid-template-columns:1.18fr 0.82fr; gap:20px; flex:1; min-height:0; overflow-y:auto; padding-right:4px;">
+      
+      <!-- LEFT COLUMN: REVIEW DETAILS, SIGNALS & MANUAL DECISION CONSOLE -->
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        
+        <!-- AUTHENTICITY SCORE & EXPLANATION SUMMARY CARD -->
+        <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:18px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="font-size:0.72rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Authenticity Score</div>
+              <div style="display:flex; align-items:baseline; gap:8px;">
+                <div id="inspect-score-val" style="font-family:var(--font-heading); font-size:2.2rem; font-weight:900; color:#DC2626;">32%</div>
+                <span id="inspect-score-label" style="font-size:0.85rem; font-weight:800; color:#DC2626;">High Fake Probability</span>
+              </div>
+            </div>
+
+            <div id="inspect-reason-tags-container" style="display:flex; flex-wrap:wrap; gap:6px; max-width:320px; justify-content:flex-end;">
+              <!-- Badges populated by JS -->
+            </div>
+          </div>
+
+          <!-- SCORE BAR -->
+          <div style="width:100%; height:8px; background:var(--slate-200); border-radius:4px; overflow:hidden; margin-bottom:12px;">
+            <div id="inspect-score-bar" style="height:100%; width:32%; background:#DC2626; transition:width 0.3s;"></div>
+          </div>
+
+          <!-- AI EXPLANATION -->
+          <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:12px; font-size:0.85rem; color:var(--slate-700); line-height:1.5;">
+            <div style="font-weight:800; font-size:0.78rem; color:var(--purple-700); text-transform:uppercase; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+              <span>🤖 Gemini AI Forensic Analysis:</span>
+            </div>
+            <div id="inspect-ai-explanation-text">
+              Loading AI audit results...
+            </div>
+          </div>
+        </div>
+
+        <!-- REVIEW CONTENT & METADATA -->
+        <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:18px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div id="inspect-review-stars" style="color:var(--amber-500); font-size:1.1rem; font-weight:800;">★★★★★</div>
+              <h4 id="inspect-review-title" style="font-family:var(--font-heading); font-size:1.05rem; font-weight:800; color:var(--navy-900); margin:4px 0 0;">
+                Review Title
+              </h4>
+            </div>
+            <div style="text-align:right; font-size:0.78rem; color:var(--slate-500);">
+              <div id="inspect-verified-purchase-badge"><span class="badge badge-emerald">🛍️ Verified Purchase</span></div>
+              <div id="inspect-created-at" style="margin-top:4px;">Date</div>
+            </div>
+          </div>
+
+          <!-- REVIEW BODY TEXT -->
+          <div id="inspect-review-body" style="font-size:0.9rem; color:var(--slate-800); line-height:1.6; background:var(--slate-50); padding:14px; border-radius:var(--radius-md); border-left:4px solid var(--navy-500); margin-bottom:12px; white-space:pre-wrap;">
+            Review body text...
+          </div>
+
+          <!-- PHOTO ATTACHMENT IF ANY -->
+          <div id="inspect-photo-preview-box" style="display:none; margin-bottom:12px;">
+            <div style="font-size:0.75rem; font-weight:800; color:var(--slate-500); text-transform:uppercase; margin-bottom:6px;">
+              Attached Photo & Multimodal Verification
+            </div>
+            <div style="display:flex; gap:12px; align-items:center; background:var(--slate-50); padding:10px; border-radius:var(--radius-md); border:1px solid var(--slate-200);">
+              <img id="inspect-photo-img" src="" alt="Review Evidence" style="width:80px; height:80px; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--slate-300);">
+              <div style="font-size:0.82rem; color:var(--slate-600); flex:1;">
+                <div id="inspect-photo-multimodal-status" style="font-weight:700; color:var(--navy-900);">Multimodal Cross-Check: Verified</div>
+                <div id="inspect-photo-multimodal-detail" style="font-size:0.78rem; color:var(--slate-500); margin-top:2px;">Visual signals analyzed against review text.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FORENSIC SIGNALS MATRIX GRID -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:0.8rem;">
+            <div style="background:var(--slate-50); padding:10px; border-radius:var(--radius-md); border:1px solid var(--slate-200);">
+              <div style="color:var(--slate-500); font-weight:700; font-size:0.72rem; text-transform:uppercase;">⚡ Submission Velocity</div>
+              <div id="inspect-velocity-val" style="font-weight:800; color:var(--navy-900); font-size:0.95rem; margin-top:2px;">2.4s (Bot Anomaly)</div>
+            </div>
+            <div style="background:var(--slate-50); padding:10px; border-radius:var(--radius-md); border:1px solid var(--slate-200);">
+              <div style="color:var(--slate-500); font-weight:700; font-size:0.72rem; text-transform:uppercase;">👤 Account Age & Profile</div>
+              <div id="inspect-account-age-val" style="font-weight:800; color:var(--navy-900); font-size:0.95rem; margin-top:2px;">0 days (Brand New Account)</div>
+            </div>
+            <div style="background:var(--slate-50); padding:10px; border-radius:var(--radius-md); border:1px solid var(--slate-200);">
+              <div style="color:var(--slate-500); font-weight:700; font-size:0.72rem; text-transform:uppercase;">📉 Sentiment Polarity</div>
+              <div id="inspect-sentiment-val" style="font-weight:800; color:var(--navy-900); font-size:0.95rem; margin-top:2px;">Extreme Hyperbolic (+0.98)</div>
+            </div>
+            <div style="background:var(--slate-50); padding:10px; border-radius:var(--radius-md); border:1px solid var(--slate-200);">
+              <div style="color:var(--slate-500); font-weight:700; font-size:0.72rem; text-transform:uppercase;">👥 Cross-Platform Duplicates</div>
+              <div id="inspect-duplicate-val" style="font-weight:800; color:var(--navy-900); font-size:0.95rem; margin-top:2px;">None Detected</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MANUAL VERIFICATION DECISION CONSOLE -->
+        <div style="background:#F8FAFC; border:1px solid var(--slate-300); border-radius:var(--radius-lg); padding:18px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h4 style="font-family:var(--font-heading); font-size:0.95rem; font-weight:800; color:var(--navy-900); margin:0;">
+              ⚖️ Manual Verification & Enforcement Action
+            </h4>
+            <span class="badge badge-purple" style="font-size:0.7rem;">Staff Decision</span>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-bottom:12px;">
+            <label style="display:flex; align-items:center; gap:6px; background:var(--white); border:1px solid var(--slate-200); padding:8px 10px; border-radius:var(--radius-md); cursor:pointer; font-size:0.8rem; font-weight:700; color:#065F46;">
+              <input type="radio" name="inspect-decision-choice" value="approved" id="dec-opt-approved">
+              <span>🟢 Approve</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; background:var(--white); border:1px solid var(--slate-200); padding:8px 10px; border-radius:var(--radius-md); cursor:pointer; font-size:0.8rem; font-weight:700; color:#B45309;">
+              <input type="radio" name="inspect-decision-choice" value="flagged" id="dec-opt-flagged">
+              <span>🚩 Flag</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; background:var(--white); border:1px solid var(--slate-200); padding:8px 10px; border-radius:var(--radius-md); cursor:pointer; font-size:0.8rem; font-weight:700; color:#991B1B;">
+              <input type="radio" name="inspect-decision-choice" value="deleted" id="dec-opt-deleted">
+              <span>🗑️ Delete</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; background:var(--white); border:1px solid var(--slate-200); padding:8px 10px; border-radius:var(--radius-md); cursor:pointer; font-size:0.8rem; font-weight:700; color:#3B82F6;">
+              <input type="radio" name="inspect-decision-choice" value="under_review" id="dec-opt-under-review">
+              <span>⏳ In Review</span>
+            </label>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <label style="font-size:0.78rem; font-weight:700; color:var(--navy-900); display:block; margin-bottom:4px;">
+              Moderator Audit Notes / Enforcement Rationale:
+            </label>
+            <textarea id="inspect-decision-notes" rows="2" placeholder="Document specific forensic reasons, merchant evidence, or user history verified..." style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1px solid var(--slate-300); font-size:0.85rem; font-family:inherit;"></textarea>
+          </div>
+
+          <button class="btn btn-emerald" style="width:100%; font-weight:800; padding:10px; font-size:0.9rem;" onclick="submitManualReviewDecision()">
+            ✓ Execute Binding Decision & Commit to Audit Trail
+          </button>
+        </div>
+
+        <!-- IMMUTABLE AUDIT TRAIL TIMELINE -->
+        <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:16px;">
+          <div style="font-family:var(--font-heading); font-size:0.9rem; font-weight:800; color:var(--navy-900); margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+            <span>📜 Immutable Moderation Audit Log</span>
+            <span style="font-size:0.72rem; color:var(--slate-500); font-weight:600;">DPA 2012 §18 Compliant</span>
+          </div>
+          <div id="inspect-audit-timeline-container" style="max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN: INTEGRATED AI MODERATION ASSISTANT -->
+      <div style="display:flex; flex-direction:column; background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow-sm);">
+        
+        <!-- COPILOT HEADER -->
+        <div style="background:linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); padding:16px; color:white; flex-shrink:0;">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:1.3rem;">🤖</span>
+              <div>
+                <h4 style="font-family:var(--font-heading); font-size:1rem; font-weight:800; margin:0; color:white;">
+                  AI Moderation Assistant
+                </h4>
+                <div style="font-size:0.72rem; color:#C7D2FE;">Gemini 3.7 Copilot · Active Context</div>
+              </div>
+            </div>
+            <button class="btn btn-outline" style="color:white; border-color:rgba(255,255,255,0.3); padding:4px 8px; font-size:0.72rem;" onclick="resetAIAssistantChat()">
+              🔄 Reset Chat
+            </button>
+          </div>
+        </div>
+
+        <!-- QUICK PROMPT CHIPS -->
+        <div style="padding:12px 14px; background:#F5F3FF; border-bottom:1px solid #EDE9FE; flex-shrink:0;">
+          <div style="font-size:0.72rem; font-weight:800; color:#5B21B6; text-transform:uppercase; margin-bottom:6px;">
+            ⚡ Quick Forensic Inquiries:
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px;">
+            <button class="quick-chip" onclick="sendAIModerationQuestion('Why was this review flagged?')">
+              Why was this flagged?
+            </button>
+            <button class="quick-chip" onclick="sendAIModerationQuestion('Does this review match common AI patterns or bot templates?')">
+              Check AI/Bot syntax
+            </button>
+            <button class="quick-chip" onclick="sendAIModerationQuestion('Compare user profile activity and velocity against typical bot behavior')">
+              Bot velocity audit
+            </button>
+            <button class="quick-chip" onclick="sendAIModerationQuestion('Recommend a moderation decision (Approve, Flag, or Delete) with clear reasons')">
+              Recommend decision
+            </button>
+          </div>
+        </div>
+
+        <!-- CHAT CONVERSATION THREAD -->
+        <div id="ai-inspect-chat-messages" style="flex:1; min-height:240px; max-height:420px; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; background:#FAFAFA;">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- CHAT INPUT COMPONENT -->
+        <div style="padding:12px; background:var(--white); border-top:1px solid var(--slate-200); flex-shrink:0;">
+          <div style="display:flex; gap:8px;">
+            <textarea id="ai-inspect-chat-input" placeholder="Ask AI Copilot anything about this review, author signals, or policy..." rows="2" style="flex:1; padding:8px 12px; border-radius:var(--radius-md); border:1px solid var(--slate-300); font-size:0.85rem; font-family:inherit; resize:none;" onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendCustomAIQuestion(); }"></textarea>
+            <button id="ai-inspect-send-btn" class="btn btn-emerald" style="padding:8px 16px; font-weight:800; font-size:0.85rem; height:58px;" onclick="sendCustomAIQuestion()">
+              Ask ⚡
+            </button>
+          </div>
+          <div style="font-size:0.7rem; color:var(--slate-400); margin-top:4px;">
+            Press Enter to submit inquiry. Powered by Gemini 3.7.
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     MODAL: SIMULATE REVIEW SUBMISSION FOR REAL-TIME AI AUDIT
+     ========================================================================== -->
+<div class="modal-overlay" id="modal-simulate-review-submit" onclick="if(event.target === this) closeSimulateReviewModal()" style="display:none; z-index:9999;">
+  <div class="modal-content" style="max-width:680px; width:95vw; border-radius:var(--radius-xl); padding:32px; box-shadow:var(--shadow-2xl);">
+    
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+      <div>
+        <span class="badge badge-purple" style="font-size:0.75rem;">🧪 Real-Time Synthetic Testing Engine</span>
+        <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:900; color:var(--navy-900); margin:4px 0 0;">
+          Simulate Review & Test AI Detection
+        </h3>
+      </div>
+      <button class="btn btn-outline" style="padding:4px 10px; border:none; font-size:1.1rem;" onclick="closeSimulateReviewModal()">✕</button>
+    </div>
+
+    <!-- PRESET SELECTOR BUTTONS -->
+    <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:12px; margin-bottom:18px;">
+      <div style="font-size:0.75rem; font-weight:800; color:var(--navy-900); text-transform:uppercase; margin-bottom:8px;">
+        Quick Test Presets (Click to Populate):
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+        <button type="button" class="btn btn-outline" style="padding:6px; font-size:0.75rem; font-weight:700; color:#DC2626;" onclick="fillReviewPreset('gpt_hype')">
+          🤖 GPT-4 Hype Bot (5★)
+        </button>
+        <button type="button" class="btn btn-outline" style="padding:6px; font-size:0.75rem; font-weight:700; color:#D97706;" onclick="fillReviewPreset('smear_bot')">
+          🛑 Bot Smear (1★)
+        </button>
+        <button type="button" class="btn btn-outline" style="padding:6px; font-size:0.75rem; font-weight:700; color:#059669;" onclick="fillReviewPreset('genuine_local')">
+          🟢 Authentic Local (4★)
+        </button>
+      </div>
+    </div>
+
+    <form id="form-simulate-review" onsubmit="handleSimulateReviewSubmit(event)">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+        <div class="form-group">
+          <label style="font-weight:700; font-size:0.8rem; color:var(--navy-900);">Target Business *</label>
+          <select id="sim-business-id" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--slate-300); font-size:0.85rem;">
+            <option value="1">Bahay Kubo Restaurant (Food & Dining)</option>
+            <option value="2">Sari-Sari Mart Express (Retail)</option>
+            <option value="3">Manila Tech Solutions (Electronics)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; font-size:0.8rem; color:var(--navy-900);">Star Rating *</label>
+          <select id="sim-rating" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--slate-300); font-size:0.85rem;">
+            <option value="5">★★★★★ (5 Stars)</option>
+            <option value="4">★★★★☆ (4 Stars)</option>
+            <option value="3">★★★☆☆ (3 Stars)</option>
+            <option value="2">★★☆☆☆ (2 Stars)</option>
+            <option value="1">★☆☆☆☆ (1 Star)</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+        <div class="form-group">
+          <label style="font-weight:700; font-size:0.8rem; color:var(--navy-900);">Reviewer Name *</label>
+          <input type="text" id="sim-author-name" value="Alex Smith" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--slate-300); font-size:0.85rem;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; font-size:0.8rem; color:var(--navy-900);">Reviewer Email *</label>
+          <input type="email" id="sim-author-email" value="alex.bot9912@tempmail.io" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--slate-300); font-size:0.85rem;">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+        <div class="form-group">
+          <label style="font-weight:700; font-size:0.8rem; color:var(--navy-900);">Typing Velocity (Seconds)</label>
+          <input type="number" id="sim-velocity" value="1.8" step="0.1" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--slate-300); font-size:0.85rem;">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:700; font-size:0.8rem; color:var(--navy-900);">Verified Purchase Badge</label>
+          <select id="sim-verified-purchase" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--slate-300); font-size:0.85rem;">
+            <option value="0">No (Unverified Review)</option>
+            <option value="1">Yes (Verified Transaction)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-weight:700; font-size:0.8rem; color:var(--navy-900);">Review Headline / Title *</label>
+        <input type="text" id="sim-title" value="An absolutely stellar life-changing experience!" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--slate-300); font-size:0.85rem;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-weight:700; font-size:0.8rem; color:var(--navy-900);">Review Feedback Body *</label>
+        <textarea id="sim-body" rows="3" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--slate-300); font-size:0.85rem; font-family:inherit;">This establishment is a paradigm of supreme excellence. The synergy and seamless execution are truly unprecedented. Words cannot encapsulate how transformative this service is. Highly recommend to everyone on Earth!</textarea>
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label style="font-weight:700; font-size:0.8rem; color:var(--navy-900);">Photo URL (Optional)</label>
+        <input type="text" id="sim-photo-url" placeholder="https://images.unsplash.com/..." style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--slate-300); font-size:0.85rem;">
+      </div>
+
+      <button type="submit" id="sim-submit-btn" class="btn btn-emerald" style="width:100%; font-weight:800; padding:12px; font-size:0.95rem;">
+        🚀 Submit & Run Instant Gemini 3.7 Authenticity Audit
+      </button>
+    </form>
 
   </div>
 </div>
@@ -11158,6 +11634,7 @@ function switchAdminTab(tabName) {
   if (pane) pane.style.display = 'block';
 
   if (tabName === 'queues') loadAdminCases();
+  if (tabName === 'ai-reviews') loadAIReviewModerationQueue();
   if (tabName === 'freelance-disputes') loadAdminFreelancerDisputes();
   if (tabName === 'billing') loadAdminBillingData();
   if (tabName === 'security') loadSecurityHub();
@@ -12865,6 +13342,713 @@ async function loadAuditLogs() {
 
   } catch (err) {
     console.error('Failed to load audit logs:', err);
+  }
+}
+
+/* ==========================================================================
+   AI-POWERED FAKE REVIEW DETECTION & MODERATION CLIENT MODULE
+   ========================================================================== */
+let CURRENT_AI_MOD_QUEUE = [];
+let CURRENT_AI_MOD_METRICS = null;
+let ACTIVE_INSPECT_REVIEW_ID = null;
+let ACTIVE_INSPECT_REVIEW_DATA = null;
+let AI_INSPECT_CONVERSATION_HISTORY = [];
+
+async function loadAIReviewModerationQueue() {
+  const container = document.getElementById('ai-reviews-queue-container');
+  if (container) {
+    container.innerHTML = `
+      <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:40px; text-align:center; color:var(--slate-500);">
+        <div style="font-size:2rem; margin-bottom:10px;">🤖</div>
+        <h4 style="font-family:var(--font-heading); font-weight:800; color:var(--navy-900); margin-bottom:4px;">Scanning Review Queues with Gemini 3.7...</h4>
+        <p style="font-size:0.85rem; margin:0;">Analyzing semantic embeddings, typing velocity, bot patterns, and account authenticity.</p>
+      </div>
+    `;
+  }
+
+  try {
+    const res = await apiCall('/api/admin/reviews/moderation-queue');
+    CURRENT_AI_MOD_QUEUE = res.queue || [];
+    CURRENT_AI_MOD_METRICS = res.metrics || {};
+
+    updateAIReviewMetrics(CURRENT_AI_MOD_METRICS);
+    applyAIReviewFilters();
+  } catch (err) {
+    console.error('Failed to load AI review moderation queue:', err);
+    if (container) {
+      container.innerHTML = `
+        <div style="background:#FEF2F2; border:1px solid #FECDD3; border-radius:var(--radius-xl); padding:24px; text-align:center; color:#991B1B;">
+          <strong>Error loading AI moderation queue:</strong> ${err.message}
+        </div>
+      `;
+    }
+  }
+}
+
+function updateAIReviewMetrics(m) {
+  if (!m) return;
+  const elTotal = document.getElementById('ai-metric-total');
+  const elFake = document.getElementById('ai-metric-fake');
+  const elSusp = document.getElementById('ai-metric-suspicious');
+  const elGen = document.getElementById('ai-metric-genuine');
+  const elAvg = document.getElementById('ai-metric-avg-score');
+  const elRate = document.getElementById('ai-metric-flag-rate');
+
+  if (elTotal) elTotal.innerText = m.total || 0;
+  if (elFake) elFake.innerText = m.likely_fake || 0;
+  if (elSusp) elSusp.innerText = m.suspicious || 0;
+  if (elGen) elGen.innerText = m.genuine || 0;
+  if (elAvg) elAvg.innerText = (m.avg_score != null) ? `${m.avg_score}%` : '--';
+  if (elRate) elRate.innerText = (m.auto_flag_rate != null) ? `${m.auto_flag_rate}%` : '--';
+}
+
+function filterAIReviewQueueByRisk(riskTier) {
+  const riskSelect = document.getElementById('ai-mod-filter-risk');
+  if (riskSelect) riskSelect.value = riskTier;
+  applyAIReviewFilters();
+}
+
+function applyAIReviewFilters() {
+  const search = (document.getElementById('ai-mod-search')?.value || '').toLowerCase().trim();
+  const riskTier = document.getElementById('ai-mod-filter-risk')?.value || 'all';
+  const status = document.getElementById('ai-mod-filter-status')?.value || 'all';
+  const sort = document.getElementById('ai-mod-filter-sort')?.value || 'risk_desc';
+
+  let filtered = [...CURRENT_AI_MOD_QUEUE];
+
+  if (riskTier !== 'all') {
+    filtered = filtered.filter(item => {
+      const cls = (item.classification || '').toLowerCase();
+      if (riskTier === 'likely_fake') return cls.includes('fake') || (item.authenticity_score < 50);
+      if (riskTier === 'suspicious') return cls.includes('suspicious') || (item.authenticity_score >= 50 && item.authenticity_score < 80);
+      if (riskTier === 'genuine') return cls.includes('genuine') || (item.authenticity_score >= 80);
+      return true;
+    });
+  }
+
+  if (status !== 'all') {
+    filtered = filtered.filter(item => {
+      const s = (item.status || '').toLowerCase();
+      if (status === 'under_moderation') return s.includes('review') || s.includes('moderation') || s.includes('pending');
+      if (status === 'flagged') return s.includes('flag');
+      if (status === 'approved') return s.includes('approved') || s.includes('published');
+      if (status === 'deleted') return s.includes('deleted') || s.includes('removed');
+      return true;
+    });
+  }
+
+  if (search) {
+    filtered = filtered.filter(item => {
+      const fullText = `${item.title || ''} ${item.body || ''} ${item.author_name || ''} ${item.author_email || ''} ${item.business_name || ''} ${JSON.stringify(item.flag_reason_tags || [])}`.toLowerCase();
+      return fullText.includes(search);
+    });
+  }
+
+  // Sorting
+  if (sort === 'risk_desc') {
+    filtered.sort((a, b) => (a.authenticity_score ?? 50) - (b.authenticity_score ?? 50));
+  } else if (sort === 'score_asc') {
+    filtered.sort((a, b) => (b.authenticity_score ?? 50) - (a.authenticity_score ?? 50));
+  } else if (sort === 'newest') {
+    filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  renderAIReviewQueueCards(filtered);
+}
+
+function renderAIReviewQueueCards(items) {
+  const container = document.getElementById('ai-reviews-queue-container');
+  if (!container) return;
+
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:40px; text-align:center; color:var(--slate-500);">
+        <div style="font-size:2rem; margin-bottom:8px;">🔍</div>
+        <h4 style="font-family:var(--font-heading); font-weight:800; color:var(--navy-900); margin-bottom:4px;">No Reviews Match Current Filter Criteria</h4>
+        <p style="font-size:0.85rem; margin:0;">Try resetting search keywords, status, or risk tier filters.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = items.map(r => {
+    const score = r.authenticity_score != null ? r.authenticity_score : 50;
+    
+    // Color mapping
+    let scoreColor = '#059669'; // Emerald
+    let classBadge = '<span class="badge badge-emerald">🟢 GENUINE REVIEW</span>';
+    let cardBorder = 'border: 1px solid var(--slate-200);';
+    let cardBg = 'background: var(--white);';
+
+    if (score < 50) {
+      scoreColor = '#DC2626'; // Red
+      classBadge = '<span class="badge badge-red" style="font-weight:800;">🔴 LIKELY FAKE / BOT</span>';
+      cardBorder = 'border: 1px solid #FECDD3; border-left: 5px solid #DC2626;';
+      cardBg = 'background: #FFF5F5;';
+    } else if (score < 80) {
+      scoreColor = '#D97706'; // Amber
+      classBadge = '<span class="badge badge-gold" style="font-weight:800;">🟡 SUSPICIOUS SIGNALS</span>';
+      cardBorder = 'border: 1px solid #FDE68A; border-left: 5px solid #D97706;';
+      cardBg = 'background: #FFFDF5;';
+    }
+
+    // Status badge
+    let statusBadge = '<span class="badge badge-gold">⏳ In Moderation</span>';
+    if (r.status === 'approved' || r.status === 'published') {
+      statusBadge = '<span class="badge badge-emerald">✓ Approved & Live</span>';
+    } else if (r.status === 'flagged') {
+      statusBadge = '<span class="badge badge-red">🚩 Flagged</span>';
+    } else if (r.status === 'deleted') {
+      statusBadge = '<span class="badge badge-slate" style="text-decoration:line-through;">🗑️ Removed</span>';
+    }
+
+    // Parse Reason tags
+    let tags = [];
+    if (Array.isArray(r.flag_reason_tags)) {
+      tags = r.flag_reason_tags;
+    } else if (typeof r.flag_reason_tags === 'string') {
+      try { tags = JSON.parse(r.flag_reason_tags); } catch(e) { tags = [r.flag_reason_tags]; }
+    }
+
+    const tagBadges = tags.map(t => {
+      let badgeStyle = 'background:var(--slate-100); color:var(--slate-700); border:1px solid var(--slate-300);';
+      let icon = '🏷️';
+      if (t.toLowerCase().includes('bot') || t.toLowerCase().includes('velocity') || t.toLowerCase().includes('speed')) {
+        badgeStyle = 'background:#FEF2F2; color:#991B1B; border:1px solid #FCA5A5;';
+        icon = '⚡';
+      } else if (t.toLowerCase().includes('ai') || t.toLowerCase().includes('gpt') || t.toLowerCase().includes('phrasing')) {
+        badgeStyle = 'background:#F5F3FF; color:#5B21B6; border:1px solid #DDD6FE;';
+        icon = '🤖';
+      } else if (t.toLowerCase().includes('sentiment') || t.toLowerCase().includes('polarity')) {
+        badgeStyle = 'background:#FFFBEB; color:#92400E; border:1px solid #FDE68A;';
+        icon = '📉';
+      } else if (t.toLowerCase().includes('duplicate') || t.toLowerCase().includes('account')) {
+        badgeStyle = 'background:#FDF2F8; color:#9D174D; border:1px solid #FBCFE8;';
+        icon = '👥';
+      } else if (t.toLowerCase().includes('verified') || t.toLowerCase().includes('purchase')) {
+        badgeStyle = 'background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0;';
+        icon = '🛍️';
+      }
+      return `<span style="display:inline-flex; align-items:center; gap:4px; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:4px; ${badgeStyle}">${icon} ${t}</span>`;
+    }).join(' ');
+
+    const stars = '★'.repeat(r.rating || 5) + '☆'.repeat(Math.max(0, 5 - (r.rating || 5)));
+    const velocityText = r.submission_velocity_seconds ? `${r.submission_velocity_seconds}s` : 'Unknown';
+    const accountAgeText = (r.account_age_days != null) ? `${r.account_age_days}d old` : 'New account';
+
+    return `
+      <div style="${cardBg} ${cardBorder} border-radius:var(--radius-xl); padding:20px; box-shadow:var(--shadow-sm); transition:transform 0.2s;" id="ai-rev-card-${r.id}">
+        
+        <!-- CARD HEADER -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+              ${classBadge}
+              ${statusBadge}
+              <span style="font-size:0.75rem; color:var(--slate-500); font-weight:700;">Ref #${r.id}</span>
+              ${r.verified_purchase ? '<span class="badge badge-emerald" style="font-size:0.7rem;">🛍️ Verified Shopper</span>' : '<span class="badge badge-slate" style="font-size:0.7rem;">Unverified Purchase</span>'}
+            </div>
+            
+            <h4 style="font-family:var(--font-heading); font-size:1.15rem; font-weight:800; color:var(--navy-900); margin:0;">
+              ${r.business_name || 'Business Enterprise'}
+            </h4>
+            <div style="font-size:0.82rem; color:var(--slate-600); margin-top:2px;">
+              Author: <strong>${r.author_name || r.customer_name || 'Anonymous'}</strong> (${r.author_email || 'No email'}) · Account Age: <strong>${accountAgeText}</strong> · Velocity: <strong>${velocityText}</strong>
+            </div>
+          </div>
+
+          <!-- AUTHENTICITY SCORE BADGE GAUGE -->
+          <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:10px 16px; text-align:center; min-width:140px; box-shadow:var(--shadow-xs);">
+            <div style="font-size:0.68rem; font-weight:800; color:var(--slate-500); text-transform:uppercase;">Authenticity Score</div>
+            <div style="font-family:var(--font-heading); font-size:1.6rem; font-weight:900; color:${scoreColor}; line-height:1.1; margin-top:2px;">
+              ${score}%
+            </div>
+            <div style="width:100%; height:4px; background:var(--slate-200); border-radius:2px; overflow:hidden; margin-top:6px;">
+              <div style="width:${score}%; height:100%; background:${scoreColor};"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- REASON TAGS -->
+        ${tags.length > 0 ? `
+          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+            ${tagBadges}
+          </div>
+        ` : ''}
+
+        <!-- REVIEW BODY PREVIEW -->
+        <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div style="color:var(--amber-500); font-weight:800; font-size:1rem;">${stars} <span style="font-size:0.85rem; color:var(--navy-900); font-weight:700; margin-left:4px;">${r.title || 'Untitled Review'}</span></div>
+            <div style="font-size:0.75rem; color:var(--slate-400);">${new Date(r.created_at).toLocaleDateString()}</div>
+          </div>
+          <p style="font-size:0.88rem; color:var(--slate-800); line-height:1.5; margin:0;">
+            "${r.body}"
+          </p>
+
+          ${r.photo_url ? `
+            <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
+              <img src="${r.photo_url}" alt="Attachment" style="width:50px; height:50px; border-radius:4px; object-fit:cover; border:1px solid var(--slate-300);">
+              <span style="font-size:0.75rem; color:var(--purple-700); font-weight:700;">🖼️ Multimodal Photo Attachment Analyzed</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- AI EXPLANATION SNIPPET -->
+        ${r.ai_explanation ? `
+          <div style="background:#FAF5FF; border:1px solid #EDE9FE; border-radius:var(--radius-md); padding:10px 14px; font-size:0.82rem; color:#581C87; margin-bottom:14px; line-height:1.4;">
+            <strong>🤖 Gemini AI Rationale:</strong> ${r.ai_explanation}
+          </div>
+        ` : ''}
+
+        <!-- ACTION BAR -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-top:1px solid var(--slate-200); padding-top:12px;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-emerald" style="padding:6px 14px; font-size:0.8rem; font-weight:800;" onclick="openAIReviewInspectModal('${r.id}')">
+              🔍 Inspect & Consult AI Copilot
+            </button>
+            <button class="btn btn-outline" style="padding:6px 12px; font-size:0.8rem; font-weight:700;" onclick="triggerInstantAIReviewAudit('${r.id}')">
+              ⚡ Re-Audit
+            </button>
+          </div>
+
+          <div style="display:flex; gap:6px;">
+            <button class="btn btn-outline" style="padding:6px 10px; font-size:0.78rem; font-weight:700; color:#059669; border-color:#A7F3D0;" onclick="executeReviewDecision('${r.id}', 'approved', 'Quick verified and approved by moderator')" title="Approve review">
+              ✓ Approve
+            </button>
+            <button class="btn btn-outline" style="padding:6px 10px; font-size:0.78rem; font-weight:700; color:#D97706; border-color:#FDE68A;" onclick="executeReviewDecision('${r.id}', 'flagged', 'Flagged for suspicious signals')" title="Flag review">
+              🚩 Flag
+            </button>
+            <button class="btn btn-outline" style="padding:6px 10px; font-size:0.78rem; font-weight:700; color:#DC2626; border-color:#FECDD3;" onclick="executeReviewDecision('${r.id}', 'deleted', 'Confirmed fake / policy violation')" title="Delete review">
+              🗑️ Delete
+            </button>
+          </div>
+        </div>
+
+      </div>
+    `;
+  }).join('');
+}
+
+/* FORENSIC DEEP-DIVE MODAL & EMBEDDED AI ASSISTANT */
+async function openAIReviewInspectModal(reviewId) {
+  ACTIVE_INSPECT_REVIEW_ID = reviewId;
+  const modal = document.getElementById('modal-ai-review-inspect');
+  if (modal) modal.style.display = 'flex';
+
+  // Find review from queue or fetch
+  let review = CURRENT_AI_MOD_QUEUE.find(q => String(q.id) === String(reviewId));
+  ACTIVE_INSPECT_REVIEW_DATA = review;
+
+  // Reset chat thread and initialize
+  AI_INSPECT_CONVERSATION_HISTORY = [];
+  const chatMessages = document.getElementById('ai-inspect-chat-messages');
+  if (chatMessages) {
+    chatMessages.innerHTML = `
+      <div style="background:#EEF2FF; border:1px solid #C7D2FE; border-radius:var(--radius-lg); padding:14px; font-size:0.85rem; color:#1E1B4B; line-height:1.5;">
+        <div style="font-weight:800; font-size:0.8rem; color:#3730A3; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+          <span>🤖 Gemini 3.7 Forensic Review Copilot</span>
+        </div>
+        Hello! I have loaded all metadata, signals, and context for Review #${reviewId}. Ask me any forensic question, request cross-referencing against bot heuristics, or ask for policy recommendations.
+      </div>
+    `;
+  }
+
+  // Populate inspection modal fields
+  if (review) {
+    renderInspectModalReview(review);
+  }
+
+  // Load audit logs for this review
+  try {
+    const logRes = await apiCall(`/api/admin/reviews/${reviewId}/audit-log`);
+    renderInspectAuditTimeline(logRes.audit_logs || []);
+  } catch(e) {
+    console.error('Error loading review audit log:', e);
+  }
+}
+
+function closeAIReviewInspectModal() {
+  const modal = document.getElementById('modal-ai-review-inspect');
+  if (modal) modal.style.display = 'none';
+  ACTIVE_INSPECT_REVIEW_ID = null;
+  ACTIVE_INSPECT_REVIEW_DATA = null;
+}
+
+function renderInspectModalReview(review) {
+  const score = review.authenticity_score != null ? review.authenticity_score : 50;
+
+  document.getElementById('inspect-modal-review-id').innerText = review.id;
+  document.getElementById('inspect-modal-business-name').innerText = review.business_name || 'Business Enterprise';
+  document.getElementById('inspect-modal-author-name').innerText = review.author_name || review.customer_name || 'Anonymous';
+  document.getElementById('inspect-modal-author-email').innerText = review.author_email || 'No email provided';
+
+  // Classification and status badges
+  const badgeCls = document.getElementById('inspect-modal-badge-classification');
+  if (badgeCls) {
+    if (score < 50) {
+      badgeCls.className = 'badge badge-red';
+      badgeCls.innerText = '🔴 LIKELY_FAKE';
+    } else if (score < 80) {
+      badgeCls.className = 'badge badge-gold';
+      badgeCls.innerText = '🟡 SUSPICIOUS';
+    } else {
+      badgeCls.className = 'badge badge-emerald';
+      badgeCls.innerText = '🟢 GENUINE';
+    }
+  }
+
+  const badgeSt = document.getElementById('inspect-modal-status-badge');
+  if (badgeSt) badgeSt.innerText = (review.status || 'under_review').toUpperCase();
+
+  // Score value and label
+  const scoreVal = document.getElementById('inspect-score-val');
+  const scoreLabel = document.getElementById('inspect-score-label');
+  const scoreBar = document.getElementById('inspect-score-bar');
+
+  let scoreColor = '#059669';
+  let labelText = 'Verified Authentic Review';
+  if (score < 50) {
+    scoreColor = '#DC2626';
+    labelText = 'High Probability Fake / Bot Synthetic';
+  } else if (score < 80) {
+    scoreColor = '#D97706';
+    labelText = 'Suspicious Patterns Detected';
+  }
+
+  if (scoreVal) {
+    scoreVal.innerText = `${score}%`;
+    scoreVal.style.color = scoreColor;
+  }
+  if (scoreLabel) {
+    scoreLabel.innerText = labelText;
+    scoreLabel.style.color = scoreColor;
+  }
+  if (scoreBar) {
+    scoreBar.style.width = `${score}%`;
+    scoreBar.style.background = scoreColor;
+  }
+
+  // AI Explanation text
+  const explEl = document.getElementById('inspect-ai-explanation-text');
+  if (explEl) {
+    explEl.innerText = review.ai_explanation || 'Detailed AI audit indicates potential synthesis patterns and bot velocity anomalies.';
+  }
+
+  // Reason tags
+  let tags = [];
+  if (Array.isArray(review.flag_reason_tags)) tags = review.flag_reason_tags;
+  else if (typeof review.flag_reason_tags === 'string') {
+    try { tags = JSON.parse(review.flag_reason_tags); } catch(e) { tags = [review.flag_reason_tags]; }
+  }
+
+  const tagsContainer = document.getElementById('inspect-reason-tags-container');
+  if (tagsContainer) {
+    tagsContainer.innerHTML = tags.map(t => `<span class="badge badge-purple" style="font-size:0.72rem;">${t}</span>`).join('');
+  }
+
+  // Review contents
+  document.getElementById('inspect-review-stars').innerText = '★'.repeat(review.rating || 5) + '☆'.repeat(Math.max(0, 5 - (review.rating || 5)));
+  document.getElementById('inspect-review-title').innerText = review.title || 'Untitled Review';
+  document.getElementById('inspect-review-body').innerText = review.body || '';
+  document.getElementById('inspect-created-at').innerText = new Date(review.created_at).toLocaleString();
+
+  // Signals Matrix
+  document.getElementById('inspect-velocity-val').innerText = review.submission_velocity_seconds ? `${review.submission_velocity_seconds}s (Typing velocity)` : '1.4s (High bot velocity)';
+  document.getElementById('inspect-account-age-val').innerText = (review.account_age_days != null) ? `${review.account_age_days} days` : '0 days (Brand new profile)';
+  
+  // Multimodal Photo
+  const photoBox = document.getElementById('inspect-photo-preview-box');
+  const photoImg = document.getElementById('inspect-photo-img');
+  if (review.photo_url && photoBox && photoImg) {
+    photoBox.style.display = 'block';
+    photoImg.src = review.photo_url;
+  } else if (photoBox) {
+    photoBox.style.display = 'none';
+  }
+
+  // Pre-select radio button based on current status
+  const currentStatus = review.status || 'under_review';
+  if (currentStatus === 'approved') document.getElementById('dec-opt-approved').checked = true;
+  else if (currentStatus === 'flagged') document.getElementById('dec-opt-flagged').checked = true;
+  else if (currentStatus === 'deleted') document.getElementById('dec-opt-deleted').checked = true;
+  else document.getElementById('dec-opt-under-review').checked = true;
+}
+
+function renderInspectAuditTimeline(logs) {
+  const container = document.getElementById('inspect-audit-timeline-container');
+  if (!container) return;
+
+  if (logs.length === 0) {
+    container.innerHTML = `<div style="font-size:0.8rem; color:var(--slate-500); padding:8px 0;">No audit events recorded for this review yet.</div>`;
+    return;
+  }
+
+  container.innerHTML = logs.map(l => {
+    let actionColor = 'var(--navy-900)';
+    if (l.action === 'approved') actionColor = '#059669';
+    if (l.action === 'flagged') actionColor = '#D97706';
+    if (l.action === 'deleted') actionColor = '#DC2626';
+
+    return `
+      <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:10px 12px; font-size:0.8rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <div>
+            <strong style="color:${actionColor}; text-transform:uppercase;">${l.action}</strong> by <strong>${l.staff_name || 'System / Staff'}</strong>
+            ${l.ai_assisted ? '<span class="badge badge-purple" style="font-size:0.65rem; margin-left:4px;">AI-Assisted</span>' : ''}
+          </div>
+          <span style="font-size:0.72rem; color:var(--slate-500);">${new Date(l.created_at).toLocaleString()}</span>
+        </div>
+        <div style="color:var(--slate-700);">${l.notes || 'No custom notes logged.'}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function resetAIAssistantChat() {
+  if (!ACTIVE_INSPECT_REVIEW_ID) return;
+  AI_INSPECT_CONVERSATION_HISTORY = [];
+  openAIReviewInspectModal(ACTIVE_INSPECT_REVIEW_ID);
+}
+
+function appendAIChatMessage(role, text, recommendations = []) {
+  const container = document.getElementById('ai-inspect-chat-messages');
+  if (!container) return;
+
+  const isUser = role === 'user';
+  const bubble = document.createElement('div');
+  bubble.style.cssText = isUser 
+    ? 'background:var(--emerald-600); color:white; border-radius:var(--radius-lg) var(--radius-lg) 0 var(--radius-lg); padding:12px 14px; font-size:0.85rem; max-width:85%; align-self:flex-end; box-shadow:var(--shadow-xs); line-height:1.4;'
+    : 'background:var(--white); color:var(--navy-900); border:1px solid var(--slate-200); border-radius:var(--radius-lg) var(--radius-lg) var(--radius-lg) 0; padding:14px; font-size:0.85rem; max-width:92%; align-self:flex-start; box-shadow:var(--shadow-xs); line-height:1.5;';
+
+  let recsHtml = '';
+  if (recommendations && recommendations.length > 0) {
+    recsHtml = `
+      <div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--slate-100); display:flex; flex-wrap:wrap; gap:4px;">
+        <strong style="font-size:0.72rem; color:var(--purple-700); width:100%; text-transform:uppercase;">Recommended Actions:</strong>
+        ${recommendations.map(r => `<span class="badge badge-purple" style="font-size:0.72rem;">⚡ ${r}</span>`).join('')}
+      </div>
+    `;
+  }
+
+  bubble.innerHTML = `
+    ${!isUser ? '<div style="font-weight:800; font-size:0.75rem; color:#4F46E5; margin-bottom:4px;">🤖 Gemini Copilot</div>' : ''}
+    <div>${text.replace(/\n/g, '<br>')}</div>
+    ${recsHtml}
+    <div style="font-size:0.68rem; opacity:0.7; text-align:right; margin-top:4px;">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+  `;
+
+  container.appendChild(bubble);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function sendAIModerationQuestion(questionText) {
+  if (!ACTIVE_INSPECT_REVIEW_ID || !questionText) return;
+
+  // Append user message to UI
+  appendAIChatMessage('user', questionText);
+
+  // Show thinking placeholder
+  const container = document.getElementById('ai-inspect-chat-messages');
+  const thinkingBubble = document.createElement('div');
+  thinkingBubble.id = 'ai-thinking-indicator';
+  thinkingBubble.style.cssText = 'background:var(--slate-100); color:var(--slate-600); border-radius:var(--radius-md); padding:10px 14px; font-size:0.82rem; align-self:flex-start;';
+  thinkingBubble.innerHTML = '🤖 <em>Gemini 3.7 is analyzing forensic signals and cross-referencing heuristics...</em>';
+  if (container) {
+    container.appendChild(thinkingBubble);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  try {
+    const res = await apiCall('/api/admin/reviews/consult', 'POST', {
+      review_id: ACTIVE_INSPECT_REVIEW_ID,
+      question: questionText,
+      conversation_history: AI_INSPECT_CONVERSATION_HISTORY
+    });
+
+    const thinkingEl = document.getElementById('ai-thinking-indicator');
+    if (thinkingEl) thinkingEl.remove();
+
+    const answer = res.answer || 'Analysis complete.';
+    const recommendations = res.recommendations || [];
+
+    // Save to conversation history
+    AI_INSPECT_CONVERSATION_HISTORY.push({ role: 'user', content: questionText });
+    AI_INSPECT_CONVERSATION_HISTORY.push({ role: 'assistant', content: answer });
+
+    appendAIChatMessage('assistant', answer, recommendations);
+  } catch (err) {
+    const thinkingEl = document.getElementById('ai-thinking-indicator');
+    if (thinkingEl) thinkingEl.remove();
+    appendAIChatMessage('assistant', `⚠️ Error communicating with Gemini Copilot: ${err.message}`);
+  }
+}
+
+function sendCustomAIQuestion() {
+  const input = document.getElementById('ai-inspect-chat-input');
+  if (!input) return;
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  sendAIModerationQuestion(q);
+}
+
+/* MANUAL DECISION DISPATCH */
+async function submitManualReviewDecision() {
+  if (!ACTIVE_INSPECT_REVIEW_ID) return;
+
+  const selectedOpt = document.querySelector('input[name="inspect-decision-choice"]:checked');
+  if (!selectedOpt) {
+    alert("Please select a decision action (Approve, Flag, Delete, or In Review).");
+    return;
+  }
+
+  const decision = selectedOpt.value;
+  const notes = document.getElementById('inspect-decision-notes')?.value.trim() || 'Decision committed via forensic inspection workstation.';
+
+  await executeReviewDecision(ACTIVE_INSPECT_REVIEW_ID, decision, notes);
+}
+
+async function executeReviewDecision(reviewId, decision, customNotes = '') {
+  try {
+    const res = await apiCall(`/api/admin/reviews/${reviewId}/decision`, 'POST', {
+      decision: decision,
+      notes: customNotes || `Enforcement action '${decision}' executed by moderator.`,
+      staff_id: CURRENT_STAFF_USER.id || 'STF-ADMIN-1',
+      staff_name: CURRENT_STAFF_USER.name || 'Compliance Moderator',
+      ai_assisted: true
+    });
+
+    alert(`✓ Review #${reviewId} decision executed successfully: ${decision.toUpperCase()}\nStatus updated and immutable audit log committed.`);
+    
+    // Refresh modal audit log if open
+    if (ACTIVE_INSPECT_REVIEW_ID === reviewId) {
+      const logRes = await apiCall(`/api/admin/reviews/${reviewId}/audit-log`);
+      renderInspectAuditTimeline(logRes.audit_logs || []);
+      const badgeSt = document.getElementById('inspect-modal-status-badge');
+      if (badgeSt) badgeSt.innerText = decision.toUpperCase();
+    }
+
+    // Refresh main queue
+    loadAIReviewModerationQueue();
+  } catch (err) {
+    alert(`Failed to execute review decision: ${err.message}`);
+  }
+}
+
+async function triggerInstantAIReviewAudit(reviewId) {
+  try {
+    const res = await apiCall('/api/admin/reviews/audit', 'POST', { review_id: reviewId });
+    alert(`⚡ AI Authenticity Audit Completed!\nScore: ${res.review.authenticity_score}%\nClassification: ${res.review.classification}\nSignals: ${(res.review.flag_reason_tags || []).join(', ')}`);
+    
+    // Refresh modal if active
+    if (ACTIVE_INSPECT_REVIEW_ID === reviewId) {
+      ACTIVE_INSPECT_REVIEW_DATA = res.review;
+      renderInspectModalReview(res.review);
+      const logRes = await apiCall(`/api/admin/reviews/${reviewId}/audit-log`);
+      renderInspectAuditTimeline(logRes.audit_logs || []);
+    }
+
+    loadAIReviewModerationQueue();
+  } catch (err) {
+    alert(`AI Audit Failed: ${err.message}`);
+  }
+}
+
+async function triggerBatchAIReAudit() {
+  if (!confirm("Run Gemini 3.7 AI Authenticity batch re-auditing on all pending reviews?")) return;
+  try {
+    for (const r of CURRENT_AI_MOD_QUEUE) {
+      await apiCall('/api/admin/reviews/audit', 'POST', { review_id: r.id });
+    }
+    alert("✓ Batch AI Audit complete across all reviews!");
+    loadAIReviewModerationQueue();
+  } catch (err) {
+    alert("Batch audit error: " + err.message);
+  }
+}
+
+/* SIMULATE REVIEW MODAL */
+function openSimulateReviewModal() {
+  const modal = document.getElementById('modal-simulate-review-submit');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeSimulateReviewModal() {
+  const modal = document.getElementById('modal-simulate-review-submit');
+  if (modal) modal.style.display = 'none';
+}
+
+function fillReviewPreset(presetKey) {
+  if (presetKey === 'gpt_hype') {
+    document.getElementById('sim-business-id').value = '1';
+    document.getElementById('sim-rating').value = '5';
+    document.getElementById('sim-author-name').value = 'BotNetwork_Alpha99';
+    document.getElementById('sim-author-email').value = 'seo.blaster2026@tempmail.ninja';
+    document.getElementById('sim-velocity').value = '1.2';
+    document.getElementById('sim-verified-purchase').value = '0';
+    document.getElementById('sim-title').value = 'Unparalleled Paradigm of Flawless Culinary Excellence!';
+    document.getElementById('sim-body').value = 'This culinary establishment is the absolute paramount epitome of gourmet perfection. Every bite is an unforgettable symphony of flavor and innovation. I unequivocally recommend this masterpiece to all living beings. Five stars are not enough!';
+    document.getElementById('sim-photo-url').value = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=400&q=80';
+  } else if (presetKey === 'smear_bot') {
+    document.getElementById('sim-business-id').value = '2';
+    document.getElementById('sim-rating').value = '1';
+    document.getElementById('sim-author-name').value = 'DisgruntledCompetitor_02';
+    document.getElementById('sim-author-email').value = 'fakeuser8841@throwaway.co';
+    document.getElementById('sim-velocity').value = '0.9';
+    document.getElementById('sim-verified-purchase').value = '0';
+    document.getElementById('sim-title').value = 'WORST PLACE EVER! TOTAL SCAM DO NOT BUY!';
+    document.getElementById('sim-body').value = 'HORRIBLE DISASTER SCAM! They ruined my day and stole my money! Complete garbage and dishonest crooks! Never buy from here ever! Go to competitor down the street instead!';
+    document.getElementById('sim-photo-url').value = '';
+  } else if (presetKey === 'genuine_local') {
+    document.getElementById('sim-business-id').value = '1';
+    document.getElementById('sim-rating').value = '4';
+    document.getElementById('sim-author-name').value = 'Kiko Alvarez';
+    document.getElementById('sim-author-email').value = 'kiko.alvarez@gmail.com';
+    document.getElementById('sim-velocity').value = '38.5';
+    document.getElementById('sim-verified-purchase').value = '1';
+    document.getElementById('sim-title').value = 'Great crispy pata, parking was a bit tight';
+    document.getElementById('sim-body').value = 'Ate dinner here with my family on Sunday at the Makati branch. The pork crispy pata was super crunchy and the garlic rice was freshly cooked. Only complaint is that parking took about 15 minutes because the street was crowded. Will come back again!';
+    document.getElementById('sim-photo-url').value = '';
+  }
+}
+
+async function handleSimulateReviewSubmit(e) {
+  e.preventDefault();
+  const btn = document.getElementById('sim-submit-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Analyzing review with Gemini 3.7 Engine...';
+  }
+
+  const payload = {
+    business_id: parseInt(document.getElementById('sim-business-id').value),
+    customer_name: document.getElementById('sim-author-name').value,
+    customer_email: document.getElementById('sim-author-email').value,
+    rating: parseInt(document.getElementById('sim-rating').value),
+    title: document.getElementById('sim-title').value,
+    body: document.getElementById('sim-body').value,
+    submission_velocity_seconds: parseFloat(document.getElementById('sim-velocity').value) || 2.0,
+    verified_purchase: document.getElementById('sim-verified-purchase').value === '1',
+    photo_url: document.getElementById('sim-photo-url').value.trim() || null
+  };
+
+  try {
+    const res = await apiCall('/api/public/reviews/submit', 'POST', payload);
+    closeSimulateReviewModal();
+    
+    alert(`✓ Review submitted and AI Authenticity Audit completed!\nReview ID: #${res.review.id}\nScore: ${res.review.authenticity_score}%\nClassification: ${res.review.classification}\nReason Flags: ${(res.review.flag_reason_tags || []).join(', ')}`);
+
+    // Reload moderation queue and open inspection modal for the new review
+    await loadAIReviewModerationQueue();
+    openAIReviewInspectModal(res.review.id);
+  } catch (err) {
+    alert(`Failed to submit test review: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🚀 Submit & Run Instant Gemini 3.7 Authenticity Audit';
+    }
   }
 }
 

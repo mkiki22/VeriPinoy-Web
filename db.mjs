@@ -481,14 +481,42 @@ export async function initDatabase() {
       rating INTEGER NOT NULL,
       review_title TEXT,
       review_content TEXT NOT NULL,
-      review_status TEXT DEFAULT 'published', -- published, hidden, under_review, removed
+      review_status TEXT DEFAULT 'published', -- published, hidden, under_review, flagged, removed
       flagged_status INTEGER DEFAULT 0,
       flag_reason TEXT,
       flagged_by_business INTEGER DEFAULT 0,
       flagged_date TEXT,
       official_response TEXT,
+      authenticity_score REAL DEFAULT 85,
+      classification TEXT DEFAULT 'GENUINE', -- GENUINE, SUSPICIOUS, LIKELY_FAKE
+      flag_reason_tags TEXT DEFAULT '["Verified Buyer"]',
+      recommended_action TEXT DEFAULT 'APPROVE', -- APPROVE, FLAG, DELETE
+      ai_analysis_details TEXT,
+      photo_url TEXT,
+      account_age_days INTEGER DEFAULT 30,
+      submission_velocity_seconds INTEGER DEFAULT 60,
+      user_total_reviews INTEGER DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS review_audit_log (
+      id TEXT PRIMARY KEY,
+      review_id TEXT NOT NULL,
+      action TEXT NOT NULL, -- AI_CLASSIFY, MANUAL_APPROVE, MANUAL_FLAG, MANUAL_DELETE, AI_CONSULTATION, RE_ANALYZE, ESCALATE
+      user_id TEXT,
+      moderator_name TEXT,
+      ai_assistant_used TEXT DEFAULT 'N', -- 'Y' | 'N'
+      notes TEXT,
+      previous_status TEXT,
+      new_status TEXT,
+      authenticity_score REAL,
+      classification TEXT,
+      metadata TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (review_id) REFERENCES customer_reviews(id) ON DELETE CASCADE
     );
   `);
 
@@ -1294,8 +1322,32 @@ export async function initDatabase() {
   db.run(`CREATE INDEX IF NOT EXISTS idx_kyc_apps_status ON kyc_applications(verification_status);`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_kyb_apps_status ON kyb_applications(verification_status);`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_biz ON customer_reviews(business_id);`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_score ON customer_reviews(authenticity_score);`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_class ON customer_reviews(classification);`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_admin_id);`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_case_assign_case ON case_assignments(case_id);`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_rev_audit_rev ON review_audit_log(review_id);`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_rev_audit_action ON review_audit_log(action);`);
+
+  /* Run safe column migrations for existing SQLite database */
+  const reviewColumns = [
+    { name: 'authenticity_score', type: 'REAL DEFAULT 85' },
+    { name: 'classification', type: "TEXT DEFAULT 'GENUINE'" },
+    { name: 'flag_reason_tags', type: `TEXT DEFAULT '["Verified Buyer"]'` },
+    { name: 'recommended_action', type: "TEXT DEFAULT 'APPROVE'" },
+    { name: 'ai_analysis_details', type: 'TEXT' },
+    { name: 'photo_url', type: 'TEXT' },
+    { name: 'account_age_days', type: 'INTEGER DEFAULT 30' },
+    { name: 'submission_velocity_seconds', type: 'INTEGER DEFAULT 60' },
+    { name: 'user_total_reviews', type: 'INTEGER DEFAULT 1' }
+  ];
+  for (const col of reviewColumns) {
+    try {
+      db.run(`ALTER TABLE customer_reviews ADD COLUMN ${col.name} ${col.type};`);
+    } catch (e) {
+      // Column already exists
+    }
+  }
 
   /* ==========================================================================
      SEED INITIAL MASTER DATA IF TABLES ARE EMPTY
@@ -1339,11 +1391,12 @@ function seedDatabaseIfEmpty() {
 
   const now = new Date().toISOString();
 
-  // Always ensure all pricing plans, security data, and freelancer profiles are seeded/updated
+  // Always ensure all pricing plans, security data, freelancer profiles, and review moderation cases are seeded/updated
   seedPricingPlans(now);
   seedSecurityData(now);
   seedFreelancerData(now);
   seedDiscoveryMasterData(now);
+  seedReviewModerationData(now);
 
   if (userCheck && userCheck.count > 0) return; // Main tables already seeded
 
@@ -3061,4 +3114,325 @@ function seedSecurityData(now = new Date().toISOString()) {
      VALUES ('MFA-ADM-1', 'ADM-SUPER-1', 'admin', 1, 'totp', 'JBSWY3DPEHPK3PXP', ?, 1, ?)`,
     [JSON.stringify(['8A2F-9C1E', '3D4B-7F0A', '5E6C-1B2A', '9F0E-4C3D']), now]
   );
+}
+
+/* Seed Real-Time AI Review Moderation Cases and Audit Trail */
+export function seedReviewModerationData(now = new Date().toISOString()) {
+  const seedReviews = [
+    {
+      id: 'REV-101',
+      customer_id: 'CUST-101',
+      customer_name: 'Maria Santos',
+      business_id: '3',
+      business_name: 'Bahay Kubo Restaurant',
+      rating: 5,
+      review_title: 'Exceptional Authentic Sinigang',
+      review_content: 'Best Sinigang na Baboy in Quezon City! The broth was perfectly sour using fresh sampalok, kangkong was crisp, and pork belly was melt-in-your-mouth tender. Service was attentive.',
+      review_status: 'published',
+      flagged_status: 0,
+      flag_reason: null,
+      flagged_by_business: 0,
+      flagged_date: null,
+      official_response: 'Maraming salamat po Maria! We prepare our Sinigang broth fresh every morning.',
+      authenticity_score: 96,
+      classification: 'GENUINE',
+      flag_reason_tags: JSON.stringify(['Verified Buyer', 'Specific Order Details', 'Natural Phrasing']),
+      recommended_action: 'APPROVE',
+      ai_analysis_details: JSON.stringify({ summary: 'High authenticity. Specific dish nuances, balanced feedback and natural Filipino culinary phrasing.', score: 96 }),
+      photo_url: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600&auto=format&fit=crop',
+      account_age_days: 180,
+      submission_velocity_seconds: 94,
+      user_total_reviews: 6
+    },
+    {
+      id: 'REV-102',
+      customer_id: 'CUST-102',
+      customer_name: 'Juan Dela Cruz',
+      business_id: '3',
+      business_name: 'Bahay Kubo Restaurant',
+      rating: 4,
+      review_title: 'Great Food, Slight Peak Hour Wait',
+      review_content: 'Food quality is top-notch. Kare-Kare sauce was rich and authentic. Parking during Sunday lunch was a bit tight, but staff assisted promptly with valet.',
+      review_status: 'published',
+      flagged_status: 0,
+      flag_reason: null,
+      flagged_by_business: 0,
+      flagged_date: null,
+      official_response: 'Salamat Juan! We are expanding our weekend valet and parking slots next month.',
+      authenticity_score: 92,
+      classification: 'GENUINE',
+      flag_reason_tags: JSON.stringify(['Verified Buyer', 'Balanced Sentiment', 'Natural Phrasing']),
+      recommended_action: 'APPROVE',
+      ai_analysis_details: JSON.stringify({ summary: 'Organic review with nuanced positive and constructive operational feedback.', score: 92 }),
+      photo_url: null,
+      account_age_days: 90,
+      submission_velocity_seconds: 82,
+      user_total_reviews: 4
+    },
+    {
+      id: 'REV-103',
+      customer_id: 'CUST-103',
+      customer_name: 'Ana Ramos',
+      business_id: '3',
+      business_name: 'Bahay Kubo Restaurant',
+      rating: 5,
+      review_title: 'Fast Delivery & Secure Eco-Packaging',
+      review_content: 'Ordered catering for a corporate team lunch in Eastwood. Arrived hot, on time, and completely spill-free in eco-friendly banana leaf wraps.',
+      review_status: 'published',
+      flagged_status: 0,
+      flag_reason: null,
+      flagged_by_business: 0,
+      flagged_date: null,
+      official_response: null,
+      authenticity_score: 94,
+      classification: 'GENUINE',
+      flag_reason_tags: JSON.stringify(['Verified Buyer', 'Natural Phrasing', 'Specific Order Details']),
+      recommended_action: 'APPROVE',
+      ai_analysis_details: JSON.stringify({ summary: 'Authentic catering review with realistic logistics and packaging context.', score: 94 }),
+      photo_url: null,
+      account_age_days: 60,
+      submission_velocity_seconds: 68,
+      user_total_reviews: 3
+    },
+    {
+      id: 'REV-104',
+      customer_id: 'CUST-104',
+      customer_name: 'Carlos Mendoza',
+      business_id: '3',
+      business_name: 'Bahay Kubo Restaurant',
+      rating: 2,
+      review_title: 'Mixup on Custom Order Allergen Spec',
+      review_content: 'Requested garlic-free seasoning due to dietary constraints, but food arrived with fried garlic chips on top. Manager replaced the bowl within 10 minutes.',
+      review_status: 'published',
+      flagged_status: 0,
+      flag_reason: null,
+      flagged_by_business: 0,
+      flagged_date: null,
+      official_response: null,
+      authenticity_score: 88,
+      classification: 'GENUINE',
+      flag_reason_tags: JSON.stringify(['Specific Incident Details', 'Natural Phrasing', 'Constructive Tone']),
+      recommended_action: 'APPROVE',
+      ai_analysis_details: JSON.stringify({ summary: 'Authentic incident description with constructive customer demeanor.', score: 88 }),
+      photo_url: null,
+      account_age_days: 120,
+      submission_velocity_seconds: 110,
+      user_total_reviews: 5
+    },
+    {
+      id: 'REV-105',
+      customer_id: 'CUST-105',
+      customer_name: 'Competitor Bot',
+      business_id: '3',
+      business_name: 'Bahay Kubo Restaurant',
+      rating: 1,
+      review_title: 'Suspicious Review from Competitor',
+      review_content: 'Worst food ever. Go to XYZ Diner instead, they have cheaper food and better deals. Boycott this restaurant immediately!',
+      review_status: 'flagged',
+      flagged_status: 1,
+      flag_reason: 'Conflict of interest / Review appears fraudulent & promotional',
+      flagged_by_business: 1,
+      flagged_date: '2026-08-11T10:00:00Z',
+      official_response: null,
+      authenticity_score: 18,
+      classification: 'LIKELY_FAKE',
+      flag_reason_tags: JSON.stringify(['Competitor Promotion / Smear', 'Extreme Sentiment Polarity', 'New Account (Created Today)', 'Bot Velocity (1.4s typing)']),
+      recommended_action: 'DELETE',
+      ai_analysis_details: JSON.stringify({ summary: 'Explicit commercial smear referencing competitor business. Automated payload injection velocity.', score: 18 }),
+      photo_url: null,
+      account_age_days: 0,
+      submission_velocity_seconds: 1.4,
+      user_total_reviews: 1
+    },
+    {
+      id: 'REV-301',
+      customer_id: 'CUST-303',
+      customer_name: 'Anonymous Guest',
+      business_id: '2',
+      business_name: 'Sari-Sari Mart',
+      rating: 1,
+      review_title: 'Disputed Price Charge',
+      review_content: 'Alleged double billing on basic rice staple items without itemized POS receipt at Cubao branch.',
+      review_status: 'under_review',
+      flagged_status: 1,
+      flag_reason: 'Merchant claims review is fake and no such purchase was made at Cubao branch.',
+      flagged_by_business: 1,
+      flagged_date: '2026-08-10T13:00:00Z',
+      official_response: null,
+      authenticity_score: 58,
+      classification: 'SUSPICIOUS',
+      flag_reason_tags: JSON.stringify(['Generic Phrasing (No Specific Detail)', 'Unverified Purchase', 'Extreme Polarity']),
+      recommended_action: 'FLAG',
+      ai_analysis_details: JSON.stringify({ summary: 'Disputed transaction lacking itemized receipt details. Requires manual claim verification.', score: 58 }),
+      photo_url: null,
+      account_age_days: 4,
+      submission_velocity_seconds: 18,
+      user_total_reviews: 1
+    },
+    {
+      id: 'REV-401',
+      customer_id: 'CUST-901',
+      customer_name: 'CyberSpam-Bot99',
+      business_id: '3',
+      business_name: 'Bahay Kubo Restaurant',
+      rating: 5,
+      review_title: 'Delve into Unparalleled Gastronomy',
+      review_content: 'Delve into this unparalleled gastronomic symphony of culinary excellence! Furthermore, the ambiance seamlessly integrates with a breathtaking tapestry of bespoke flavors. In conclusion, it is a testament to perfection par excellence.',
+      review_status: 'under_review',
+      flagged_status: 1,
+      flag_reason: 'AI-generated synthetic review pattern detected',
+      flagged_by_business: 0,
+      flagged_date: '2026-08-20T04:15:00Z',
+      official_response: null,
+      authenticity_score: 12,
+      classification: 'LIKELY_FAKE',
+      flag_reason_tags: JSON.stringify(['AI Phrasing Detected', 'Bot Velocity (0.6s typing)', 'Extreme Sentiment Polarity', 'Stock Photo Mismatch']),
+      recommended_action: 'DELETE',
+      ai_analysis_details: JSON.stringify({ summary: 'High density of synthetic LLM phrases ("delve", "testament to", "par excellence", "tapestry of flavors"). Generic stock photo attached.', score: 12 }),
+      photo_url: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&auto=format&fit=crop',
+      account_age_days: 0,
+      submission_velocity_seconds: 0.6,
+      user_total_reviews: 1
+    },
+    {
+      id: 'REV-402',
+      customer_id: 'CUST-902',
+      customer_name: 'FastPoster22',
+      business_id: '2',
+      business_name: 'Sari-Sari Mart',
+      rating: 5,
+      review_title: 'Great items fast store',
+      review_content: 'Great items fast store very good. Great items fast store very good. Great items fast store very good. Buy more now.',
+      review_status: 'under_review',
+      flagged_status: 1,
+      flag_reason: 'Repetitive keyword stuffing loop',
+      flagged_by_business: 0,
+      flagged_date: '2026-08-21T09:00:00Z',
+      official_response: null,
+      authenticity_score: 24,
+      classification: 'LIKELY_FAKE',
+      flag_reason_tags: JSON.stringify(['Keyword Stuffing / Repetition', 'Spike Posting / Burst Activity', 'Bot Velocity (2.1s typing)']),
+      recommended_action: 'DELETE',
+      ai_analysis_details: JSON.stringify({ summary: 'Looping repeated tokens and burst script payload pattern.', score: 24 }),
+      photo_url: null,
+      account_age_days: 1,
+      submission_velocity_seconds: 2.1,
+      user_total_reviews: 8
+    },
+    {
+      id: 'REV-403',
+      customer_id: 'CUST-903',
+      customer_name: 'Lani Mercado',
+      business_id: '3',
+      business_name: 'Bahay Kubo Restaurant',
+      rating: 5,
+      review_title: 'Crispy Pata was perfectly cooked!',
+      review_content: 'Ordered the Crispy Pata for our family Sunday lunch. Skin was super crispy and meat was tender, dipping sauce had the right calamansi kick. Arrived in 35 mins via food delivery.',
+      review_status: 'published',
+      flagged_status: 0,
+      flag_reason: null,
+      flagged_by_business: 0,
+      flagged_date: null,
+      official_response: null,
+      authenticity_score: 97,
+      classification: 'GENUINE',
+      flag_reason_tags: JSON.stringify(['Verified Buyer', 'Specific Order Details', 'Natural Local Dialect', 'Authentic Review']),
+      recommended_action: 'APPROVE',
+      ai_analysis_details: JSON.stringify({ summary: 'High authenticity. Contextual local references and realistic delivery timing.', score: 97 }),
+      photo_url: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600&auto=format&fit=crop',
+      account_age_days: 240,
+      submission_velocity_seconds: 105,
+      user_total_reviews: 12
+    },
+    {
+      id: 'REV-404',
+      customer_id: 'CUST-904',
+      customer_name: 'SyndiReview_Net',
+      business_id: '2',
+      business_name: 'Sari-Sari Mart',
+      rating: 1,
+      review_title: 'Totally broken and terrible',
+      review_content: 'I bought everything here and it was completely broken and ruined my entire life! Go to SuperDealMart online shop instead www.fakeurl.xyz',
+      review_status: 'flagged',
+      flagged_status: 1,
+      flag_reason: 'Third party spam URL and competitor referral',
+      flagged_by_business: 1,
+      flagged_date: '2026-08-22T11:20:00Z',
+      official_response: null,
+      authenticity_score: 15,
+      classification: 'LIKELY_FAKE',
+      flag_reason_tags: JSON.stringify(['Competitor Promotion / Smear', 'Extreme Sentiment Polarity', 'Spike Posting / Burst Activity']),
+      recommended_action: 'DELETE',
+      ai_analysis_details: JSON.stringify({ summary: 'External link insertion, severe hyperbole, competitor promotion.', score: 15 }),
+      photo_url: null,
+      account_age_days: 0,
+      submission_velocity_seconds: 1.8,
+      user_total_reviews: 1
+    },
+    {
+      id: 'REV-405',
+      customer_id: 'CUST-905',
+      customer_name: 'Mateo Valdez',
+      business_id: '2',
+      business_name: 'Sari-Sari Mart',
+      rating: 3,
+      review_title: 'Affordable supplies, delayed delivery',
+      review_content: 'Affordable office supplies and bulk paper. Delivery was delayed by 1 day due to heavy rains, but rider called in advance to notify.',
+      review_status: 'under_review',
+      flagged_status: 0,
+      flag_reason: null,
+      flagged_by_business: 0,
+      flagged_date: null,
+      official_response: null,
+      authenticity_score: 74,
+      classification: 'SUSPICIOUS',
+      flag_reason_tags: JSON.stringify(['Generic Phrasing (No Specific Detail)', 'Fresh Account (< 3 days)']),
+      recommended_action: 'FLAG',
+      ai_analysis_details: JSON.stringify({ summary: 'Moderate authenticity. Short account history but realistic situation.', score: 74 }),
+      photo_url: null,
+      account_age_days: 2,
+      submission_velocity_seconds: 45,
+      user_total_reviews: 1
+    }
+  ];
+
+  for (const r of seedReviews) {
+    executeRun(
+      `INSERT OR REPLACE INTO customer_reviews (
+        id, customer_id, customer_name, business_id, business_name, rating,
+        review_title, review_content, review_status, flagged_status, flag_reason,
+        flagged_by_business, flagged_date, official_response, authenticity_score,
+        classification, flag_reason_tags, recommended_action, ai_analysis_details,
+        photo_url, account_age_days, submission_velocity_seconds, user_total_reviews,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        r.id, r.customer_id, r.customer_name, r.business_id, r.business_name, r.rating,
+        r.review_title, r.review_content, r.review_status, r.flagged_status, r.flag_reason,
+        r.flagged_by_business, r.flagged_date, r.official_response, r.authenticity_score,
+        r.classification, r.flag_reason_tags, r.recommended_action, r.ai_analysis_details,
+        r.photo_url, r.account_age_days, r.submission_velocity_seconds, r.user_total_reviews,
+        now, now
+      ]
+    );
+
+    // Initial audit log for AI classification
+    executeRun(
+      `INSERT OR IGNORE INTO review_audit_log (
+        id, review_id, action, user_id, moderator_name, ai_assistant_used,
+        notes, previous_status, new_status, authenticity_score, classification,
+        metadata, created_at
+      ) VALUES (?, ?, 'AI_CLASSIFY', 'SYSTEM_AI', 'VeriPinoy AI Engine (Gemini 3.7)', 'N', ?, NULL, ?, ?, ?, ?, ?)`,
+      [
+        `AUD-${r.id}-INIT`,
+        r.id,
+        `Automated authenticity audit completed with score ${r.authenticity_score}% (${r.classification}). Recommended action: ${r.recommended_action}.`,
+        r.review_status,
+        r.authenticity_score,
+        r.classification,
+        r.ai_analysis_details,
+        now
+      ]
+    );
+  }
 }

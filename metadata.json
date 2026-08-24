@@ -1,6 +1,6 @@
 {
   "name": "VeriPinoy",
-  "description": "Philippine trust and verification registry featuring verified merchants, freelancer milestone contracts, work logging & invoicing workflows, reviewer decision dashboards, and multi-format report exports.",
+  "description": "Philippine trust and verification registry featuring AI-powered fake customer review detection, real-time moderation queue, Gemini 3.7 forensic assistant, verified merchants, freelancer contracts, and immutable audit logs.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
