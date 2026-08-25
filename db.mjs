@@ -1312,22 +1312,46 @@ export async function initDatabase() {
     );
   `);
 
-  /* CREATE INDEXES FOR PERFORMANCE */
-  db.run(`CREATE INDEX IF NOT EXISTS idx_active_sessions_hash ON active_sessions(session_token_hash);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_active_sessions_user ON active_sessions(user_id);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_sec_alerts_user ON security_alerts(user_id);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_vault_docs_entity ON vault_documents(entity_id);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_dup_registry_hash ON duplicate_check_registry(field_value_hash);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users(email);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_kyc_apps_status ON kyc_applications(verification_status);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_kyb_apps_status ON kyb_applications(verification_status);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_biz ON customer_reviews(business_id);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_score ON customer_reviews(authenticity_score);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_class ON customer_reviews(classification);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_admin_id);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_case_assign_case ON case_assignments(case_id);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_rev_audit_rev ON review_audit_log(review_id);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_rev_audit_action ON review_audit_log(action);`);
+  /* ==========================================================================
+     NOTES VIEWER & MANAGEMENT SCHEMA
+     ========================================================================== */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT DEFAULT 'VP-FR-10284',
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      category TEXT DEFAULT 'Work',
+      tags TEXT DEFAULT '[]',
+      is_pinned INTEGER DEFAULT 0,
+      photo_url TEXT,
+      color TEXT DEFAULT '#FFFFFF',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  /* ==========================================================================
+     DUAL-PROVIDER ESCROW & PARTNER AUDIT LOGS SCHEMA
+     ========================================================================== */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS escrow_partner_logs (
+      id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL, -- 'ESCROW_COM' | 'PARTNER_BANK'
+      action TEXT NOT NULL,   -- 'CREATE_TRANSACTION', 'DEPOSIT_FUNDS', 'REQUEST_RELEASE', 'RELEASE_FUNDS', 'DISPUTE_OPENED', 'REFUND', 'STATUS_SYNC', 'WEBHOOK_RECEIVED'
+      transaction_id TEXT,
+      engagement_id TEXT,
+      milestone_id TEXT,
+      partner_ref TEXT,
+      amount REAL DEFAULT 0,
+      currency TEXT DEFAULT 'PHP',
+      request_payload TEXT,
+      response_payload TEXT,
+      status TEXT DEFAULT 'SUCCESS', -- 'SUCCESS' | 'FAILED' | 'PENDING' | 'PROCESSED'
+      ip_address TEXT DEFAULT '127.0.0.1',
+      created_at TEXT NOT NULL
+    );
+  `);
 
   /* Run safe column migrations for existing SQLite database */
   const reviewColumns = [
@@ -1345,7 +1369,106 @@ export async function initDatabase() {
     try {
       db.run(`ALTER TABLE customer_reviews ADD COLUMN ${col.name} ${col.type};`);
     } catch (e) {
-      // Column already exists
+      // Column already exists or table freshly created with columns
+    }
+  }
+
+  // Escrow columns for milestones
+  const milestoneColumns = [
+    { name: 'escrow_provider', type: "TEXT DEFAULT 'ESCROW_COM'" },
+    { name: 'escrow_status', type: "TEXT DEFAULT 'UNFUNDED'" },
+    { name: 'escrow_transaction_id', type: "TEXT" },
+    { name: 'escrow_partner_ref', type: "TEXT" },
+    { name: 'escrow_deposit_amount', type: "REAL DEFAULT 0" },
+    { name: 'escrow_funded_at', type: "TEXT" },
+    { name: 'escrow_released_at', type: "TEXT" }
+  ];
+  for (const col of milestoneColumns) {
+    try {
+      db.run(`ALTER TABLE freelancer_milestones ADD COLUMN ${col.name} ${col.type};`);
+    } catch (e) {}
+  }
+
+  // Escrow columns for engagements
+  const engagementColumns = [
+    { name: 'escrow_provider', type: "TEXT DEFAULT 'ESCROW_COM'" },
+    { name: 'escrow_status', type: "TEXT DEFAULT 'UNFUNDED'" },
+    { name: 'escrow_transaction_id', type: "TEXT" }
+  ];
+  for (const col of engagementColumns) {
+    try {
+      db.run(`ALTER TABLE freelancer_engagements ADD COLUMN ${col.name} ${col.type};`);
+    } catch (e) {}
+  }
+
+  // Support Tickets and Live Inquiries
+  db.run(`
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id TEXT PRIMARY KEY,
+      ticket_number TEXT UNIQUE NOT NULL,
+      user_id TEXT NOT NULL,
+      user_name TEXT NOT NULL,
+      user_email TEXT NOT NULL,
+      user_type TEXT DEFAULT 'guest',
+      category TEXT DEFAULT 'general',
+      priority TEXT DEFAULT 'medium',
+      subject TEXT NOT NULL,
+      status TEXT DEFAULT 'open',
+      assigned_staff_id TEXT,
+      assigned_staff_name TEXT,
+      last_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS support_ticket_messages (
+      id TEXT PRIMARY KEY,
+      ticket_id TEXT NOT NULL,
+      sender_type TEXT NOT NULL,
+      sender_id TEXT,
+      sender_name TEXT NOT NULL,
+      message TEXT NOT NULL,
+      attachments TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE
+    );
+  `);
+
+  /* CREATE INDEXES FOR PERFORMANCE (Safely wrapped) */
+  const indexSqls = [
+    `CREATE INDEX IF NOT EXISTS idx_active_sessions_hash ON active_sessions(session_token_hash);`,
+    `CREATE INDEX IF NOT EXISTS idx_active_sessions_user ON active_sessions(user_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_sec_alerts_user ON security_alerts(user_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_vault_docs_entity ON vault_documents(entity_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_dup_registry_hash ON duplicate_check_registry(field_value_hash);`,
+    `CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users(email);`,
+    `CREATE INDEX IF NOT EXISTS idx_kyc_apps_status ON kyc_applications(verification_status);`,
+    `CREATE INDEX IF NOT EXISTS idx_kyb_apps_status ON kyb_applications(verification_status);`,
+    `CREATE INDEX IF NOT EXISTS idx_reviews_biz ON customer_reviews(business_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_reviews_score ON customer_reviews(authenticity_score);`,
+    `CREATE INDEX IF NOT EXISTS idx_reviews_class ON customer_reviews(classification);`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_admin_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_case_assign_case ON case_assignments(case_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_rev_audit_rev ON review_audit_log(review_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_rev_audit_action ON review_audit_log(action);`,
+    `CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_notes_pinned ON notes(is_pinned);`,
+    `CREATE INDEX IF NOT EXISTS idx_notes_cat ON notes(category);`,
+    `CREATE INDEX IF NOT EXISTS idx_escrow_logs_provider ON escrow_partner_logs(provider);`,
+    `CREATE INDEX IF NOT EXISTS idx_escrow_logs_tx ON escrow_partner_logs(transaction_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_escrow_logs_mls ON escrow_partner_logs(milestone_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_support_tkts_user ON support_tickets(user_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_support_tkts_status ON support_tickets(status);`,
+    `CREATE INDEX IF NOT EXISTS idx_support_tkts_cat ON support_tickets(category);`,
+    `CREATE INDEX IF NOT EXISTS idx_support_msgs_tkt ON support_ticket_messages(ticket_id);`
+  ];
+  for (const idxSql of indexSqls) {
+    try {
+      db.run(idxSql);
+    } catch (e) {
+      console.warn("Notice: index creation warning:", e.message);
     }
   }
 
@@ -1391,12 +1514,13 @@ function seedDatabaseIfEmpty() {
 
   const now = new Date().toISOString();
 
-  // Always ensure all pricing plans, security data, freelancer profiles, and review moderation cases are seeded/updated
+  // Always ensure all pricing plans, security data, freelancer profiles, review moderation cases, and support tickets are seeded/updated
   seedPricingPlans(now);
   seedSecurityData(now);
   seedFreelancerData(now);
   seedDiscoveryMasterData(now);
   seedReviewModerationData(now);
+  seedSupportData(now);
 
   if (userCheck && userCheck.count > 0) return; // Main tables already seeded
 
@@ -3435,4 +3559,474 @@ export function seedReviewModerationData(now = new Date().toISOString()) {
       ]
     );
   }
+
+  /* ==========================================================================
+     SEED INITIAL NOTES
+     ========================================================================== */
+  const seedNotes = [
+    {
+      id: 'NOTE-101',
+      user_id: 'VP-FR-10284',
+      title: 'Freelance Escrow SOP & Milestone Acceptance Protocol',
+      content: 'Standard operating procedure for escrow-backed milestones: 1. Confirm contract escrow partner (Escrow.com vs Partner Bank BaaS). 2. Ensure buyer completes deposit before work starts. 3. Log all deliverable links & test benchmarks into the Work Log module. 4. Release request initiates 72-hr client inspection window. In case of disagreement, arbitration is routed to VeriPinoy dispute reviewers.',
+      category: 'Work',
+      tags: JSON.stringify(['Escrow', 'SOP', 'Legal', 'Milestones']),
+      is_pinned: 1,
+      photo_url: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=600&q=80',
+      color: '#FEF3C7'
+    },
+    {
+      id: 'NOTE-102',
+      user_id: 'VP-FR-10284',
+      title: 'Client Identity & KYB Due Diligence Checklist',
+      content: 'Required documents before initiating high-value PHP 50,000+ contracts: \n• Valid SEC/DTI registration certificate\n• BIR Certificate of Registration (Form 2303)\n• Authorized Signatory Government ID (Passport / UMID / Driver\'s License)\n• Verified Philippine Corporate Bank Account for Direct Bank BaaS escrow settlement.',
+      category: 'Compliance',
+      tags: JSON.stringify(['KYB', 'Verification', 'BIR', 'Compliance']),
+      is_pinned: 1,
+      photo_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80',
+      color: '#ECFDF5'
+    },
+    {
+      id: 'NOTE-103',
+      user_id: 'VP-FR-10284',
+      title: 'Direct Bank Partner API (BaaS) Architecture & SLA',
+      content: 'Overview of the VeriPinoy Direct Bank API partnership:\n- Settlement Rails: Real-time PesoNet & InstaPay via Partner Bank Custody Account\n- Webhook endpoint: /api/webhooks/bank-partner\n- Signature Validation: HMAC-SHA256 with rotating bank security certificates\n- Daily Cutoff: 4:00 PM PHT for batch PesoNet clearing; instant for InstaPay transfers under PHP 50,000.',
+      category: 'Projects',
+      tags: JSON.stringify(['API', 'Banking', 'BaaS', 'Webhooks']),
+      is_pinned: 0,
+      photo_url: null,
+      color: '#EFF6FF'
+    },
+    {
+      id: 'NOTE-104',
+      user_id: 'VP-FR-10284',
+      title: 'Escrow.com REST API Integration Reference',
+      content: 'Standard integration notes for global clients using Escrow.com:\n• Sandbox Base URL: https://api.escrow-sandbox.com/2017-09-01/\n• Auth Header: Authorization: Basic [API_KEY]\n• Webhook Events: transaction_created, payment_approved, goods_sent, inspection_accepted, payment_disbursed\n• Fee split configured as 50/50 buyer/seller default unless milestone specifies otherwise.',
+      category: 'Projects',
+      tags: JSON.stringify(['Escrow.com', 'API', 'Security', 'Fintech']),
+      is_pinned: 0,
+      photo_url: null,
+      color: '#F5F3FF'
+    },
+    {
+      id: 'NOTE-105',
+      user_id: 'VP-FR-10284',
+      title: 'Philippine Freelance Tax & BIR Form 2307 Withholding',
+      content: 'Key tax guidelines for verified freelance consultants:\n- Corporate clients withhold 2% (Expanded Withholding Tax - EWT) or 8% flat income tax option\n- Form 2307 must be requested from clients quarterly for tax credit filing\n- All invoices generated via VeriPinoy automatically compute optional 2% EWT and 12% VAT breakdowns for BIR compliance.',
+      category: 'Personal',
+      tags: JSON.stringify(['Tax', 'BIR2307', 'Accounting', 'EWT']),
+      is_pinned: 0,
+      photo_url: null,
+      color: '#FFFBEB'
+    },
+    {
+      id: 'NOTE-106',
+      user_id: 'VP-FR-10284',
+      title: 'Nexus Fintech App Architecture & Sprint Milestones',
+      content: 'Tech stack: TypeScript, React, Tailwind CSS, SQLite, and Gemini 3.7 AI services.\nSprint 1: UI components & biometric auth flows (Completed & Paid via Escrow.com)\nSprint 2: Encrypted API endpoints & test harness (Under Review - Partner Bank Escrow)\nSprint 3: Cloud Run deployment, CI/CD pipeline & DPA audit logs (In Progress - Fund Locked).',
+      category: 'Projects',
+      tags: JSON.stringify(['Sprint', 'Nexus', 'Architecture', 'TypeScript']),
+      is_pinned: 0,
+      photo_url: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80',
+      color: '#FDF2F8'
+    }
+  ];
+
+  for (const n of seedNotes) {
+    executeRun(
+      `INSERT OR REPLACE INTO notes (id, user_id, title, content, category, tags, is_pinned, photo_url, color, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [n.id, n.user_id, n.title, n.content, n.category, n.tags, n.is_pinned, n.photo_url, n.color, now, now]
+    );
+  }
+
+  /* ==========================================================================
+     SEED INITIAL ESCROW PARTNER AUDIT LOGS & MILESTONE ESCROW STATUS
+     ========================================================================== */
+  // Update milestones with dual-provider details
+  executeRun(`
+    UPDATE freelancer_milestones 
+    SET escrow_provider = 'ESCROW_COM', escrow_status = 'RELEASED_TO_FREELANCER', escrow_transaction_id = 'ESC-TXN-9021-A', escrow_deposit_amount = 30000, escrow_funded_at = '2026-08-01 09:00:00', escrow_released_at = '2026-08-12 11:30:00'
+    WHERE id = 'MLS-902-1'
+  `);
+
+  executeRun(`
+    UPDATE freelancer_milestones 
+    SET escrow_provider = 'PARTNER_BANK', escrow_status = 'PENDING_RELEASE', escrow_transaction_id = 'BAAS-UBP-88392', escrow_deposit_amount = 35000, escrow_funded_at = '2026-08-15 14:20:00'
+    WHERE id = 'MLS-902-2'
+  `);
+
+  executeRun(`
+    UPDATE freelancer_milestones 
+    SET escrow_provider = 'PARTNER_BANK', escrow_status = 'FUNDED_IN_ESCROW', escrow_transaction_id = 'BAAS-UBP-88393', escrow_deposit_amount = 20000, escrow_funded_at = '2026-08-18 10:00:00'
+    WHERE id = 'MLS-902-3'
+  `);
+
+  executeRun(`
+    UPDATE freelancer_milestones 
+    SET escrow_provider = 'ESCROW_COM', escrow_status = 'RELEASED_TO_FREELANCER', escrow_transaction_id = 'ESC-TXN-9011-A', escrow_deposit_amount = 25000, escrow_funded_at = '2026-07-01 08:00:00', escrow_released_at = '2026-07-15 17:00:00'
+    WHERE id = 'MLS-901-1'
+  `);
+
+  executeRun(`
+    UPDATE freelancer_milestones 
+    SET escrow_provider = 'ESCROW_COM', escrow_status = 'DISPUTED', escrow_transaction_id = 'ESC-TXN-9011-B', escrow_deposit_amount = 25000, escrow_funded_at = '2026-07-16 11:00:00'
+    WHERE id = 'MLS-901-2'
+  `);
+
+  const seedEscrowLogs = [
+    {
+      id: 'EPL-1001',
+      provider: 'ESCROW_COM',
+      action: 'CREATE_TRANSACTION',
+      transaction_id: 'ESC-TXN-9021-A',
+      engagement_id: 'ENG-902',
+      milestone_id: 'MLS-902-1',
+      partner_ref: 'ESC-REF-77281',
+      amount: 30000,
+      currency: 'PHP',
+      request_payload: JSON.stringify({ currency: 'php', items: [{ title: 'UI Component Design System', schedule: [{ amount: 30000 }] }] }),
+      response_payload: JSON.stringify({ id: 'ESC-TXN-9021-A', status: 'created', inspection_period: 259200 }),
+      status: 'SUCCESS'
+    },
+    {
+      id: 'EPL-1002',
+      provider: 'ESCROW_COM',
+      action: 'DEPOSIT_FUNDS',
+      transaction_id: 'ESC-TXN-9021-A',
+      engagement_id: 'ENG-902',
+      milestone_id: 'MLS-902-1',
+      partner_ref: 'ESC-PAY-99302',
+      amount: 30000,
+      currency: 'PHP',
+      request_payload: JSON.stringify({ action: 'wire_deposit', amount: 30000 }),
+      response_payload: JSON.stringify({ status: 'secured_in_escrow', verified: true }),
+      status: 'SUCCESS'
+    },
+    {
+      id: 'EPL-1003',
+      provider: 'ESCROW_COM',
+      action: 'RELEASE_FUNDS',
+      transaction_id: 'ESC-TXN-9021-A',
+      engagement_id: 'ENG-902',
+      milestone_id: 'MLS-902-1',
+      partner_ref: 'ESC-DISB-44102',
+      amount: 30000,
+      currency: 'PHP',
+      request_payload: JSON.stringify({ action: 'accept_deliverable_and_disburse', reviewer: 'Nexus Fintech Corp' }),
+      response_payload: JSON.stringify({ status: 'disbursed_to_seller', transaction_complete: true }),
+      status: 'SUCCESS'
+    },
+    {
+      id: 'EPL-1004',
+      provider: 'PARTNER_BANK',
+      action: 'CREATE_TRANSACTION',
+      transaction_id: 'BAAS-UBP-88392',
+      engagement_id: 'ENG-902',
+      milestone_id: 'MLS-902-2',
+      partner_ref: 'BDO-ESCROW-2026-9921',
+      amount: 35000,
+      currency: 'PHP',
+      request_payload: JSON.stringify({ custody_account: 'UBP-TRUST-7721-002', amount: 35000, beneficiary: 'Marco Reyes' }),
+      response_payload: JSON.stringify({ reference: 'BAAS-UBP-88392', state: 'PENDING_DEPOSIT' }),
+      status: 'SUCCESS'
+    },
+    {
+      id: 'EPL-1005',
+      provider: 'PARTNER_BANK',
+      action: 'DEPOSIT_FUNDS',
+      transaction_id: 'BAAS-UBP-88392',
+      engagement_id: 'ENG-902',
+      milestone_id: 'MLS-902-2',
+      partner_ref: 'BDO-DEP-66381',
+      amount: 35000,
+      currency: 'PHP',
+      request_payload: JSON.stringify({ channel: 'InstaPay', amount: 35000 }),
+      response_payload: JSON.stringify({ status: 'FUNDED_IN_ESCROW', custody_vault: 'BSP-ACCREDITED-TRUST' }),
+      status: 'SUCCESS'
+    },
+    {
+      id: 'EPL-1006',
+      provider: 'PARTNER_BANK',
+      action: 'REQUEST_RELEASE',
+      transaction_id: 'BAAS-UBP-88392',
+      engagement_id: 'ENG-902',
+      milestone_id: 'MLS-902-2',
+      partner_ref: 'BDO-REL-REQ-102',
+      amount: 35000,
+      currency: 'PHP',
+      request_payload: JSON.stringify({ deliverable_logged: true, inspection_days: 3 }),
+      response_payload: JSON.stringify({ state: 'PENDING_RELEASE', inspection_deadline: '2026-08-27T14:20:00Z' }),
+      status: 'SUCCESS'
+    }
+  ];
+
+  for (const l of seedEscrowLogs) {
+    executeRun(
+      `INSERT OR REPLACE INTO escrow_partner_logs (id, provider, action, transaction_id, engagement_id, milestone_id, partner_ref, amount, currency, request_payload, response_payload, status, ip_address, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '127.0.0.1', ?)`,
+      [l.id, l.provider, l.action, l.transaction_id, l.engagement_id, l.milestone_id, l.partner_ref, l.amount, l.currency, l.request_payload, l.response_payload, l.status, now]
+    );
+  }
 }
+
+export function seedSupportData(now = new Date().toISOString()) {
+  const countCheck = queryOne('SELECT COUNT(*) as count FROM support_tickets');
+  if (countCheck && countCheck.count > 0) return;
+
+  const tickets = [
+    {
+      id: 'TKT-2026-101',
+      ticket_number: 'VP-SUP-8801',
+      user_id: 'maria.santos@gmail.com',
+      user_name: 'Maria Santos',
+      user_email: 'maria.santos@gmail.com',
+      user_type: 'customer',
+      category: 'escrow',
+      priority: 'high',
+      subject: 'Escrow Fund Protection & Milestone Release Timing on UX Contract',
+      status: 'in_progress',
+      assigned_staff_id: 'STF-105',
+      assigned_staff_name: 'Ben Torres',
+      last_message: 'Funds deposited via GCash are secured under BSP Circular 942 BaaS trust custody.',
+      created_at: new Date(Date.now() - 3600 * 1000 * 4).toISOString(),
+      updated_at: new Date(Date.now() - 3600 * 1000 * 1).toISOString(),
+      messages: [
+        {
+          id: 'MSG-101-1',
+          sender_type: 'user',
+          sender_id: 'maria.santos@gmail.com',
+          sender_name: 'Maria Santos',
+          message: 'Hello Support, I have funded Milestone 2 for our freelance mobile design project. How do I verify that the funds are held securely in neutral escrow before the designer starts?',
+          created_at: new Date(Date.now() - 3600 * 1000 * 4).toISOString()
+        },
+        {
+          id: 'MSG-101-2',
+          sender_type: 'staff',
+          sender_id: 'STF-105',
+          sender_name: 'Ben Torres (Support Staff)',
+          message: 'Hi Maria! Your payment of ₱35,000 has been confirmed and placed into BSP-compliant escrow custody with UnionBank BaaS Trust (Ref: BAAS-UBP-88392). The funds will only be released once you approve the milestone deliverable or the 7-day inspection window completes.',
+          created_at: new Date(Date.now() - 3600 * 1000 * 3).toISOString()
+        }
+      ]
+    },
+    {
+      id: 'TKT-2026-102',
+      ticket_number: 'VP-SUP-8802',
+      user_id: 'owner@bahaykubo.ph',
+      user_name: 'Roberto Mendoza',
+      user_email: 'owner@bahaykubo.ph',
+      user_type: 'merchant',
+      category: 'kyb',
+      priority: 'urgent',
+      subject: 'Expedited KYB Tatak Pinoy Verification for New Makati Branch',
+      status: 'open',
+      assigned_staff_id: 'STF-105',
+      assigned_staff_name: 'Ben Torres',
+      last_message: 'Attached 2026 Mayor’s Permit and updated BIR 2303 registration certificate.',
+      created_at: new Date(Date.now() - 3600 * 1000 * 6).toISOString(),
+      updated_at: new Date(Date.now() - 3600 * 1000 * 2).toISOString(),
+      messages: [
+        {
+          id: 'MSG-102-1',
+          sender_type: 'user',
+          sender_id: 'owner@bahaykubo.ph',
+          sender_name: 'Roberto Mendoza (Bahay Kubo)',
+          message: 'Magandang araw! We have opened a new location in Makati and uploaded our 2026 Mayor’s Permit and DTI filings. Could the compliance team please review and update our Tatak Pinoy Verified badge?',
+          created_at: new Date(Date.now() - 3600 * 1000 * 6).toISOString()
+        }
+      ]
+    },
+    {
+      id: 'TKT-2026-103',
+      ticket_number: 'VP-SUP-8803',
+      user_id: 'VP-FR-10284',
+      user_name: 'Marco Reyes',
+      user_email: 'marco.reyes@devpinoy.com',
+      user_type: 'freelancer',
+      category: 'escrow',
+      priority: 'medium',
+      subject: 'Milestone 2 Deliverable Uploaded - Inspection Countdown Verification',
+      status: 'awaiting_user',
+      assigned_staff_id: 'STF-105',
+      assigned_staff_name: 'Ben Torres',
+      last_message: 'Inspection window active: 3 days remaining before automatic fund release.',
+      created_at: new Date(Date.now() - 3600 * 1000 * 12).toISOString(),
+      updated_at: new Date(Date.now() - 3600 * 1000 * 5).toISOString(),
+      messages: [
+        {
+          id: 'MSG-103-1',
+          sender_type: 'user',
+          sender_id: 'VP-FR-10284',
+          sender_name: 'Marco Reyes',
+          message: 'Good day! I submitted the backend API deliverables for Milestone 2 on ENG-902. Can you confirm if the client notification was dispatched?',
+          created_at: new Date(Date.now() - 3600 * 1000 * 12).toISOString()
+        },
+        {
+          id: 'MSG-103-2',
+          sender_type: 'staff',
+          sender_id: 'STF-105',
+          sender_name: 'Ben Torres',
+          message: 'Hi Marco, the delivery notification and code repository audit log have been sent to Nexus Fintech Corp. Their 3-day inspection window expires on August 28, after which escrow will disburse automatically if no revisions are flagged.',
+          created_at: new Date(Date.now() - 3600 * 1000 * 5).toISOString()
+        }
+      ]
+    },
+    {
+      id: 'TKT-2026-104',
+      ticket_number: 'VP-SUP-8804',
+      user_id: 'juan.delacruz@gmail.com',
+      user_name: 'Juan Dela Cruz',
+      user_email: 'juan.delacruz@gmail.com',
+      user_type: 'customer',
+      category: 'review',
+      priority: 'low',
+      subject: 'Question on Tatak Pinoy Authenticity Score Algorithm',
+      status: 'resolved',
+      assigned_staff_id: 'STF-101',
+      assigned_staff_name: 'Maria Santos',
+      last_message: 'Explained multi-factor proof-of-purchase weighting and Gemini 3.7 moderation rules.',
+      created_at: new Date(Date.now() - 3600 * 1000 * 24).toISOString(),
+      updated_at: new Date(Date.now() - 3600 * 1000 * 18).toISOString(),
+      messages: [
+        {
+          id: 'MSG-104-1',
+          sender_type: 'user',
+          sender_id: 'juan.delacruz@gmail.com',
+          sender_name: 'Juan Dela Cruz',
+          message: 'Hi! Why did my verified reviewer badge give a 95% authenticity score on my dining review?',
+          created_at: new Date(Date.now() - 3600 * 1000 * 24).toISOString()
+        },
+        {
+          id: 'MSG-104-2',
+          sender_type: 'staff',
+          sender_id: 'STF-101',
+          sender_name: 'Maria Santos (Compliance Officer)',
+          message: 'Hi Juan! Reviews uploaded with receipt images and authenticated user IDs earn top weighted scores in the Tatak Pinoy trust index. Thank you for contributing to fair reviews!',
+          created_at: new Date(Date.now() - 3600 * 1000 * 18).toISOString()
+        }
+      ]
+    }
+  ];
+
+  for (const t of tickets) {
+    executeRun(
+      `INSERT OR REPLACE INTO support_tickets (id, ticket_number, user_id, user_name, user_email, user_type, category, priority, subject, status, assigned_staff_id, assigned_staff_name, last_message, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [t.id, t.ticket_number, t.user_id, t.user_name, t.user_email, t.user_type, t.category, t.priority, t.subject, t.status, t.assigned_staff_id, t.assigned_staff_name, t.last_message, t.created_at, t.updated_at]
+    );
+
+    if (t.messages && t.messages.length > 0) {
+      for (const m of t.messages) {
+        executeRun(
+          `INSERT OR REPLACE INTO support_ticket_messages (id, ticket_id, sender_type, sender_id, sender_name, message, attachments, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [m.id, t.id, m.sender_type, m.sender_id, m.sender_name, m.message, null, m.created_at]
+        );
+      }
+    }
+  }
+}
+
+export function getSupportTickets(filters = {}) {
+  let sql = 'SELECT * FROM support_tickets WHERE 1=1';
+  const params = [];
+
+  if (filters.status && filters.status !== 'all') {
+    sql += ' AND status = ?';
+    params.push(filters.status);
+  }
+  if (filters.category && filters.category !== 'all') {
+    sql += ' AND category = ?';
+    params.push(filters.category);
+  }
+  if (filters.priority && filters.priority !== 'all') {
+    sql += ' AND priority = ?';
+    params.push(filters.priority);
+  }
+  if (filters.user_id) {
+    sql += ' AND (user_id = ? OR user_email = ?)';
+    params.push(filters.user_id, filters.user_id);
+  }
+  if (filters.search) {
+    sql += ' AND (subject LIKE ? OR ticket_number LIKE ? OR user_name LIKE ? OR user_email LIKE ?)';
+    const searchPattern = `%${filters.search}%`;
+    params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+  }
+
+  sql += ' ORDER BY updated_at DESC';
+  return queryAll(sql, params);
+}
+
+export function getSupportTicketById(id) {
+  const ticket = queryOne('SELECT * FROM support_tickets WHERE id = ? OR ticket_number = ?', [id, id]);
+  if (!ticket) return null;
+
+  const messages = queryAll('SELECT * FROM support_ticket_messages WHERE ticket_id = ? ORDER BY created_at ASC', [ticket.id]);
+  return { ...ticket, messages };
+}
+
+export function createSupportTicket({ user_id, user_name, user_email, user_type = 'guest', category = 'general', priority = 'medium', subject, initial_message }) {
+  const id = `TKT-${Date.now().toString().slice(-6)}`;
+  const ticket_number = `VP-SUP-${Math.floor(1000 + Math.random() * 9000)}`;
+  const now = new Date().toISOString();
+
+  executeRun(
+    `INSERT INTO support_tickets (id, ticket_number, user_id, user_name, user_email, user_type, category, priority, subject, status, assigned_staff_id, assigned_staff_name, last_message, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', 'STF-105', 'Ben Torres', ?, ?, ?)`,
+    [id, ticket_number, user_id || 'guest', user_name || 'Guest User', user_email || 'guest@veripinoy.ph', user_type, category, priority, subject, initial_message || subject, now, now]
+  );
+
+  if (initial_message) {
+    const msgId = `MSG-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+    executeRun(
+      `INSERT INTO support_ticket_messages (id, ticket_id, sender_type, sender_id, sender_name, message, created_at)
+       VALUES (?, ?, 'user', ?, ?, ?, ?)`,
+      [msgId, id, user_id || 'guest', user_name || 'Guest User', initial_message, now]
+    );
+  }
+
+  return getSupportTicketById(id);
+}
+
+export function addSupportTicketMessage({ ticket_id, sender_type = 'staff', sender_id, sender_name, message, attachments = null }) {
+  const ticket = queryOne('SELECT * FROM support_tickets WHERE id = ? OR ticket_number = ?', [ticket_id, ticket_id]);
+  if (!ticket) throw new Error('Ticket not found');
+
+  const msgId = `MSG-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+  const now = new Date().toISOString();
+
+  executeRun(
+    `INSERT INTO support_ticket_messages (id, ticket_id, sender_type, sender_id, sender_name, message, attachments, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [msgId, ticket.id, sender_type, sender_id || 'staff', sender_name || 'Support Staff', message, attachments, now]
+  );
+
+  executeRun(
+    `UPDATE support_tickets SET last_message = ?, updated_at = ?, status = CASE WHEN status = 'closed' THEN 'open' ELSE status END WHERE id = ?`,
+    [message, now, ticket.id]
+  );
+
+  return getSupportTicketById(ticket.id);
+}
+
+export function updateSupportTicket(id, { status, priority, category, assigned_staff_id, assigned_staff_name }) {
+  const ticket = queryOne('SELECT * FROM support_tickets WHERE id = ? OR ticket_number = ?', [id, id]);
+  if (!ticket) throw new Error('Ticket not found');
+
+  const now = new Date().toISOString();
+  const nextStatus = status || ticket.status;
+  const nextPriority = priority || ticket.priority;
+  const nextCategory = category || ticket.category;
+  const nextStaffId = assigned_staff_id !== undefined ? assigned_staff_id : ticket.assigned_staff_id;
+  const nextStaffName = assigned_staff_name !== undefined ? assigned_staff_name : ticket.assigned_staff_name;
+
+  executeRun(
+    `UPDATE support_tickets SET status = ?, priority = ?, category = ?, assigned_staff_id = ?, assigned_staff_name = ?, updated_at = ? WHERE id = ?`,
+    [nextStatus, nextPriority, nextCategory, nextStaffId, nextStaffName, now, ticket.id]
+  );
+
+  return getSupportTicketById(ticket.id);
+}
+
+

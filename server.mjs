@@ -10,11 +10,19 @@ import {
   hashPassword,
   verifyPassword,
   hashToken,
-  generateSecureToken
+  generateSecureToken,
+  getSupportTickets,
+  getSupportTicketById,
+  createSupportTicket,
+  addSupportTicketMessage,
+  updateSupportTicket
 } from './db.mjs';
 import { PaymentService, PaymentGateway } from './payment-service.mjs';
 import { SecurityService } from './security-service.mjs';
 import { performAIFakeReviewAudit, consultAIModerationAssistant } from './ai-moderation-service.mjs';
+import { EscrowProviderManager, EscrowState, EscrowDotComDriver, PartnerBankDriver } from './escrow-service.mjs';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -4396,8 +4404,8 @@ app.put('/api/freelancer/milestones/:id', (req, res) => {
   }
 });
 
-// GET /api/freelancer/work-logs
-app.get('/api/freelancer/work-logs', (req, res) => {
+// GET /api/freelancer/work-logs and /api/reviewer/work-logs
+app.get(['/api/freelancer/work-logs', '/api/reviewer/work-logs'], (req, res) => {
   try {
     const { freelancer_id, engagement_id, milestone_id, status } = req.query;
     let query = `
@@ -4442,7 +4450,7 @@ app.get('/api/freelancer/work-logs', (req, res) => {
       };
     });
 
-    return res.json({ workLogs });
+    return res.json({ workLogs, work_logs: workLogs });
   } catch (err) {
     console.error('Error fetching work logs:', err);
     return res.status(500).json({ error: err.message });
@@ -4687,8 +4695,8 @@ app.post(['/api/freelancer/work-logs/:id/review', '/api/reviewer/work-logs/:id/d
    INVOICING, BILLING & PAYMENT GATEWAY INTEGRATION
    ========================================================================== */
 
-// GET /api/freelancer/invoices
-app.get('/api/freelancer/invoices', (req, res) => {
+// GET /api/freelancer/invoices and /api/reviewer/invoices
+app.get(['/api/freelancer/invoices', '/api/reviewer/invoices'], (req, res) => {
   try {
     const { freelancer_id, status, client_identifier } = req.query;
     let query = `
@@ -6216,6 +6224,115 @@ app.post('/api/vault/generate-signed-url', vaultRateLimiter, (req, res) => {
   }
 });
 
+// VAULT: Client Signed URL generation alias (/api/vault/signed-url)
+app.post('/api/vault/signed-url', vaultRateLimiter, (req, res) => {
+  try {
+    const { document_id, documentId, entity_id, access_reason, expirationMinutes = 5 } = req.body;
+    const docId = document_id || documentId;
+    if (!docId) {
+      return res.status(400).json({ error: 'document_id is required' });
+    }
+
+    const doc = queryOne('SELECT * FROM vault_documents WHERE id = ?', [docId]);
+    const staff = getAuthStaff(req);
+    const userId = staff?.name || req.body.userId || 'Authorized Staff';
+    const userRole = staff?.roleName || 'staff';
+
+    const origin = req.headers.origin || (req.headers.host ? `http://${req.headers.host}` : 'http://localhost:3000');
+    const signedData = SecurityService.generateVaultSignedUrl(
+      docId,
+      userId,
+      userRole,
+      parseInt(expirationMinutes) || 5,
+      origin
+    );
+
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    SecurityService.logVaultAccess({
+      documentId: docId,
+      userId,
+      userType: userRole,
+      actorRole: userRole,
+      accessType: 'token_generated',
+      ipAddress: ip,
+      granted: 1
+    });
+
+    return res.json({
+      success: true,
+      signed_token: signedData.signedToken,
+      signed_url: signedData.signedUrl,
+      expires_at: signedData.expiresAt,
+      document_id: docId,
+      filename: doc?.filename || 'encrypted_document.pdf'
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// VAULT: Ingest & Upload Encrypted Document (/api/vault/upload)
+app.post('/api/vault/upload', vaultRateLimiter, (req, res) => {
+  try {
+    const { entity_id, category = 'kyb', doc_type, file_name, file_payload_base64 } = req.body;
+    const docId = `VLT-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const now = new Date().toISOString();
+    const staff = getAuthStaff(req);
+    const uploader = staff?.name || 'Compliance Staff';
+
+    executeRun(
+      `INSERT INTO vault_documents (id, entity_type, entity_id, document_type, filename, encryption_algorithm, access_policy, file_size, mime_type, uploaded_by, created_at)
+       VALUES (?, ?, ?, ?, ?, 'AES-256-GCM', 'role_restricted', 1945600, 'application/pdf', ?, ?)`,
+      [docId, category || 'kyb', entity_id || 'UNKNOWN', doc_type || 'Registration Document', file_name || 'document.pdf', uploader, now]
+    );
+
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    SecurityService.logVaultAccess({
+      documentId: docId,
+      userId: uploader,
+      userType: 'staff',
+      actorRole: 'staff',
+      accessType: 'upload_encrypted',
+      ipAddress: ip,
+      granted: 1
+    });
+
+    return res.status(201).json({
+      success: true,
+      document_id: docId,
+      message: 'Document securely encrypted with AES-256-GCM and stored in Vault'
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// VAULT: Get Audit Access Logs (/api/vault/access-logs)
+app.get('/api/vault/access-logs', vaultRateLimiter, (req, res) => {
+  try {
+    const rawLogs = queryAll(`
+      SELECT * FROM vault_access_logs
+      ORDER BY created_at DESC
+      LIMIT 50
+    `);
+
+    const logs = rawLogs.map(l => ({
+      id: l.id,
+      document_id: l.document_id,
+      accessor_user_id: l.user_id,
+      ip_address: l.ip_address,
+      access_reason: l.access_type === 'token_generated' ? 'HMAC Signed Token Access' : (l.access_type === 'view_decrypted' ? 'Decrypted Document Inspection' : (l.access_type === 'upload_encrypted' ? 'Secure Document Ingestion' : 'Compliance Audit')),
+      status: l.granted ? 'Authorized 200' : 'Denied 403',
+      created_at: l.created_at,
+      accessed_at: l.created_at
+    }));
+
+    return res.json({ success: true, logs });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 3. VAULT: Access & Decrypt Document via Signed URL / Token
 app.get('/api/vault/document/:documentId', vaultRateLimiter, (req, res) => {
   const { documentId } = req.params;
@@ -6573,6 +6690,781 @@ app.post('/api/security/dpa/request-deletion', (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
+});
+
+/* ==========================================================================
+   NOTES VIEWER & MANAGEMENT API
+   ========================================================================== */
+
+// GET /api/notes - List notes with search, category filtering & pinned prioritization
+app.get('/api/notes', (req, res) => {
+  try {
+    const { category, search, user_id, is_pinned } = req.query;
+    let sql = `SELECT * FROM notes WHERE 1=1`;
+    const params = [];
+
+    if (user_id) {
+      sql += ` AND user_id = ?`;
+      params.push(user_id);
+    }
+
+    if (category && category !== 'All') {
+      sql += ` AND category = ?`;
+      params.push(category);
+    }
+
+    if (is_pinned !== undefined) {
+      sql += ` AND is_pinned = ?`;
+      params.push(parseInt(is_pinned));
+    }
+
+    if (search && search.trim()) {
+      const term = `%${search.trim()}%`;
+      sql += ` AND (title LIKE ? OR content LIKE ? OR tags LIKE ? OR category LIKE ?)`;
+      params.push(term, term, term, term);
+    }
+
+    // Pinned notes anchored at the top, then newest updated first
+    sql += ` ORDER BY is_pinned DESC, updated_at DESC`;
+
+    const rawNotes = queryAll(sql, params);
+    const notes = rawNotes.map(n => {
+      let parsedTags = [];
+      try {
+        parsedTags = typeof n.tags === 'string' ? JSON.parse(n.tags) : (n.tags || []);
+      } catch (e) {
+        parsedTags = n.tags ? [n.tags] : [];
+      }
+      return {
+        id: n.id,
+        user_id: n.user_id,
+        title: n.title,
+        content: n.content,
+        category: n.category || 'General',
+        tags: parsedTags,
+        is_pinned: Boolean(n.is_pinned),
+        photo_url: n.photo_url || null,
+        color: n.color || '#FFFFFF',
+        created_at: n.created_at,
+        updated_at: n.updated_at
+      };
+    });
+
+    const categories = ['All', 'Work', 'Personal', 'Projects', 'Compliance', 'Escrow', 'General'];
+    return res.json({ success: true, count: notes.length, notes, categories });
+  } catch (err) {
+    console.error('Error fetching notes:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/notes/:id - Get single note
+app.get('/api/notes/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const n = queryOne('SELECT * FROM notes WHERE id = ?', [id]);
+    if (!n) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    let parsedTags = [];
+    try {
+      parsedTags = typeof n.tags === 'string' ? JSON.parse(n.tags) : (n.tags || []);
+    } catch (e) {
+      parsedTags = [];
+    }
+
+    return res.json({
+      success: true,
+      note: {
+        ...n,
+        tags: parsedTags,
+        is_pinned: Boolean(n.is_pinned)
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/notes - Create a new note
+app.post('/api/notes', (req, res) => {
+  try {
+    const { title, content, category = 'Work', tags = [], is_pinned = false, photo_url = null, color = '#FFFFFF', user_id = 'VP-FR-10284' } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Note title is required' });
+    }
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: 'Note content is required' });
+    }
+
+    const noteId = `NOTE-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+    const now = new Date().toISOString();
+    const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []));
+
+    executeRun(
+      `INSERT INTO notes (id, user_id, title, content, category, tags, is_pinned, photo_url, color, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [noteId, user_id, title.trim(), content.trim(), category || 'Work', tagsJson, is_pinned ? 1 : 0, photo_url || null, color || '#FFFFFF', now, now]
+    );
+
+    const createdNote = queryOne('SELECT * FROM notes WHERE id = ?', [noteId]);
+    return res.status(201).json({
+      success: true,
+      message: 'Note created successfully',
+      note: {
+        ...createdNote,
+        tags: JSON.parse(createdNote.tags || '[]'),
+        is_pinned: Boolean(createdNote.is_pinned)
+      }
+    });
+  } catch (err) {
+    console.error('Error creating note:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/notes/:id - Update note
+app.put('/api/notes/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = queryOne('SELECT * FROM notes WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    const { title, content, category, tags, is_pinned, photo_url, color } = req.body;
+    const now = new Date().toISOString();
+
+    const updatedTitle = title !== undefined ? title.trim() : existing.title;
+    const updatedContent = content !== undefined ? content.trim() : existing.content;
+    const updatedCategory = category !== undefined ? category : existing.category;
+    let updatedTags = existing.tags;
+    if (tags !== undefined) {
+      updatedTags = JSON.stringify(Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []));
+    }
+    const updatedPinned = is_pinned !== undefined ? (is_pinned ? 1 : 0) : existing.is_pinned;
+    const updatedPhoto = photo_url !== undefined ? photo_url : existing.photo_url;
+    const updatedColor = color !== undefined ? color : existing.color;
+
+    executeRun(
+      `UPDATE notes 
+       SET title = ?, content = ?, category = ?, tags = ?, is_pinned = ?, photo_url = ?, color = ?, updated_at = ?
+       WHERE id = ?`,
+      [updatedTitle, updatedContent, updatedCategory, updatedTags, updatedPinned, updatedPhoto, updatedColor, now, id]
+    );
+
+    const refreshed = queryOne('SELECT * FROM notes WHERE id = ?', [id]);
+    return res.json({
+      success: true,
+      message: 'Note updated successfully',
+      note: {
+        ...refreshed,
+        tags: JSON.parse(refreshed.tags || '[]'),
+        is_pinned: Boolean(refreshed.is_pinned)
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/notes/:id - Delete note
+app.delete('/api/notes/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = queryOne('SELECT * FROM notes WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    executeRun('DELETE FROM notes WHERE id = ?', [id]);
+    return res.json({ success: true, message: 'Note deleted successfully', id });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/notes/:id/pin - Toggle pin status
+app.post('/api/notes/:id/pin', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = queryOne('SELECT * FROM notes WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    const newPinned = existing.is_pinned ? 0 : 1;
+    const now = new Date().toISOString();
+    executeRun('UPDATE notes SET is_pinned = ?, updated_at = ? WHERE id = ?', [newPinned, now, id]);
+
+    return res.json({
+      success: true,
+      id,
+      is_pinned: Boolean(newPinned),
+      message: newPinned ? 'Note pinned to top' : 'Note unpinned'
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/* ==========================================================================
+   DUAL-PROVIDER ESCROW & PAYMENT ENGINE API
+   ========================================================================== */
+
+// GET /api/escrow/providers - List active escrow provider drivers & configs
+app.get('/api/escrow/providers', (req, res) => {
+  try {
+    const summary = EscrowProviderManager.getProviderSummary();
+    return res.json({ success: true, ...summary });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/escrow/overview - Real-time metrics & state counts
+app.get('/api/escrow/overview', (req, res) => {
+  try {
+    const overview = EscrowProviderManager.getEscrowOverview();
+    return res.json({ success: true, ...overview });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/escrow/summary', (req, res) => {
+  try {
+    const overview = EscrowProviderManager.getEscrowOverview();
+    return res.json({ success: true, ...overview });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/escrow/milestones - All contract milestones with escrow metadata
+app.get('/api/escrow/milestones', (req, res) => {
+  try {
+    const milestones = queryAll(`
+      SELECT m.*, 
+             m.milestone_title AS title,
+             e.client_identifier, 
+             e.project_name, 
+             e.project_name as engagement_title,
+             COALESCE(m.escrow_provider, 'PARTNER_BANK') as escrow_provider,
+             COALESCE(m.escrow_status, m.status, 'UNFUNDED') as escrow_state,
+             COALESCE(m.escrow_transaction_id, '') as escrow_transaction_id
+      FROM freelancer_milestones m
+      LEFT JOIN freelancer_engagements e ON m.engagement_id = e.id
+      ORDER BY m.id DESC
+    `);
+
+    return res.json({ success: true, count: milestones.length, data: milestones });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/escrow/partner-logs - External audit trail & partner request/response logs
+app.get(['/api/escrow/partner-logs', '/api/escrow/logs'], (req, res) => {
+  try {
+    const { provider, limit = 50 } = req.query;
+    const logs = EscrowProviderManager.getPartnerAuditLogs({ provider, limit });
+    return res.json({ success: true, count: logs.length, logs, data: logs });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/escrow/deposit - Flexible body or param milestone deposit
+app.post(['/api/escrow/deposit', '/api/escrow/milestones/:milestoneId/deposit'], async (req, res) => {
+  try {
+    const milestoneId = req.params.milestoneId || req.body.milestone_id || req.body.milestoneId;
+    const { paymentMethod = 'online_banking', provider } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+
+    // If provider is specified, update milestone provider first
+    if (provider && milestoneId) {
+      executeRun(`UPDATE freelancer_milestones SET escrow_provider = ? WHERE id = ?`, [provider, milestoneId]);
+    }
+
+    const result = await EscrowProviderManager.depositEscrowFunds({
+      milestoneId,
+      paymentMethod,
+      ipAddress: ip
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/escrow/request-release - Deliverable Inspection Request
+app.post(['/api/escrow/request-release', '/api/escrow/milestones/:milestoneId/request-release'], async (req, res) => {
+  try {
+    const milestoneId = req.params.milestoneId || req.body.milestone_id || req.body.milestoneId;
+    const { deliverableNotes = '', notes = '' } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+
+    const result = await EscrowProviderManager.requestEscrowRelease({
+      milestoneId,
+      deliverableNotes: deliverableNotes || notes,
+      ipAddress: ip
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/escrow/release - Release Escrow Funds to Freelancer
+app.post(['/api/escrow/release', '/api/escrow/milestones/:milestoneId/release'], async (req, res) => {
+  try {
+    const milestoneId = req.params.milestoneId || req.body.milestone_id || req.body.milestoneId;
+    const { reviewerId = 'Client Authorized', note = 'Approved milestone deliverable', notes = '' } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+
+    const result = await EscrowProviderManager.releaseEscrowFunds({
+      milestoneId,
+      reviewerId,
+      note: note || notes,
+      ipAddress: ip
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/escrow/dispute - Open Dispute
+app.post(['/api/escrow/dispute', '/api/escrow/milestones/:milestoneId/dispute'], async (req, res) => {
+  try {
+    const milestoneId = req.params.milestoneId || req.body.milestone_id || req.body.milestoneId;
+    const { reason = 'Milestone deliverables contestation', notes = '' } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+
+    const result = await EscrowProviderManager.disputeEscrowTransaction({
+      milestoneId,
+      reason: reason || notes,
+      ipAddress: ip
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/escrow/refund - Refund Buyer
+app.post(['/api/escrow/refund', '/api/escrow/milestones/:milestoneId/refund'], async (req, res) => {
+  try {
+    const milestoneId = req.params.milestoneId || req.body.milestone_id || req.body.milestoneId;
+    const { reason = 'Mutual settlement refund', notes = '' } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+
+    const result = await EscrowProviderManager.refundEscrowTransaction({
+      milestoneId,
+      reason: reason || notes,
+      ipAddress: ip
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// WEBHOOK HANDLER: Driver A - Escrow.com Webhook Listener
+app.post('/api/webhooks/escrow-com', async (req, res) => {
+  try {
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    const result = await EscrowProviderManager.handleWebhookEvent({
+      provider: 'ESCROW_COM',
+      rawBody: req.body,
+      headers: req.headers,
+      ipAddress: ip
+    });
+    return res.json(result);
+  } catch (err) {
+    console.error('Escrow.com Webhook Error:', err);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// WEBHOOK HANDLER: Driver B - Direct Partner Bank Webhook Listener
+app.post('/api/webhooks/bank-partner', async (req, res) => {
+  try {
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    const result = await EscrowProviderManager.handleWebhookEvent({
+      provider: 'PARTNER_BANK',
+      rawBody: req.body,
+      headers: req.headers,
+      ipAddress: ip
+    });
+    return res.json(result);
+  } catch (err) {
+    console.error('Bank Partner Webhook Error:', err);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/escrow/simulate-event - Developer & Reviewer State Machine Simulator
+app.post('/api/escrow/simulate-event', async (req, res) => {
+  try {
+    const { milestoneId, action: explicitAction, eventType, provider = 'ESCROW_COM', amount, reason } = req.body;
+    const action = explicitAction || eventType;
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+
+    let result;
+    if (action === 'CREATE_TRANSACTION') {
+      result = await EscrowProviderManager.createMilestoneEscrow({ milestoneId, provider, ipAddress: ip });
+    } else if (action === 'DEPOSIT_FUNDS') {
+      result = await EscrowProviderManager.depositEscrowFunds({ milestoneId, ipAddress: ip });
+    } else if (action === 'REQUEST_RELEASE') {
+      result = await EscrowProviderManager.requestEscrowRelease({ milestoneId, deliverableNotes: 'Simulated deliverable benchmark completion', ipAddress: ip });
+    } else if (action === 'RELEASE_FUNDS') {
+      result = await EscrowProviderManager.releaseEscrowFunds({ milestoneId, reviewerId: 'Simulator Reviewer', note: 'Deliverables accepted via simulated signoff', ipAddress: ip });
+    } else if (action === 'DISPUTE') {
+      result = await EscrowProviderManager.disputeEscrowTransaction({ milestoneId, reason: reason || 'Simulated arbitration contestation', ipAddress: ip });
+    } else if (action === 'REFUND') {
+      result = await EscrowProviderManager.refundEscrowTransaction({ milestoneId, reason: reason || 'Simulated refund to buyer', ipAddress: ip });
+    } else {
+      return res.status(400).json({ error: `Unknown simulated action: ${action}` });
+    }
+
+    return res.json({ success: true, simulatedAction: action, ...result });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+/* ==========================================================================
+   MULTI-FORMAT REPORT EXPORT API (Excel, CSV, PDF)
+   ========================================================================== */
+
+app.get('/api/reports/export', async (req, res) => {
+  try {
+    const { type = 'escrow', format = 'xlsx' } = req.query;
+    const dateStamp = new Date().toISOString().split('T')[0];
+    const cleanFormat = (format || 'xlsx').toLowerCase();
+
+    let title = 'VeriPinoy Compliance Report';
+    let dataRows = [];
+
+    if (type === 'escrow' || type === 'milestones') {
+      title = 'VeriPinoy_Escrow_Milestones_Report';
+      const rows = queryAll(`
+        SELECT 
+          m.id AS Milestone_ID,
+          m.milestone_title AS Milestone_Title,
+          m.amount AS Amount_PHP,
+          m.status AS Work_Status,
+          COALESCE(m.escrow_provider, 'ESCROW_COM') AS Escrow_Provider,
+          COALESCE(m.escrow_status, 'UNFUNDED') AS Escrow_Status,
+          COALESCE(m.escrow_transaction_id, 'N/A') AS Transaction_Reference,
+          m.due_date AS Due_Date,
+          m.created_at AS Created_At
+        FROM freelancer_milestones m
+        ORDER BY m.created_at DESC
+      `);
+      dataRows = rows;
+    } else if (type === 'work_logs') {
+      title = 'VeriPinoy_Work_Logs_Report';
+      const rows = queryAll(`
+        SELECT 
+          id AS Log_ID,
+          freelancer_id AS Freelancer_ID,
+          engagement_id AS Engagement_ID,
+          milestone_id AS Milestone_ID,
+          title AS Task_Title,
+          total_amount AS Total_Amount_PHP,
+          status AS Review_Status,
+          hours_logged AS Hours_Logged,
+          reviewed_by AS Reviewer,
+          created_at AS Logged_At
+        FROM freelancer_work_logs
+        ORDER BY created_at DESC
+      `);
+      dataRows = rows;
+    } else if (type === 'invoices') {
+      title = 'VeriPinoy_Invoices_Report';
+      const rows = queryAll(`
+        SELECT 
+          invoice_number AS Invoice_No,
+          client_identifier AS Client_Name,
+          amount AS Amount_PHP,
+          currency AS Currency,
+          status AS Payment_Status,
+          due_date AS Due_Date,
+          payment_method AS Payment_Method,
+          paid_at AS Paid_Date,
+          created_at AS Issued_Date
+        FROM freelancer_invoices
+        ORDER BY created_at DESC
+      `);
+      dataRows = rows;
+    } else if (type === 'notes') {
+      title = 'VeriPinoy_Notes_Documentation_Report';
+      const rows = queryAll(`
+        SELECT 
+          id AS Note_ID,
+          title AS Title,
+          category AS Category,
+          tags AS Tags,
+          is_pinned AS Pinned,
+          created_at AS Created_At,
+          updated_at AS Last_Updated
+        FROM notes
+        ORDER BY is_pinned DESC, updated_at DESC
+      `);
+      dataRows = rows;
+    } else if (type === 'escrow_logs') {
+      title = 'VeriPinoy_Escrow_Partner_Audit_Logs';
+      const rows = queryAll(`
+        SELECT 
+          id AS Log_ID,
+          provider AS Provider,
+          action AS Operation,
+          transaction_id AS Transaction_ID,
+          milestone_id AS Milestone_ID,
+          amount AS Amount_PHP,
+          status AS Log_Status,
+          ip_address AS Source_IP,
+          created_at AS Timestamp
+        FROM escrow_partner_logs
+        ORDER BY created_at DESC
+      `);
+      dataRows = rows;
+    }
+
+    const dynamicFilename = `${title}_${dateStamp}.${cleanFormat}`;
+
+    // 1. EXCEL (.xlsx) FORMAT
+    if (cleanFormat === 'xlsx') {
+      const worksheet = XLSX.utils.json_to_sheet(dataRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Report_Data');
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${dynamicFilename}"`);
+      return res.send(buffer);
+    }
+
+    // 2. CSV (.csv) FORMAT
+    if (cleanFormat === 'csv') {
+      const worksheet = XLSX.utils.json_to_sheet(dataRows);
+      const csvOutput = XLSX.utils.sheet_to_csv(worksheet);
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${dynamicFilename}"`);
+      return res.send(csvOutput);
+    }
+
+    // 3. PDF (.pdf) FORMAT
+    if (cleanFormat === 'pdf') {
+      const doc = new jsPDF({ orientation: 'landscape' });
+      doc.setFontSize(16);
+      doc.setTextColor(11, 19, 43);
+      doc.text('VeriPinoy Official Compliance & Financial Audit Report', 14, 18);
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Report Type: ${type.toUpperCase()} | Generated: ${new Date().toISOString()} | Standard: BSP Circular 942 / PH-DPA-2012`, 14, 25);
+
+      if (dataRows.length > 0) {
+        const headers = Object.keys(dataRows[0]);
+        let y = 35;
+        
+        // Render simple clean table layout
+        doc.setFillColor(241, 245, 249);
+        doc.rect(14, y - 5, 270, 8, 'F');
+        doc.setFontSize(8);
+        doc.setTextColor(15, 23, 42);
+        doc.setFont(undefined, 'bold');
+        
+        const colWidth = Math.floor(270 / headers.length);
+        headers.forEach((h, i) => {
+          doc.text(String(h).substring(0, 18), 16 + (i * colWidth), y);
+        });
+
+        doc.setFont(undefined, 'normal');
+        y += 8;
+
+        dataRows.slice(0, 25).forEach((row, rIdx) => {
+          if (y > 185) {
+            doc.addPage();
+            y = 20;
+          }
+          if (rIdx % 2 === 1) {
+            doc.setFillColor(248, 250, 252);
+            doc.rect(14, y - 4, 270, 7, 'F');
+          }
+          headers.forEach((h, i) => {
+            const val = String(row[h] !== undefined && row[h] !== null ? row[h] : '-');
+            doc.text(val.substring(0, 19), 16 + (i * colWidth), y);
+          });
+          y += 7;
+        });
+      }
+
+      const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${dynamicFilename}"`);
+      return res.send(pdfBuffer);
+    }
+
+    return res.status(400).json({ error: `Unsupported format: ${cleanFormat}. Use xlsx, csv, or pdf.` });
+  } catch (err) {
+    console.error('Report export error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/* ==========================================================================
+   SUPPORT DESK & LIVE CONCIERGE API
+   ========================================================================== */
+
+// GET /api/support/tickets
+app.get('/api/support/tickets', (req, res) => {
+  try {
+    const { status, category, priority, user_id, search } = req.query;
+    const tickets = getSupportTickets({ status, category, priority, user_id, search });
+    return res.json({ success: true, tickets });
+  } catch (err) {
+    console.error('Fetch support tickets error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/support/tickets/:id
+app.get('/api/support/tickets/:id', (req, res) => {
+  try {
+    const ticket = getSupportTicketById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Support ticket not found' });
+    return res.json({ success: true, ticket });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/support/tickets
+app.post('/api/support/tickets', (req, res) => {
+  try {
+    const { user_id, user_name, user_email, user_type, category, priority, subject, message } = req.body;
+    if (!subject) return res.status(400).json({ error: 'Subject is required' });
+
+    const ticket = createSupportTicket({
+      user_id: user_id || 'guest',
+      user_name: user_name || 'Guest User',
+      user_email: user_email || 'guest@veripinoy.ph',
+      user_type: user_type || 'guest',
+      category: category || 'general',
+      priority: priority || 'medium',
+      subject,
+      initial_message: message
+    });
+
+    return res.status(201).json({ success: true, ticket });
+  } catch (err) {
+    console.error('Create support ticket error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/support/tickets/:id/messages
+app.post('/api/support/tickets/:id/messages', (req, res) => {
+  try {
+    const { sender_type, sender_id, sender_name, message, attachments } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message content is required' });
+
+    const updatedTicket = addSupportTicketMessage({
+      ticket_id: req.params.id,
+      sender_type: sender_type || 'user',
+      sender_id: sender_id || 'anonymous',
+      sender_name: sender_name || 'User',
+      message,
+      attachments
+    });
+
+    return res.json({ success: true, ticket: updatedTicket });
+  } catch (err) {
+    console.error('Post ticket message error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST, PATCH, PUT /api/support/tickets/:id/status
+const handleTicketStatusUpdate = (req, res) => {
+  try {
+    const { status, priority, category, assigned_staff_id, assigned_staff_name, assigned_to, assigned_to_name } = req.body;
+    const updated = updateSupportTicket(req.params.id, {
+      status,
+      priority,
+      category,
+      assigned_staff_id: assigned_staff_id !== undefined ? assigned_staff_id : assigned_to,
+      assigned_staff_name: assigned_staff_name !== undefined ? assigned_staff_name : assigned_to_name
+    });
+    return res.json({ success: true, ticket: updated });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+app.post('/api/support/tickets/:id/status', handleTicketStatusUpdate);
+app.patch('/api/support/tickets/:id/status', handleTicketStatusUpdate);
+app.put('/api/support/tickets/:id/status', handleTicketStatusUpdate);
+app.patch('/api/support/tickets/:id', handleTicketStatusUpdate);
+app.put('/api/support/tickets/:id', handleTicketStatusUpdate);
+
+// POST /api/support/chat (Intelligent Concierge Bot Engine)
+app.post('/api/support/chat', (req, res) => {
+  try {
+    const { message, user_type, user_name } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message is required' });
+
+    const lower = message.toLowerCase();
+    let reply = "";
+    let suggestedAction = null;
+
+    if (lower.includes('escrow') || lower.includes('fund') || lower.includes('release') || lower.includes('deposit') || lower.includes('custody')) {
+      reply = "VeriPinoy protects all transactions with dual-provider regulated escrow. Funds are deposited into BSP-compliant trust custody (via UnionBank BaaS Trust or Escrow.com) and disbursed strictly upon milestone deliverable acceptance.";
+      suggestedAction = { label: "🛡️ Open Escrow Engine", route: "escrow" };
+    } else if (lower.includes('note') || lower.includes('sop') || lower.includes('workspace')) {
+      reply = "You can organize all your client checklists, internal SOPs, and project documentation in the Standalone My Notes dashboard. Notes can be categorized, pinned, tagged, and exported to Excel, CSV, or PDF.";
+      suggestedAction = { label: "📝 Open My Notes", route: "notes" };
+    } else if (lower.includes('kyb') || lower.includes('verify') || lower.includes('dti') || lower.includes('sec') || lower.includes('permit') || lower.includes('tatak pinoy')) {
+      reply = "To attain the official 'Tatak Pinoy, Tatak Sigurado' seal, business owners can submit SEC/DTI registration and current Mayor's permits in the Business Owner Hub. Our compliance staff reviews submissions within 24-48 hours.";
+      suggestedAction = { label: "🏢 Visit Business Hub", route: "auth-business" };
+    } else if (lower.includes('freelancer') || lower.includes('worklog') || lower.includes('contract') || lower.includes('invoice')) {
+      reply = "Verified Filipino freelancers enjoy automated milestone tracking, time/deliverable logging, secure escrow funding, and direct invoice payouts to GCash, Maya, or Philippine bank accounts.";
+      suggestedAction = { label: "💼 Freelancer Portal", route: "freelancers" };
+    } else if (lower.includes('dispute') || lower.includes('complaint') || lower.includes('refund')) {
+      reply = "Disputes are reviewed by certified compliance moderators under fair mediation standards. You can submit supporting evidence, message history, and contract deliverables for neutral review.";
+      suggestedAction = { label: "🎧 Contact Live Staff", action: "create_ticket" };
+    } else {
+      reply = `Thank you for reaching out to VeriPinoy Support! Our concierge team is active 24/7. An authorized staff member (STF-105 Ben Torres) is ready to help with your inquiry.`;
+      suggestedAction = { label: "🎫 Submit Formal Support Ticket", action: "create_ticket" };
+    }
+
+    return res.json({
+      success: true,
+      reply,
+      suggestedAction,
+      timestamp: new Date().toISOString(),
+      agent: { name: "Ben Torres", role: "Support Staff (STF-105)", badge: "Tatak Pinoy Concierge" }
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 404 Handler for Unmatched API Routes
+app.all('/api/*', (req, res) => {
+  return res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.path}` });
 });
 
 /* SPA Fallback */
