@@ -1,7 +1,9 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { setupWebSocketServer, broadcastWsMessage } from './chat-ws-server.mjs';
 import {
   initDatabase,
   queryAll,
@@ -15,7 +17,25 @@ import {
   getSupportTicketById,
   createSupportTicket,
   addSupportTicketMessage,
-  updateSupportTicket
+  updateSupportTicket,
+  getUserE2EEKey,
+  upsertUserE2EEKey,
+  getConversationKeys,
+  upsertConversationKey,
+  getConversationsForUser,
+  getConversationById,
+  createConversation,
+  getConversationMessages,
+  addChatMessage,
+  updateChatMessage,
+  markConversationRead,
+  updateUserPresence,
+  getAllUserPresences,
+  getUserPresence,
+  saveChatAttachment,
+  getChatAttachment,
+  logEmailFallbackNotification,
+  getDispatchedEmailNotifications
 } from './db.mjs';
 import { PaymentService, PaymentGateway } from './payment-service.mjs';
 import { SecurityService } from './security-service.mjs';
@@ -7390,6 +7410,15 @@ app.post('/api/support/tickets/:id/messages', (req, res) => {
       attachments
     });
 
+    try {
+      broadcastWsMessage({
+        type: 'ticket:update',
+        ticket_id: req.params.id,
+        ticket: updatedTicket,
+        user_id: updatedTicket.user_id
+      });
+    } catch (e) {}
+
     return res.json({ success: true, ticket: updatedTicket });
   } catch (err) {
     console.error('Post ticket message error:', err);
@@ -7462,6 +7491,408 @@ app.post('/api/support/chat', (req, res) => {
   }
 });
 
+/* ==========================================================================
+   UNIVERSAL CHAT & E2EE MESSAGING SYSTEM API ROUTES
+   ========================================================================== */
+
+// GET /api/chat/conversations - List conversations for a user
+app.get('/api/chat/conversations', (req, res) => {
+  try {
+    const { user_id, role, type } = req.query;
+    if (!user_id && role !== 'admin' && role !== 'staff') {
+      return res.status(400).json({ error: 'user_id is required to fetch conversations' });
+    }
+    const conversations = getConversationsForUser(user_id || 'ALL', role || 'customer', type || 'all');
+    return res.json({ success: true, conversations });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/chat/conversations - Create or initialize a conversation
+app.post('/api/chat/conversations', (req, res) => {
+  try {
+    const {
+      id,
+      conversation_type,
+      participant_a_id,
+      participant_a_name,
+      participant_a_role,
+      participant_b_id,
+      participant_b_name,
+      participant_b_role,
+      contract_id,
+      ticket_id,
+      title,
+      is_e2ee
+    } = req.body;
+
+    if (!participant_a_id || !participant_b_id) {
+      return res.status(400).json({ error: 'Participant A and Participant B are required' });
+    }
+
+    const conv = createConversation({
+      id,
+      conversation_type: conversation_type || 'direct',
+      participant_a_id,
+      participant_a_name: participant_a_name || 'Client',
+      participant_a_role: participant_a_role || 'customer',
+      participant_b_id,
+      participant_b_name: participant_b_name || 'Freelancer',
+      participant_b_role: participant_b_role || 'freelancer',
+      contract_id: contract_id || null,
+      ticket_id: ticket_id || null,
+      title: title || 'New Conversation',
+      is_e2ee: is_e2ee ? 1 : 0
+    });
+
+    try {
+      broadcastWsMessage({
+        type: 'conversation:new',
+        conversation: conv,
+        recipient_id: participant_b_id,
+        sender_id: participant_a_id
+      });
+    } catch (e) {}
+
+    return res.json({ success: true, conversation: conv });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/chat/conversations/:id - Get conversation details
+app.get('/api/chat/conversations/:id', (req, res) => {
+  try {
+    const conv = getConversationById(req.params.id);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+    return res.json({ success: true, conversation: conv });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/chat/conversations/:id/messages - Get message history
+app.get('/api/chat/conversations/:id/messages', (req, res) => {
+  try {
+    const convId = req.params.id;
+    const { user_id, role } = req.query;
+    const conv = getConversationById(convId);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+    if (user_id && role !== 'admin' && role !== 'staff') {
+      if (conv.participant_a_id !== user_id && conv.participant_b_id !== user_id) {
+        return res.status(403).json({ error: 'Forbidden: You are not a participant in this conversation thread' });
+      }
+    }
+
+    const limit = parseInt(req.query.limit) || 100;
+    const messages = getConversationMessages(convId, limit);
+    return res.json({ success: true, thread_id: convId, conversation_id: convId, messages });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/chat/conversations/:id/messages - Send a message
+app.post('/api/chat/conversations/:id/messages', (req, res) => {
+  try {
+    const {
+      sender_id,
+      sender_name,
+      sender_role,
+      recipient_id,
+      message_text,
+      is_e2ee,
+      encrypted_payload,
+      attachments,
+      quote_reply_to,
+      quote_preview,
+      temp_id
+    } = req.body;
+
+    if (!sender_id) return res.status(400).json({ error: 'Sender ID is required' });
+
+    const msg = addChatMessage({
+      conversation_id: req.params.id,
+      sender_id,
+      sender_name: sender_name || 'User',
+      sender_role: sender_role || 'customer',
+      recipient_id: recipient_id || 'recipient',
+      message_text,
+      is_e2ee: is_e2ee ? 1 : 0,
+      encrypted_payload,
+      attachments,
+      quote_reply_to,
+      quote_preview
+    });
+
+    // Real-time WebSocket broadcast
+    try {
+      broadcastWsMessage({
+        type: 'message:new',
+        conversationId: req.params.id,
+        tempId: temp_id || null,
+        message: msg,
+        sender_id,
+        recipient_id
+      });
+    } catch (e) {}
+
+    // Check recipient presence; if offline/away, log an email fallback notification
+    try {
+      const recipientPresence = getUserPresence(recipient_id);
+      if (recipientPresence.status !== 'online') {
+        const preview = is_e2ee ? 'You received a new end-to-end encrypted message.' : (message_text ? (message_text.substring(0, 80) + (message_text.length > 80 ? '...' : '')) : 'Sent an attachment');
+        logEmailFallbackNotification({
+          recipient_email: recipient_id.includes('@') ? recipient_id : `${recipient_id.toLowerCase()}@veripinoy.ph`,
+          recipient_name: recipient_id,
+          sender_name: sender_name || 'A VeriPinoy User',
+          conversation_id: req.params.id,
+          preview_snippet: preview,
+          direct_link: `https://veripinoy.ph/chat?conversation_id=${req.params.id}`
+        });
+      }
+    } catch (e) {
+      console.warn('Fallback notification log notice:', e.message);
+    }
+
+    return res.json({ success: true, message: msg });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH & PUT /api/chat/messages/:id - Edit or delete message
+const handleChatMessageUpdate = (req, res) => {
+  try {
+    const { message_text, is_deleted, encrypted_payload } = req.body;
+    const updated = updateChatMessage(req.params.id, {
+      message_text,
+      is_edited: is_deleted ? 0 : 1,
+      is_deleted: is_deleted ? 1 : 0,
+      encrypted_payload
+    });
+
+    try {
+      broadcastWsMessage({
+        type: 'message:updated',
+        conversationId: updated ? updated.conversation_id : null,
+        messageId: req.params.id,
+        message: updated
+      });
+    } catch (e) {}
+
+    return res.json({ success: true, message: updated });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+app.patch('/api/chat/messages/:id', handleChatMessageUpdate);
+app.put('/api/chat/messages/:id', handleChatMessageUpdate);
+
+// DELETE /api/chat/messages/:id - Soft-delete message
+app.delete('/api/chat/messages/:id', (req, res) => {
+  try {
+    const updated = updateChatMessage(req.params.id, { is_deleted: 1 });
+
+    try {
+      broadcastWsMessage({
+        type: 'message:updated',
+        conversationId: updated ? updated.conversation_id : null,
+        messageId: req.params.id,
+        message: updated
+      });
+    } catch (e) {}
+
+    return res.json({ success: true, message: updated });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/chat/conversations/:id/read - Mark conversation as read
+app.post('/api/chat/conversations/:id/read', (req, res) => {
+  try {
+    const { reader_id } = req.body;
+    const result = markConversationRead(req.params.id, reader_id || '');
+
+    try {
+      broadcastWsMessage({
+        type: 'read:receipt',
+        conversationId: req.params.id,
+        reader_id: reader_id,
+        read_at: new Date().toISOString()
+      });
+    } catch (e) {}
+
+    return res.json({ success: true, result });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// E2EE CRYPTOGRAPHIC KEY REGISTRY ENDPOINTS
+app.get('/api/chat/e2ee/keys/:userId', (req, res) => {
+  try {
+    const key = getUserE2EEKey(req.params.userId);
+    if (!key) return res.status(404).json({ error: 'Public key not registered for user' });
+    return res.json({ success: true, key });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/chat/e2ee/keys', (req, res) => {
+  try {
+    const { user_id, user_email, public_key, ecdh_public_key, key_fingerprint } = req.body;
+    if (!user_id || !public_key) {
+      return res.status(400).json({ error: 'user_id and public_key are required' });
+    }
+    const saved = upsertUserE2EEKey({
+      user_id,
+      user_email: user_email || `${user_id}@veripinoy.ph`,
+      public_key: typeof public_key === 'object' ? JSON.stringify(public_key) : public_key,
+      ecdh_public_key: ecdh_public_key ? (typeof ecdh_public_key === 'object' ? JSON.stringify(ecdh_public_key) : ecdh_public_key) : null,
+      key_fingerprint: key_fingerprint || 'SHA256:FINGERPRINT-DEFAULT'
+    });
+    return res.json({ success: true, key: saved });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Conversation Symmetric Key Wrappings for E2EE
+app.get('/api/chat/e2ee/conversations/:id/keys', (req, res) => {
+  try {
+    const { user_id } = req.query;
+    const keys = getConversationKeys(req.params.id, user_id);
+    return res.json({ success: true, keys });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/chat/e2ee/conversations/:id/keys', (req, res) => {
+  try {
+    const { user_id, wrapped_key, algorithm } = req.body;
+    if (!user_id || !wrapped_key) {
+      return res.status(400).json({ error: 'user_id and wrapped_key are required' });
+    }
+    const saved = upsertConversationKey({
+      conversation_id: req.params.id,
+      user_id,
+      wrapped_key,
+      algorithm: algorithm || 'RSA-OAEP-256'
+    });
+    return res.json({ success: true, key: saved });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PRESENCE & TYPING INDICATORS
+app.get('/api/chat/presence', (req, res) => {
+  try {
+    const presences = getAllUserPresences();
+    return res.json({ success: true, presences });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/chat/presence/:userId', (req, res) => {
+  try {
+    const presence = getUserPresence(req.params.userId);
+    return res.json({ success: true, presence });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/chat/presence', (req, res) => {
+  try {
+    const { user_id, status, is_typing_in } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+    const p = updateUserPresence(user_id, status || 'online', is_typing_in !== undefined ? is_typing_in : null);
+
+    try {
+      broadcastWsMessage({
+        type: 'presence:update',
+        user_id,
+        status: status || 'online',
+        is_typing_in: is_typing_in !== undefined ? is_typing_in : null,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) {}
+
+    return res.json({ success: true, presence: p });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// CHAT ATTACHMENTS
+app.post('/api/chat/attachments', (req, res) => {
+  try {
+    const { conversation_id, message_id, uploader_id, file_name, file_size, mime_type, file_data } = req.body;
+    if (!conversation_id || !file_name || !uploader_id) {
+      return res.status(400).json({ error: 'conversation_id, uploader_id, and file_name are required' });
+    }
+    const att = saveChatAttachment({
+      conversation_id,
+      message_id: message_id || null,
+      uploader_id,
+      file_name,
+      file_size: file_size || 0,
+      mime_type: mime_type || 'application/octet-stream',
+      file_data: file_data || ''
+    });
+    return res.json({ success: true, attachment: att });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/chat/attachments/:id', (req, res) => {
+  try {
+    const att = getChatAttachment(req.params.id);
+    if (!att) return res.status(404).json({ error: 'Attachment not found' });
+    return res.json({ success: true, attachment: att });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// EMAIL FALLBACK NOTIFICATIONS LOGS
+app.get('/api/chat/notifications/email-fallback', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const notifications = getDispatchedEmailNotifications(limit);
+    return res.json({ success: true, notifications });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/chat/notifications/email-fallback', (req, res) => {
+  try {
+    const { recipient_email, recipient_name, sender_name, conversation_id, preview_snippet, direct_link } = req.body;
+    const notif = logEmailFallbackNotification({
+      recipient_email: recipient_email || 'user@veripinoy.ph',
+      recipient_name: recipient_name || 'User',
+      sender_name: sender_name || 'Sender',
+      conversation_id: conversation_id || 'CONV-001',
+      preview_snippet: preview_snippet || 'You have received a new message on VeriPinoy.',
+      direct_link: direct_link || 'https://veripinoy.ph/chat'
+    });
+    return res.json({ success: true, notification: notif });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 404 Handler for Unmatched API Routes
 app.all('/api/*', (req, res) => {
   return res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.path}` });
@@ -7472,6 +7903,9 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = http.createServer(app);
+setupWebSocketServer(server);
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`VeriPinoy Production Relational Database Backend server running on http://0.0.0.0:${PORT}`);
 });

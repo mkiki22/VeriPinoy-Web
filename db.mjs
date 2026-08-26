@@ -1462,8 +1462,126 @@ export async function initDatabase() {
     `CREATE INDEX IF NOT EXISTS idx_support_tkts_user ON support_tickets(user_id);`,
     `CREATE INDEX IF NOT EXISTS idx_support_tkts_status ON support_tickets(status);`,
     `CREATE INDEX IF NOT EXISTS idx_support_tkts_cat ON support_tickets(category);`,
-    `CREATE INDEX IF NOT EXISTS idx_support_msgs_tkt ON support_ticket_messages(ticket_id);`
+    `CREATE INDEX IF NOT EXISTS idx_support_msgs_tkt ON support_ticket_messages(ticket_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_chat_conv_part_a ON chat_conversations(participant_a_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_chat_conv_part_b ON chat_conversations(participant_b_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_chat_msgs_conv ON chat_messages(conversation_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_chat_msgs_sender ON chat_messages(sender_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_e2ee_keys_user ON user_e2ee_keys(user_id);`
   ];
+
+  /* ==========================================================================
+     E2EE & UNIVERSAL CHAT WORKFLOW TABLES
+     ========================================================================== */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_e2ee_keys (
+      id TEXT PRIMARY KEY,
+      user_id TEXT UNIQUE NOT NULL,
+      user_email TEXT NOT NULL,
+      public_key TEXT NOT NULL,
+      ecdh_public_key TEXT,
+      key_fingerprint TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_conversations (
+      id TEXT PRIMARY KEY,
+      conversation_type TEXT NOT NULL, -- 'contract', 'support', 'direct', 'inquiry'
+      participant_a_id TEXT NOT NULL,
+      participant_a_name TEXT NOT NULL,
+      participant_a_role TEXT NOT NULL, -- 'customer', 'freelancer', 'business', 'staff'
+      participant_b_id TEXT NOT NULL,
+      participant_b_name TEXT NOT NULL,
+      participant_b_role TEXT NOT NULL, -- 'customer', 'freelancer', 'business', 'staff'
+      contract_id TEXT,
+      ticket_id TEXT,
+      title TEXT NOT NULL,
+      is_e2ee INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'active',
+      last_message_text TEXT,
+      last_message_sender_id TEXT,
+      last_message_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_conversation_keys (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      wrapped_key TEXT NOT NULL,
+      algorithm TEXT DEFAULT 'RSA-OAEP-256',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      sender_role TEXT NOT NULL,
+      recipient_id TEXT NOT NULL,
+      message_text TEXT,
+      is_e2ee INTEGER DEFAULT 0,
+      encrypted_payload TEXT,
+      attachments TEXT,
+      quote_reply_to TEXT,
+      quote_preview TEXT,
+      status TEXT DEFAULT 'sent',
+      is_edited INTEGER DEFAULT 0,
+      is_deleted INTEGER DEFAULT 0,
+      read_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_presence (
+      user_id TEXT PRIMARY KEY,
+      status TEXT DEFAULT 'online',
+      is_typing_in TEXT,
+      last_seen_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_attachments (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      message_id TEXT,
+      uploader_id TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_data TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_email_notifications (
+      id TEXT PRIMARY KEY,
+      recipient_email TEXT NOT NULL,
+      recipient_name TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      preview_snippet TEXT NOT NULL,
+      direct_link TEXT NOT NULL,
+      status TEXT DEFAULT 'dispatched',
+      sent_at TEXT NOT NULL
+    );
+  `);
   for (const idxSql of indexSqls) {
     try {
       db.run(idxSql);
@@ -1521,6 +1639,7 @@ function seedDatabaseIfEmpty() {
   seedDiscoveryMasterData(now);
   seedReviewModerationData(now);
   seedSupportData(now);
+  seedUniversalChatData(now);
 
   if (userCheck && userCheck.count > 0) return; // Main tables already seeded
 
@@ -3928,6 +4047,340 @@ export function seedSupportData(now = new Date().toISOString()) {
   }
 }
 
+export function seedUniversalChatData(now = new Date().toISOString()) {
+  const countCheck = queryOne('SELECT COUNT(*) as count FROM chat_conversations');
+  if (countCheck && countCheck.count > 0) return;
+
+  console.log('Seeding initial Universal Chat & E2EE conversations...');
+
+  // Seed sample E2EE public keys for Marco Reyes, Maria Clara, Juan Dela Cruz, and Support
+  const sampleKeys = [
+    {
+      id: 'KEY-USR-CUST-1001',
+      user_id: 'USR-CUST-1001',
+      user_email: 'customer@veripinoy.ph',
+      public_key: JSON.stringify({
+        kty: 'RSA',
+        n: 's1q7R...ClientPublicModulus2026',
+        e: 'AQAB',
+        alg: 'RSA-OAEP-256',
+        ext: true,
+        key_ops: ['wrapKey', 'encrypt']
+      }),
+      ecdh_public_key: JSON.stringify({ kty: 'EC', crv: 'P-256', x: '4f9b_ClientEcdhX', y: '82c1_ClientEcdhY' }),
+      key_fingerprint: 'SHA256:7B:3F:A9:41:88:C2:5E:10:99:A1:34:B7:6E:DF:02:11'
+    },
+    {
+      id: 'KEY-USER-FR-10284',
+      user_id: 'USER-FR-10284',
+      user_email: 'freelancer@marcoreyes.dev',
+      public_key: JSON.stringify({
+        kty: 'RSA',
+        n: 'v9k2M...FreelancerMarcoPublicModulus2026',
+        e: 'AQAB',
+        alg: 'RSA-OAEP-256',
+        ext: true,
+        key_ops: ['wrapKey', 'encrypt']
+      }),
+      ecdh_public_key: JSON.stringify({ kty: 'EC', crv: 'P-256', x: '1a2b_MarcoEcdhX', y: '3c4d_MarcoEcdhY' }),
+      key_fingerprint: 'SHA256:F2:89:1B:77:33:AA:DC:44:09:88:12:FE:51:90:3A:C4'
+    },
+    {
+      id: 'KEY-USR-BIZ-2001',
+      user_id: 'USR-BIZ-2001',
+      user_email: 'owner@manilabakery.ph',
+      public_key: JSON.stringify({
+        kty: 'RSA',
+        n: 'b7c3X...BizJuanPublicModulus2026',
+        e: 'AQAB',
+        alg: 'RSA-OAEP-256',
+        ext: true,
+        key_ops: ['wrapKey', 'encrypt']
+      }),
+      ecdh_public_key: JSON.stringify({ kty: 'EC', crv: 'P-256', x: '7x8y_JuanEcdhX', y: '9z0w_JuanEcdhY' }),
+      key_fingerprint: 'SHA256:33:91:DE:AA:55:01:8C:72:49:BF:22:90:7E:11:88:FF'
+    }
+  ];
+
+  for (const k of sampleKeys) {
+    executeRun(
+      `INSERT OR REPLACE INTO user_e2ee_keys (id, user_id, user_email, public_key, ecdh_public_key, key_fingerprint, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [k.id, k.user_id, k.user_email, k.public_key, k.ecdh_public_key, k.key_fingerprint, now, now]
+    );
+  }
+
+  // Seed sample Presences
+  const presences = [
+    { user_id: 'USER-FR-10284', status: 'online', is_typing_in: null },
+    { user_id: 'USR-CUST-1001', status: 'online', is_typing_in: null },
+    { user_id: 'USR-BIZ-2001', status: 'away', is_typing_in: null },
+    { user_id: 'USER-FR-10285', status: 'online', is_typing_in: null },
+    { user_id: 'STF-105', status: 'online', is_typing_in: null },
+    { user_id: 'guest', status: 'online', is_typing_in: null }
+  ];
+  for (const p of presences) {
+    executeRun(
+      `INSERT OR REPLACE INTO chat_presence (user_id, status, is_typing_in, last_seen_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [p.user_id, p.status, p.is_typing_in, now, now]
+    );
+  }
+
+  // Seed sample Conversations & Messages
+  const t0 = Date.now();
+  const sampleConvs = [
+    {
+      id: 'CONV-CONTRACT-001',
+      conversation_type: 'contract',
+      participant_a_id: 'USR-CUST-1001',
+      participant_a_name: 'Maria Clara De Los Santos',
+      participant_a_role: 'customer',
+      participant_b_id: 'USER-FR-10284',
+      participant_b_name: 'Marco Antonio Reyes',
+      participant_b_role: 'freelancer',
+      contract_id: 'ENG-902',
+      ticket_id: null,
+      title: 'Fintech Mobile UI/UX & Design System (ENG-902)',
+      is_e2ee: 1,
+      last_message_text: '🔒 [End-to-End Encrypted Message]',
+      last_message_sender_id: 'USER-FR-10284',
+      last_message_at: new Date(t0 - 1000 * 60 * 5).toISOString(),
+      messages: [
+        {
+          id: 'MSG-001-1',
+          sender_id: 'USR-CUST-1001',
+          sender_name: 'Maria Clara De Los Santos',
+          sender_role: 'customer',
+          recipient_id: 'USER-FR-10284',
+          message_text: null,
+          is_e2ee: 1,
+          encrypted_payload: JSON.stringify({
+            ciphertext: 'qR82x+9/MariaInitialRequirementSpec/UI2026/GCM==',
+            iv: 'kX8z019AaBbC==',
+            algorithm: 'AES-GCM',
+            plaintext_preview: 'Hi Marco! Milestone 2 has been funded into UnionBank escrow (₱35,000). Are the high-fidelity Figma components ready for review?',
+            version: '1.0'
+          }),
+          attachments: null,
+          quote_reply_to: null,
+          quote_preview: null,
+          created_at: new Date(t0 - 1000 * 60 * 25).toISOString()
+        },
+        {
+          id: 'MSG-001-2',
+          sender_id: 'USR-CUST-1001',
+          sender_name: 'Maria Clara De Los Santos',
+          sender_role: 'customer',
+          recipient_id: 'USER-FR-10284',
+          message_text: null,
+          is_e2ee: 1,
+          encrypted_payload: JSON.stringify({
+            ciphertext: '91KxL/GroupedWithinTwoMinutesSpecRequirement/GCM==',
+            iv: '3aB89100ZzYx==',
+            algorithm: 'AES-GCM',
+            plaintext_preview: 'Specifically looking for the Tatak Pinoy QR checkout flow and dark mode tokens.',
+            version: '1.0'
+          }),
+          attachments: null,
+          quote_reply_to: null,
+          quote_preview: null,
+          created_at: new Date(t0 - 1000 * 60 * 24).toISOString() // Grouped! (1 min apart)
+        },
+        {
+          id: 'MSG-001-3',
+          sender_id: 'USER-FR-10284',
+          sender_name: 'Marco Antonio Reyes',
+          sender_role: 'freelancer',
+          recipient_id: 'USR-CUST-1001',
+          message_text: null,
+          is_e2ee: 1,
+          encrypted_payload: JSON.stringify({
+            ciphertext: '77aA89/MarcoReplyReadyWithFigmaDeliverables/GCM==',
+            iv: '99xZ1020BbCc==',
+            algorithm: 'AES-GCM',
+            plaintext_preview: 'Magandang araw Maria! Yes, all 42 screen states and design tokens have been finalized. I have attached the complete Milestone 2 PDF specification and inspection bundle.',
+            version: '1.0'
+          }),
+          attachments: JSON.stringify([
+            {
+              id: 'ATT-001',
+              name: 'VeriPinoy_Fintech_Design_System_M2.pdf',
+              size: 4280000,
+              type: 'application/pdf',
+              url: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80',
+              is_image: false
+            }
+          ]),
+          quote_reply_to: 'MSG-001-1',
+          quote_preview: JSON.stringify({
+            sender_name: 'Maria Clara De Los Santos',
+            snippet: 'Hi Marco! Milestone 2 has been funded into UnionBank escrow (₱35,000)...'
+          }),
+          created_at: new Date(t0 - 1000 * 60 * 15).toISOString()
+        },
+        {
+          id: 'MSG-001-4',
+          sender_id: 'USER-FR-10284',
+          sender_name: 'Marco Antonio Reyes',
+          sender_role: 'freelancer',
+          recipient_id: 'USR-CUST-1001',
+          message_text: null,
+          is_e2ee: 1,
+          encrypted_payload: JSON.stringify({
+            ciphertext: '44zZ/LoggedMilestoneReadyForEscrowDisburse/GCM==',
+            iv: '12xY8890AaBb==',
+            algorithm: 'AES-GCM',
+            plaintext_preview: 'Work log submitted! You can inspect the deliverable and trigger the escrow release once approved.',
+            version: '1.0'
+          }),
+          attachments: JSON.stringify([
+            {
+              id: 'ATT-002',
+              name: 'QR_Checkout_Interactive_Mockup.png',
+              size: 1840000,
+              type: 'image/png',
+              url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80',
+              is_image: true
+            }
+          ]),
+          quote_reply_to: null,
+          quote_preview: null,
+          created_at: new Date(t0 - 1000 * 60 * 5).toISOString()
+        }
+      ]
+    },
+    {
+      id: 'CONV-INQUIRY-002',
+      conversation_type: 'inquiry',
+      participant_a_id: 'USR-BIZ-2001',
+      participant_a_name: 'Juan Dela Cruz (Manila Bakery)',
+      participant_a_role: 'business',
+      participant_b_id: 'USER-FR-10285',
+      participant_b_name: 'Maria Teresa Santos',
+      participant_b_role: 'freelancer',
+      contract_id: null,
+      ticket_id: null,
+      title: 'Tatak Pinoy Packaging & Brand Identity Inquiry',
+      is_e2ee: 0,
+      last_message_text: 'I would love to help! Let me prepare a custom proposal and quote for your 3 product lines.',
+      last_message_sender_id: 'USER-FR-10285',
+      last_message_at: new Date(t0 - 1000 * 60 * 45).toISOString(),
+      messages: [
+        {
+          id: 'MSG-002-1',
+          sender_id: 'USR-BIZ-2001',
+          sender_name: 'Juan Dela Cruz (Manila Bakery)',
+          sender_role: 'business',
+          recipient_id: 'USER-FR-10285',
+          message_text: 'Good day Maria! We saw your verified freelancer profile on VeriPinoy. We need artisanal packaging designs for our traditional Ensaymada gift boxes with BIR and Tatak Pinoy QR verification.',
+          is_e2ee: 0,
+          encrypted_payload: null,
+          attachments: null,
+          quote_reply_to: null,
+          quote_preview: null,
+          created_at: new Date(t0 - 1000 * 60 * 60).toISOString()
+        },
+        {
+          id: 'MSG-002-2',
+          sender_id: 'USER-FR-10285',
+          sender_name: 'Maria Teresa Santos',
+          sender_role: 'freelancer',
+          recipient_id: 'USR-BIZ-2001',
+          message_text: 'I would love to help! Let me prepare a custom proposal and quote for your 3 product lines.',
+          is_e2ee: 0,
+          encrypted_payload: null,
+          attachments: null,
+          quote_reply_to: null,
+          quote_preview: null,
+          created_at: new Date(t0 - 1000 * 60 * 45).toISOString()
+        }
+      ]
+    },
+    {
+      id: 'CONV-SUPPORT-003',
+      conversation_type: 'support',
+      participant_a_id: 'USR-CUST-1001',
+      participant_a_name: 'Maria Clara De Los Santos',
+      participant_a_role: 'customer',
+      participant_b_id: 'STF-105',
+      participant_b_name: 'Ben Torres (Support Staff)',
+      participant_b_role: 'staff',
+      contract_id: null,
+      ticket_id: 'TKT-2026-101',
+      title: 'Escrow Fund Protection & Milestone Release (VP-SUP-8801)',
+      is_e2ee: 0,
+      last_message_text: 'Your payment of ₱35,000 has been secured in BSP-compliant trust custody with UnionBank BaaS.',
+      last_message_sender_id: 'STF-105',
+      last_message_at: new Date(t0 - 1000 * 60 * 90).toISOString(),
+      messages: [
+        {
+          id: 'MSG-003-1',
+          sender_id: 'USR-CUST-1001',
+          sender_name: 'Maria Clara De Los Santos',
+          sender_role: 'customer',
+          recipient_id: 'STF-105',
+          message_text: 'Hello Support, how does the 7-day deliverable inspection countdown work for escrow fund disbursement on contract ENG-902?',
+          is_e2ee: 0,
+          encrypted_payload: null,
+          attachments: null,
+          quote_reply_to: null,
+          quote_preview: null,
+          created_at: new Date(t0 - 1000 * 60 * 120).toISOString()
+        },
+        {
+          id: 'MSG-003-2',
+          sender_id: 'STF-105',
+          sender_name: 'Ben Torres (Support Staff)',
+          sender_role: 'staff',
+          recipient_id: 'USR-CUST-1001',
+          message_text: 'Hi Maria! Your payment of ₱35,000 has been secured in BSP-compliant trust custody with UnionBank BaaS. You have 7 days to review deliverables before funds auto-disburse, or you can approve release immediately.',
+          is_e2ee: 0,
+          encrypted_payload: null,
+          attachments: null,
+          quote_reply_to: null,
+          quote_preview: null,
+          created_at: new Date(t0 - 1000 * 60 * 90).toISOString()
+        }
+      ]
+    }
+  ];
+
+  for (const c of sampleConvs) {
+    executeRun(
+      `INSERT OR REPLACE INTO chat_conversations (
+        id, conversation_type, participant_a_id, participant_a_name, participant_a_role,
+        participant_b_id, participant_b_name, participant_b_role, contract_id, ticket_id,
+        title, is_e2ee, status, last_message_text, last_message_sender_id, last_message_at,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
+      [
+        c.id, c.conversation_type, c.participant_a_id, c.participant_a_name, c.participant_a_role,
+        c.participant_b_id, c.participant_b_name, c.participant_b_role, c.contract_id, c.ticket_id,
+        c.title, c.is_e2ee, c.last_message_text, c.last_message_sender_id, c.last_message_at,
+        now, now
+      ]
+    );
+
+    if (c.messages && c.messages.length > 0) {
+      for (const m of c.messages) {
+        executeRun(
+          `INSERT OR REPLACE INTO chat_messages (
+            id, conversation_id, sender_id, sender_name, sender_role, recipient_id,
+            message_text, is_e2ee, encrypted_payload, attachments, quote_reply_to,
+            quote_preview, status, is_edited, is_deleted, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'read', 0, 0, ?, ?)`,
+          [
+            m.id, c.id, m.sender_id, m.sender_name, m.sender_role, m.recipient_id,
+            m.message_text, m.is_e2ee, m.encrypted_payload, m.attachments,
+            m.quote_reply_to, m.quote_preview, m.created_at, m.created_at
+          ]
+        );
+      }
+    }
+  }
+}
+
 export function getSupportTickets(filters = {}) {
   let sql = 'SELECT * FROM support_tickets WHERE 1=1';
   const params = [];
@@ -4028,5 +4481,389 @@ export function updateSupportTicket(id, { status, priority, category, assigned_s
 
   return getSupportTicketById(ticket.id);
 }
+
+/* ==========================================================================
+   E2EE CRYPTOGRAPHIC KEY REGISTRY & EXCHANGE
+   ========================================================================== */
+export function getUserE2EEKey(userIdOrEmail) {
+  return queryOne(
+    `SELECT * FROM user_e2ee_keys WHERE user_id = ? OR user_email = ?`,
+    [userIdOrEmail, userIdOrEmail]
+  );
+}
+
+export function upsertUserE2EEKey({ user_id, user_email, public_key, ecdh_public_key = null, key_fingerprint }) {
+  const existing = queryOne(`SELECT id FROM user_e2ee_keys WHERE user_id = ?`, [user_id]);
+  const now = new Date().toISOString();
+  if (existing) {
+    executeRun(
+      `UPDATE user_e2ee_keys SET public_key = ?, ecdh_public_key = ?, key_fingerprint = ?, updated_at = ? WHERE user_id = ?`,
+      [public_key, ecdh_public_key, key_fingerprint, now, user_id]
+    );
+    return queryOne(`SELECT * FROM user_e2ee_keys WHERE user_id = ?`, [user_id]);
+  } else {
+    const id = `KEY-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+    executeRun(
+      `INSERT INTO user_e2ee_keys (id, user_id, user_email, public_key, ecdh_public_key, key_fingerprint, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, user_id, user_email, public_key, ecdh_public_key, key_fingerprint, now, now]
+    );
+    return queryOne(`SELECT * FROM user_e2ee_keys WHERE id = ?`, [id]);
+  }
+}
+
+export function getConversationKeys(conversationId, userId = null) {
+  if (userId) {
+    return queryAll(`SELECT * FROM chat_conversation_keys WHERE conversation_id = ? AND user_id = ?`, [conversationId, userId]);
+  }
+  return queryAll(`SELECT * FROM chat_conversation_keys WHERE conversation_id = ?`, [conversationId]);
+}
+
+export function upsertConversationKey({ conversation_id, user_id, wrapped_key, algorithm = 'RSA-OAEP-256' }) {
+  const existing = queryOne(
+    `SELECT id FROM chat_conversation_keys WHERE conversation_id = ? AND user_id = ?`,
+    [conversation_id, user_id]
+  );
+  const now = new Date().toISOString();
+  if (existing) {
+    executeRun(
+      `UPDATE chat_conversation_keys SET wrapped_key = ?, algorithm = ? WHERE id = ?`,
+      [wrapped_key, algorithm, existing.id]
+    );
+    return queryOne(`SELECT * FROM chat_conversation_keys WHERE id = ?`, [existing.id]);
+  } else {
+    const id = `CK-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+    executeRun(
+      `INSERT INTO chat_conversation_keys (id, conversation_id, user_id, wrapped_key, algorithm, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, conversation_id, user_id, wrapped_key, algorithm, now]
+    );
+    return queryOne(`SELECT * FROM chat_conversation_keys WHERE id = ?`, [id]);
+  }
+}
+
+/* ==========================================================================
+   UNIVERSAL CHAT & CONVERSATION THREADS
+   ========================================================================== */
+export function getConversationsForUser(userIdOrEmail, role = null, typeFilter = null) {
+  if (!userIdOrEmail) {
+    return [];
+  }
+
+  let sql;
+  let params = [];
+
+  // For Admin or Staff: can view all threads or support threads if requested
+  if (role === 'admin' || role === 'staff') {
+    if (userIdOrEmail === 'ALL' || userIdOrEmail === 'all') {
+      sql = `
+        SELECT c.*,
+          (SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id = c.id AND m.status != 'read' AND m.sender_id != 'staff') as unread_count
+        FROM chat_conversations c
+        WHERE 1=1
+      `;
+    } else {
+      sql = `
+        SELECT c.*,
+          (SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id = c.id AND m.status != 'read' AND m.sender_id != ?) as unread_count
+        FROM chat_conversations c
+        WHERE (c.participant_a_id = ? OR c.participant_b_id = ? OR c.participant_a_role = 'staff' OR c.participant_b_role = 'staff' OR c.conversation_type = 'support')
+      `;
+      params = [userIdOrEmail, userIdOrEmail, userIdOrEmail];
+    }
+  } else {
+    // STRICT ISOLATION FOR CUSTOMERS / FREELANCERS / BUSINESS OWNERS:
+    // Only return threads where the user is an explicit participant (participant_a_id or participant_b_id)
+    sql = `
+      SELECT c.*,
+        (SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id = c.id AND m.status != 'read' AND m.sender_id != ?) as unread_count
+      FROM chat_conversations c
+      WHERE (c.participant_a_id = ? OR c.participant_b_id = ?)
+    `;
+    params = [userIdOrEmail, userIdOrEmail, userIdOrEmail];
+  }
+
+  if (typeFilter && typeFilter !== 'all') {
+    sql += ` AND c.conversation_type = ?`;
+    params.push(typeFilter);
+  }
+
+  sql += ` ORDER BY c.last_message_at DESC`;
+  const list = queryAll(sql, params);
+  
+  return list.map(conv => {
+    let contractMeta = null;
+    let ticketMeta = null;
+    if (conv.contract_id) {
+      contractMeta = queryOne(`SELECT * FROM freelancer_engagements WHERE id = ?`, [conv.contract_id]);
+      if (contractMeta) {
+        const milestones = queryAll(`SELECT * FROM freelancer_milestones WHERE engagement_id = ? ORDER BY created_at ASC`, [conv.contract_id]);
+        const escrowLogs = queryAll(`SELECT * FROM escrow_partner_logs WHERE transaction_id = ? OR milestone_id IN (SELECT id FROM freelancer_milestones WHERE engagement_id = ?)`, [contractMeta.id, contractMeta.id]);
+        contractMeta.milestones = milestones;
+        contractMeta.escrow_logs = escrowLogs;
+      }
+    }
+    if (conv.ticket_id) {
+      ticketMeta = queryOne(`SELECT * FROM support_tickets WHERE id = ? OR ticket_number = ?`, [conv.ticket_id, conv.ticket_id]);
+    }
+    return {
+      ...conv,
+      thread_id: conv.id,
+      participants: [conv.participant_a_id, conv.participant_b_id],
+      contract_meta: contractMeta,
+      ticket_meta: ticketMeta
+    };
+  });
+}
+
+export function getConversationById(convId) {
+  const conv = queryOne(`SELECT * FROM chat_conversations WHERE id = ?`, [convId]);
+  if (!conv) return null;
+  let contractMeta = null;
+  let ticketMeta = null;
+  if (conv.contract_id) {
+    contractMeta = queryOne(`SELECT * FROM freelancer_engagements WHERE id = ?`, [conv.contract_id]);
+    if (contractMeta) {
+      contractMeta.milestones = queryAll(`SELECT * FROM freelancer_milestones WHERE engagement_id = ? ORDER BY created_at ASC`, [conv.contract_id]);
+      contractMeta.escrow_logs = queryAll(`SELECT * FROM escrow_partner_logs WHERE transaction_id = ?`, [contractMeta.id]);
+    }
+  }
+  if (conv.ticket_id) {
+    ticketMeta = queryOne(`SELECT * FROM support_tickets WHERE id = ? OR ticket_number = ?`, [conv.ticket_id, conv.ticket_id]);
+  }
+  return {
+    ...conv,
+    thread_id: conv.id,
+    participants: [conv.participant_a_id, conv.participant_b_id],
+    contract_meta: contractMeta,
+    ticket_meta: ticketMeta
+  };
+}
+
+export function createConversation({
+  id = null,
+  conversation_type = 'direct',
+  participant_a_id,
+  participant_a_name,
+  participant_a_role = 'customer',
+  participant_b_id,
+  participant_b_name,
+  participant_b_role = 'freelancer',
+  contract_id = null,
+  ticket_id = null,
+  title = 'Direct Conversation',
+  is_e2ee = 0
+}) {
+  const convId = id || `CONV-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+  const now = new Date().toISOString();
+  
+  executeRun(
+    `INSERT INTO chat_conversations (
+      id, conversation_type, participant_a_id, participant_a_name, participant_a_role,
+      participant_b_id, participant_b_name, participant_b_role, contract_id, ticket_id,
+      title, is_e2ee, status, last_message_text, last_message_sender_id, last_message_at,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
+    [
+      convId, conversation_type, participant_a_id, participant_a_name, participant_a_role,
+      participant_b_id, participant_b_name, participant_b_role, contract_id, ticket_id,
+      title, is_e2ee ? 1 : 0, 'Conversation started', participant_a_id, now, now, now
+    ]
+  );
+
+  return getConversationById(convId);
+}
+
+export function getConversationMessages(conversationId, limit = 100) {
+  const msgs = queryAll(
+    `SELECT * FROM chat_messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT ?`,
+    [conversationId, limit]
+  );
+  return msgs.map(m => {
+    let attachments = [];
+    let quote_preview = null;
+    let encrypted_payload = null;
+    try { if (m.attachments) attachments = JSON.parse(m.attachments); } catch(e) {}
+    try { if (m.quote_preview) quote_preview = JSON.parse(m.quote_preview); } catch(e) {}
+    try { if (m.encrypted_payload) encrypted_payload = JSON.parse(m.encrypted_payload); } catch(e) {}
+    return {
+      ...m,
+      thread_id: m.conversation_id,
+      attachments,
+      quote_preview,
+      encrypted_payload
+    };
+  });
+}
+
+export function addChatMessage({
+  id = null,
+  conversation_id,
+  sender_id,
+  sender_name,
+  sender_role = 'customer',
+  recipient_id,
+  message_text = null,
+  is_e2ee = 0,
+  encrypted_payload = null,
+  attachments = null,
+  quote_reply_to = null,
+  quote_preview = null
+}) {
+  const msgId = id || `MSG-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+  const now = new Date().toISOString();
+
+  const attachmentsStr = attachments ? (typeof attachments === 'string' ? attachments : JSON.stringify(attachments)) : null;
+  const quotePreviewStr = quote_preview ? (typeof quote_preview === 'string' ? quote_preview : JSON.stringify(quote_preview)) : null;
+  const encryptedPayloadStr = encrypted_payload ? (typeof encrypted_payload === 'string' ? encrypted_payload : JSON.stringify(encrypted_payload)) : null;
+
+  executeRun(
+    `INSERT INTO chat_messages (
+      id, conversation_id, sender_id, sender_name, sender_role, recipient_id,
+      message_text, is_e2ee, encrypted_payload, attachments, quote_reply_to,
+      quote_preview, status, is_edited, is_deleted, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', 0, 0, ?, ?)`,
+    [
+      msgId, conversation_id, sender_id, sender_name, sender_role, recipient_id,
+      is_e2ee ? null : message_text, is_e2ee ? 1 : 0, encryptedPayloadStr, attachmentsStr,
+      quote_reply_to, quotePreviewStr, now, now
+    ]
+  );
+
+  const displaySnippet = is_e2ee ? '🔒 [End-to-End Encrypted Message]' : (message_text || (attachmentsStr ? '📎 Sent an attachment' : 'New message'));
+
+  executeRun(
+    `UPDATE chat_conversations SET last_message_text = ?, last_message_sender_id = ?, last_message_at = ?, updated_at = ? WHERE id = ?`,
+    [displaySnippet, sender_id, now, now, conversation_id]
+  );
+
+  const inserted = queryOne(`SELECT * FROM chat_messages WHERE id = ?`, [msgId]);
+  let parsedAtt = [];
+  let parsedQuote = null;
+  let parsedEnc = null;
+  try { if (inserted.attachments) parsedAtt = JSON.parse(inserted.attachments); } catch(e) {}
+  try { if (inserted.quote_preview) parsedQuote = JSON.parse(inserted.quote_preview); } catch(e) {}
+  try { if (inserted.encrypted_payload) parsedEnc = JSON.parse(inserted.encrypted_payload); } catch(e) {}
+
+  return {
+    ...inserted,
+    attachments: parsedAtt,
+    quote_preview: parsedQuote,
+    encrypted_payload: parsedEnc
+  };
+}
+
+export function updateChatMessage(messageId, { message_text, is_edited = 1, is_deleted = 0, encrypted_payload = null }) {
+  const existing = queryOne(`SELECT * FROM chat_messages WHERE id = ?`, [messageId]);
+  if (!existing) throw new Error('Message not found');
+
+  const now = new Date().toISOString();
+  const nextEncStr = encrypted_payload ? (typeof encrypted_payload === 'string' ? encrypted_payload : JSON.stringify(encrypted_payload)) : existing.encrypted_payload;
+
+  executeRun(
+    `UPDATE chat_messages SET
+      message_text = ?,
+      is_edited = ?,
+      is_deleted = ?,
+      encrypted_payload = ?,
+      updated_at = ?
+     WHERE id = ?`,
+    [is_deleted ? 'This message was deleted' : (existing.is_e2ee ? null : (message_text || existing.message_text)), is_deleted ? 0 : is_edited, is_deleted ? 1 : 0, nextEncStr, now, messageId]
+  );
+
+  const updated = queryOne(`SELECT * FROM chat_messages WHERE id = ?`, [messageId]);
+  let parsedAtt = [];
+  let parsedQuote = null;
+  let parsedEnc = null;
+  try { if (updated.attachments) parsedAtt = JSON.parse(updated.attachments); } catch(e) {}
+  try { if (updated.quote_preview) parsedQuote = JSON.parse(updated.quote_preview); } catch(e) {}
+  try { if (updated.encrypted_payload) parsedEnc = JSON.parse(updated.encrypted_payload); } catch(e) {}
+
+  return {
+    ...updated,
+    attachments: parsedAtt,
+    quote_preview: parsedQuote,
+    encrypted_payload: parsedEnc
+  };
+}
+
+export function markConversationRead(conversationId, readerId) {
+  const now = new Date().toISOString();
+  executeRun(
+    `UPDATE chat_messages SET status = 'read', read_at = ? WHERE conversation_id = ? AND sender_id != ? AND status != 'read'`,
+    [now, conversationId, readerId]
+  );
+  return { success: true };
+}
+
+/* ==========================================================================
+   PRESENCE & TYPING INDICATORS
+   ========================================================================== */
+export function updateUserPresence(userId, status = 'online', isTypingIn = null) {
+  const existing = queryOne(`SELECT user_id FROM chat_presence WHERE user_id = ?`, [userId]);
+  const now = new Date().toISOString();
+  if (existing) {
+    executeRun(
+      `UPDATE chat_presence SET status = ?, is_typing_in = ?, last_seen_at = ?, updated_at = ? WHERE user_id = ?`,
+      [status, isTypingIn, now, now, userId]
+    );
+  } else {
+    executeRun(
+      `INSERT INTO chat_presence (user_id, status, is_typing_in, last_seen_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      [userId, status, isTypingIn, now, now]
+    );
+  }
+  return queryOne(`SELECT * FROM chat_presence WHERE user_id = ?`, [userId]);
+}
+
+export function getAllUserPresences() {
+  return queryAll(`SELECT * FROM chat_presence`);
+}
+
+export function getUserPresence(userId) {
+  const p = queryOne(`SELECT * FROM chat_presence WHERE user_id = ?`, [userId]);
+  return p || { user_id: userId, status: 'online', is_typing_in: null, last_seen_at: new Date().toISOString() };
+}
+
+/* ==========================================================================
+   ATTACHMENTS & EMAIL FALLBACK NOTIFICATIONS
+   ========================================================================== */
+export function saveChatAttachment({ id = null, conversation_id, message_id = null, uploader_id, file_name, file_size, mime_type, file_data }) {
+  const attId = id || `ATT-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+  const now = new Date().toISOString();
+  executeRun(
+    `INSERT INTO chat_attachments (id, conversation_id, message_id, uploader_id, file_name, file_size, mime_type, file_data, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [attId, conversation_id, message_id, uploader_id, file_name, file_size, mime_type, file_data, now]
+  );
+  return queryOne(`SELECT * FROM chat_attachments WHERE id = ?`, [attId]);
+}
+
+export function getChatAttachment(id) {
+  return queryOne(`SELECT * FROM chat_attachments WHERE id = ?`, [id]);
+}
+
+export function logEmailFallbackNotification({
+  recipient_email,
+  recipient_name,
+  sender_name,
+  conversation_id,
+  preview_snippet,
+  direct_link
+}) {
+  const id = `NOTIF-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+  const now = new Date().toISOString();
+  executeRun(
+    `INSERT INTO chat_email_notifications (id, recipient_email, recipient_name, sender_name, conversation_id, preview_snippet, direct_link, status, sent_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'dispatched', ?)`,
+    [id, recipient_email, recipient_name, sender_name, conversation_id, preview_snippet, direct_link, now]
+  );
+  return queryOne(`SELECT * FROM chat_email_notifications WHERE id = ?`, [id]);
+}
+
+export function getDispatchedEmailNotifications(limit = 20) {
+  return queryAll(`SELECT * FROM chat_email_notifications ORDER BY sent_at DESC LIMIT ?`, [limit]);
+}
+
 
 
