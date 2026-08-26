@@ -16,5 +16,11 @@
     "sql.js": "^1.14.1",
     "ws": "^8.21.3",
     "xlsx": "^0.18.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@google/genai",
+      "protobufjs"
+    ]
   }
 }
