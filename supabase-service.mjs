@@ -8,9 +8,15 @@ const DEFAULT_PROJECT_ID = 'wfsvxzgzdefyuwhuotzq';
 let supabaseClient = null;
 
 export function getSupabaseConfig() {
-  const url = (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/rest\/v1\/?$/, '').trim();
-  const anonKey = (process.env.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
-  const projectId = process.env.SUPABASE_PROJECT_ID || DEFAULT_PROJECT_ID;
+  let rawUrl = (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
+  if (rawUrl && !rawUrl.includes('.') && !rawUrl.includes('/')) {
+    rawUrl = `https://${rawUrl}.supabase.co`;
+  } else if (rawUrl && !/^https?:\/\//i.test(rawUrl)) {
+    rawUrl = `https://${rawUrl}`;
+  }
+  const url = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '').trim();
+  const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
+  const projectId = process.env.SUPABASE_PROJECT_ID || (url.includes('.supabase.co') ? url.replace(/^https?:\/\//, '').split('.')[0] : DEFAULT_PROJECT_ID);
 
   return {
     url,

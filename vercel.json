@@ -6,9 +6,6 @@
       "use": "@vercel/node",
       "config": {
         "includeFiles": [
-          "sql-wasm.wasm",
-          "node_modules/sql.js/dist/sql-wasm.wasm",
-          "veripinoy.db",
           "index.html",
           "e2ee-crypto.js",
           "ai-moderation-service.mjs",

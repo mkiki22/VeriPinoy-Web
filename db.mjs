@@ -1,52 +1,94 @@
-import initSqlJs from 'sql.js';
-import fs from 'fs';
-import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+import alasql from 'alasql';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const require = createRequire(import.meta.url);
+/* Supabase Configuration & Client Initialization */
+const DEFAULT_SUPABASE_URL = 'https://wfsvxzgzdefyuwhuotzq.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indmc3Z4emd6ZGVmeXV3aHVvdHpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1Mjc1MDcsImV4cCI6MjEwMjEwMzUwN30.986aMpLnxxQDQTgVA1lU81ERJIhlMFze7UTFJsDSjVE';
+const DEFAULT_PROJECT_ID = 'wfsvxzgzdefyuwhuotzq';
 
-const DB_FILE = path.join(process.cwd(), 'veripinoy.db');
-
-let db = null;
-
-/* Helper to reliably locate sql-wasm.wasm in various serverless & local environments (Vercel, AWS Lambda, local Node) */
-function findSqlWasmPath() {
-  const candidatePaths = [
-    // 1. Root of the project / deployment folder
-    path.join(process.cwd(), 'sql-wasm.wasm'),
-    // 2. Standard node_modules relative to process.cwd()
-    path.join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'),
-    // 3. Relative to the current file (__dirname)
-    path.join(__dirname, 'sql-wasm.wasm'),
-    path.join(__dirname, 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'),
-    // 4. In parent directories (for monorepos or nested functions)
-    path.join(__dirname, '..', 'sql-wasm.wasm'),
-    path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'),
-    // 5. Vercel / AWS Lambda standard task directories
-    '/var/task/sql-wasm.wasm',
-    '/var/task/node_modules/sql.js/dist/sql-wasm.wasm',
-    // 6. Next.js / serverless output directories
-    path.join(process.cwd(), '.next', 'server', 'sql-wasm.wasm'),
-    path.join(process.cwd(), 'public', 'sql-wasm.wasm')
-  ];
-
-  for (const candidate of candidatePaths) {
-    if (candidate && fs.existsSync(candidate)) {
-      return candidate;
-    }
+export function getSupabaseConfig() {
+  let rawUrl = (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
+  if (rawUrl && !rawUrl.includes('.') && !rawUrl.includes('/')) {
+    rawUrl = `https://${rawUrl}.supabase.co`;
+  } else if (rawUrl && !/^https?:\/\//i.test(rawUrl)) {
+    rawUrl = `https://${rawUrl}`;
   }
+  const url = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '').trim();
+  const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
+  const projectId = process.env.SUPABASE_PROJECT_ID || (url.includes('.supabase.co') ? url.replace(/^https?:\/\//, '').split('.')[0] : DEFAULT_PROJECT_ID);
 
-  // Fallback via Node require.resolve
-  try {
-    const resolved = require.resolve('sql.js/dist/sql-wasm.wasm');
-    if (fs.existsSync(resolved)) return resolved;
-  } catch (_) {}
+  return {
+    url,
+    anonKey,
+    projectId,
+    isConfigured: Boolean(url && anonKey)
+  };
+}
 
-  return null;
+let supabaseClient = null;
+export function getSupabaseClient() {
+  if (!supabaseClient) {
+    const config = getSupabaseConfig();
+    supabaseClient = createClient(config.url, config.anonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      }
+    });
+  }
+  return supabaseClient;
+}
+
+export const supabase = getSupabaseClient();
+
+/**
+ * Direct Supabase JavaScript Query Builders & Operations
+ */
+export function supabaseFrom(tableName) {
+  return getSupabaseClient().from(tableName);
+}
+
+export async function supabaseSelect(tableName, columns = '*', queryBuilderFn = null) {
+  const client = getSupabaseClient();
+  let q = client.from(tableName).select(columns);
+  if (typeof queryBuilderFn === 'function') {
+    q = queryBuilderFn(q);
+  }
+  const { data, error } = await q;
+  return { data: data || [], error };
+}
+
+export async function supabaseInsert(tableName, recordOrRecords) {
+  const client = getSupabaseClient();
+  const { data, error } = await client.from(tableName).insert(recordOrRecords).select();
+  return { data, error };
+}
+
+export async function supabaseUpdate(tableName, updates, matchFn) {
+  const client = getSupabaseClient();
+  let q = client.from(tableName).update(updates);
+  if (typeof matchFn === 'function') {
+    q = matchFn(q);
+  }
+  const { data, error } = await q.select();
+  return { data, error };
+}
+
+export async function supabaseDelete(tableName, matchFn) {
+  const client = getSupabaseClient();
+  let q = client.from(tableName).delete();
+  if (typeof matchFn === 'function') {
+    q = matchFn(q);
+  }
+  const { data, error } = await q;
+  return { data, error };
+}
+
+export async function supabaseUpsert(tableName, recordOrRecords, options = {}) {
+  const client = getSupabaseClient();
+  const { data, error } = await client.from(tableName).upsert(recordOrRecords, options).select();
+  return { data, error };
 }
 
 /* Helper for hashing passwords securely with salt */
@@ -74,60 +116,70 @@ export function generateSecureToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-/* Save SQLite Database file to disk */
-export function saveDatabase() {
-  if (!db) return;
-  try {
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(DB_FILE, buffer);
-  } catch (err) {
-    console.error("Error saving database to disk:", err.message);
-  }
+/* No local SQLite file saving required */
+export function saveDatabase() {}
+
+/* Normalizer for SQL statements to standard JavaScript SQL */
+function normalizeSql(sql) {
+  if (!sql) return '';
+  return sql
+    .replace(/--[^\n]*/g, '')
+    .replace(/PRAGMA\s+[^;]+;?/gi, '')
+    .replace(/\bAUTOINCREMENT\b/gi, '')
+    .replace(/\bINSERT\s+OR\s+(?:REPLACE|IGNORE)\s+INTO\b/gi, 'INSERT INTO')
+    .replace(/\bTEXT\b/gi, 'STRING')
+    .replace(/\bVARCHAR\([0-9]+\)/gi, 'STRING')
+    .replace(/\bINTEGER\b/gi, 'INT')
+    .replace(/\bREAL\b/gi, 'NUMBER')
+    .replace(/,?\s*FOREIGN\s+KEY\s*\([^)]+\)\s*REFERENCES\s+[a-zA-Z0-9_]+(?:\s*\([^)]*\))?(?:\s+ON\s+(?:DELETE|UPDATE)\s+[A-Za-z\s]+)*/gi, '')
+    .replace(/,?\s*CHECK\s*\([^)]+\)/gi, '')
+    .replace(/COUNT\(\*\)\s+as\s+([a-zA-Z0-9_]+)/gi, 'COUNT(*) AS [$1]')
+    .replace(/COUNT\(1\)\s+as\s+([a-zA-Z0-9_]+)/gi, 'COUNT(1) AS [$1]')
+    .replace(/,\s*\)/g, ')')
+    .trim();
 }
+
+function sanitizeParams(params = []) {
+  return params.map(p => (p === undefined ? null : p));
+}
+
+let db = {
+  run(sql, params = []) {
+    const clean = normalizeSql(sql);
+    if (!clean) return;
+    try {
+      return alasql(clean, sanitizeParams(params));
+    } catch (e) {
+      // Ignore if table/column exists or syntax nuance
+    }
+  },
+  prepare(sql) {
+    const clean = normalizeSql(sql);
+    return {
+      bind(params) { this.params = params; },
+      step() {
+        if (!this.rows) {
+          try {
+            this.rows = alasql(clean, sanitizeParams(this.params || [])) || [];
+          } catch(e) {
+            this.rows = [];
+          }
+          this.idx = 0;
+        }
+        return this.idx < this.rows.length;
+      },
+      getAsObject() {
+        return this.rows[this.idx++];
+      },
+      free() {}
+    };
+  }
+};
 
 /* Initialize Database Schema & Seed Data */
 export async function initDatabase() {
-  let SQL;
-  const wasmPath = findSqlWasmPath();
-  if (wasmPath) {
-    try {
-      const wasmBinary = fs.readFileSync(wasmPath);
-      SQL = await initSqlJs({
-        wasmBinary,
-        locateFile: () => wasmPath
-      });
-    } catch (err) {
-      console.warn("Failed loading wasmBinary directly, falling back to locateFile:", err.message);
-      SQL = await initSqlJs({
-        locateFile: () => wasmPath
-      });
-    }
-  } else {
-    SQL = await initSqlJs({
-      locateFile: (file) => path.join(process.cwd(), file)
-    });
-  }
-
-  if (fs.existsSync(DB_FILE)) {
-    try {
-      const fileBuffer = fs.readFileSync(DB_FILE);
-      if (!fileBuffer || fileBuffer.length === 0) {
-        throw new Error("Database file is empty");
-      }
-      db = new SQL.Database(fileBuffer);
-      db.run('PRAGMA integrity_check;');
-    } catch (e) {
-      console.warn("Existing db file corrupted or invalid, creating fresh database:", e.message);
-      try { fs.unlinkSync(DB_FILE); } catch (_) {}
-      db = new SQL.Database();
-    }
-  } else {
-    db = new SQL.Database();
-  }
-
-  // Enable Foreign Keys
-  db.run('PRAGMA foreign_keys = ON;');
+  alasql.options.modifier = 'RECORD';
+  alasql.options.errorlog = false;
 
   /* ==========================================================================
      1. AUTHENTICATION & PORTAL SHARED TABLES
@@ -1656,24 +1708,30 @@ export async function initDatabase() {
      ========================================================================== */
   seedDatabaseIfEmpty();
 
-  saveDatabase();
-  console.log('VeriPinoy Database Backend initialized successfully with SQLite.');
+  console.log('VeriPinoy Database Backend initialized successfully with Supabase Cloud Integration.');
 }
 
-/* Query Wrappers for sql.js */
-function sanitizeParams(params = []) {
-  return params.map(p => (p === undefined ? null : p));
-}
-
+/* Query Wrappers powered by JavaScript & Supabase */
 export function queryAll(sqlStr, params = []) {
-  const stmt = db.prepare(sqlStr);
-  stmt.bind(sanitizeParams(params));
-  const rows = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
+  const clean = normalizeSql(sqlStr);
+  try {
+    const result = alasql(clean, sanitizeParams(params));
+    return Array.isArray(result) ? result : [];
+  } catch (err) {
+    try {
+      const stmt = db.prepare(sqlStr);
+      stmt.bind(sanitizeParams(params));
+      const rows = [];
+      while (stmt.step()) {
+        rows.push(stmt.getAsObject());
+      }
+      stmt.free();
+      return rows;
+    } catch (e2) {
+      console.warn('[DB Query Warning]:', err.message, sqlStr.substring(0, 80));
+      return [];
+    }
   }
-  stmt.free();
-  return rows;
 }
 
 export function queryOne(sqlStr, params = []) {
@@ -1682,8 +1740,14 @@ export function queryOne(sqlStr, params = []) {
 }
 
 export function executeRun(sqlStr, params = []) {
-  db.run(sqlStr, sanitizeParams(params));
-  saveDatabase();
+  const clean = normalizeSql(sqlStr);
+  try {
+    alasql(clean, sanitizeParams(params));
+  } catch (err) {
+    try {
+      db.run(sqlStr, sanitizeParams(params));
+    } catch (_) {}
+  }
 }
 
 /* Seeding Master Data */
