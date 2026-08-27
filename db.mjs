@@ -2,10 +2,52 @@ import initSqlJs from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 
 const DB_FILE = path.join(process.cwd(), 'veripinoy.db');
 
 let db = null;
+
+/* Helper to reliably locate sql-wasm.wasm in various serverless & local environments (Vercel, AWS Lambda, local Node) */
+function findSqlWasmPath() {
+  const candidatePaths = [
+    // 1. Root of the project / deployment folder
+    path.join(process.cwd(), 'sql-wasm.wasm'),
+    // 2. Standard node_modules relative to process.cwd()
+    path.join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'),
+    // 3. Relative to the current file (__dirname)
+    path.join(__dirname, 'sql-wasm.wasm'),
+    path.join(__dirname, 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'),
+    // 4. In parent directories (for monorepos or nested functions)
+    path.join(__dirname, '..', 'sql-wasm.wasm'),
+    path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'),
+    // 5. Vercel / AWS Lambda standard task directories
+    '/var/task/sql-wasm.wasm',
+    '/var/task/node_modules/sql.js/dist/sql-wasm.wasm',
+    // 6. Next.js / serverless output directories
+    path.join(process.cwd(), '.next', 'server', 'sql-wasm.wasm'),
+    path.join(process.cwd(), 'public', 'sql-wasm.wasm')
+  ];
+
+  for (const candidate of candidatePaths) {
+    if (candidate && fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Fallback via Node require.resolve
+  try {
+    const resolved = require.resolve('sql.js/dist/sql-wasm.wasm');
+    if (fs.existsSync(resolved)) return resolved;
+  } catch (_) {}
+
+  return null;
+}
 
 /* Helper for hashing passwords securely with salt */
 export function hashPassword(password, salt = null) {
@@ -46,7 +88,26 @@ export function saveDatabase() {
 
 /* Initialize Database Schema & Seed Data */
 export async function initDatabase() {
-  const SQL = await initSqlJs();
+  let SQL;
+  const wasmPath = findSqlWasmPath();
+  if (wasmPath) {
+    try {
+      const wasmBinary = fs.readFileSync(wasmPath);
+      SQL = await initSqlJs({
+        wasmBinary,
+        locateFile: () => wasmPath
+      });
+    } catch (err) {
+      console.warn("Failed loading wasmBinary directly, falling back to locateFile:", err.message);
+      SQL = await initSqlJs({
+        locateFile: () => wasmPath
+      });
+    }
+  } else {
+    SQL = await initSqlJs({
+      locateFile: (file) => path.join(process.cwd(), file)
+    });
+  }
 
   if (fs.existsSync(DB_FILE)) {
     try {

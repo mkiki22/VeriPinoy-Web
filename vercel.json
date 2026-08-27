@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.mjs",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "sql-wasm.wasm",
+          "node_modules/sql.js/dist/sql-wasm.wasm",
+          "veripinoy.db",
+          "index.html",
+          "e2ee-crypto.js",
+          "ai-moderation-service.mjs",
+          "chat-ws-server.mjs",
+          "db.mjs",
+          "escrow-service.mjs",
+          "payment-service.mjs",
+          "security-service.mjs",
+          "staff-workspace-service.mjs",
+          "supabase-service.mjs"
+        ]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "server.mjs"
+    }
+  ]
+}

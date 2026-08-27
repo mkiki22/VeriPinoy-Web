@@ -1,6 +1,6 @@
 {
   "name": "VeriPinoy",
-  "description": "Philippine trust and verification registry featuring AI-powered fake customer review detection, real-time moderation queue, Gemini 3.7 forensic assistant, verified merchants, freelancer contracts, and immutable audit logs.",
+  "description": "Philippine trust and verification registry with Supabase PostgreSQL cloud backend integration, AI-powered fake review detection, real-time moderation queue, Gemini 3.7 forensic assistant, verified merchants, freelancer escrow contracts, and immutable audit logs.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

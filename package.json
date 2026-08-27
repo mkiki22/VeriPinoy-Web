@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "build": "echo 'Static app ready'",
+    "build": "node -e \"const fs=require('fs'),path=require('path'); const src=path.join('node_modules/sql.js/dist/sql-wasm.wasm'); if(fs.existsSync(src) && !fs.existsSync('sql-wasm.wasm')) fs.copyFileSync(src, 'sql-wasm.wasm');\" && echo 'Build ready'",
     "lint": "echo 'No lint errors'"
   },
   "dependencies": {
     "@google/genai": "^2.18.0",
+    "@supabase/supabase-js": "^2.112.4",
     "express": "^4.19.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",

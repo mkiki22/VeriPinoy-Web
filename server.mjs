@@ -44,6 +44,14 @@ import { EscrowProviderManager, EscrowState, EscrowDotComDriver, PartnerBankDriv
 import * as StaffWorkspace from './staff-workspace-service.mjs';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
+import {
+  getSupabaseConfig,
+  getSupabaseClient,
+  testSupabaseConnection,
+  mirrorToSupabase,
+  syncDatabaseToSupabase,
+  getSupabaseSchemaDDL
+} from './supabase-service.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -7514,6 +7522,103 @@ app.post('/api/chat/notifications/email-fallback', (req, res) => {
     return res.json({ success: true, notification: notif });
   } catch (err) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+/* ==========================================================================
+   SUPABASE CLOUD DATABASE INTEGRATION & DATA SYNC API
+   ========================================================================== */
+
+// Get Supabase Status & Connection Diagnostic
+app.get('/api/supabase/status', async (req, res) => {
+  try {
+    const config = getSupabaseConfig();
+    const test = await testSupabaseConnection();
+    return res.json({
+      success: true,
+      configured: config.isConfigured,
+      project_id: config.projectId,
+      url: config.url,
+      ...test
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Run Active Live Diagnostic Test Against Supabase
+app.post('/api/supabase/test', async (req, res) => {
+  try {
+    const result = await testSupabaseConnection();
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get PostgreSQL DDL Schema for Supabase SQL Editor
+app.get('/api/supabase/schema', (req, res) => {
+  try {
+    const ddl = getSupabaseSchemaDDL();
+    return res.json({ success: true, ddl });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// One-Click Synchronize Local Database to Supabase Cloud
+app.post('/api/supabase/sync', async (req, res) => {
+  try {
+    const syncResults = await syncDatabaseToSupabase(async (key) => {
+      switch (key) {
+        case 'merchants':
+          return queryAll('SELECT * FROM merchants');
+        case 'reviews':
+          return queryAll('SELECT * FROM reviews');
+        case 'tickets':
+          return queryAll('SELECT * FROM support_tickets');
+        case 'conversations':
+          return queryAll('SELECT * FROM chat_conversations');
+        case 'messages':
+          return queryAll('SELECT * FROM chat_messages');
+        case 'escrow':
+          return queryAll('SELECT * FROM escrow_transactions');
+        case 'audit_logs':
+          return queryAll('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 500');
+        default:
+          return [];
+      }
+    });
+
+    return res.json({
+      success: true,
+      synced_at: new Date().toISOString(),
+      results: syncResults
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Query Supabase Table Directly via Backend Proxy
+app.get('/api/supabase/table/:tableName', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const client = getSupabaseClient();
+    
+    const { data, error, count } = await client
+      .from(tableName)
+      .select('*', { count: 'exact' })
+      .limit(limit);
+
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    return res.json({ success: true, table: tableName, count, data });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
