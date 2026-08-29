@@ -5,12 +5,11 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "build": "echo 'Supabase cloud database app ready'",
+    "build": "echo 'Build complete'",
     "lint": "echo 'No lint errors'"
   },
   "dependencies": {
     "@google/genai": "^2.18.0",
-    "@supabase/supabase-js": "^2.112.4",
     "alasql": "^4.19.0",
     "express": "^4.19.2",
     "jspdf": "^4.2.1",

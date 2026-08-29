@@ -14,8 +14,7 @@
           "escrow-service.mjs",
           "payment-service.mjs",
           "security-service.mjs",
-          "staff-workspace-service.mjs",
-          "supabase-service.mjs"
+          "staff-workspace-service.mjs"
         ]
       }
     }

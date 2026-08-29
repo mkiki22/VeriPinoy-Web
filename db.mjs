@@ -1,95 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import alasql from 'alasql';
 import crypto from 'crypto';
-
-/* Supabase Configuration & Client Initialization */
-const DEFAULT_SUPABASE_URL = 'https://wfsvxzgzdefyuwhuotzq.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indmc3Z4emd6ZGVmeXV3aHVvdHpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1Mjc1MDcsImV4cCI6MjEwMjEwMzUwN30.986aMpLnxxQDQTgVA1lU81ERJIhlMFze7UTFJsDSjVE';
-const DEFAULT_PROJECT_ID = 'wfsvxzgzdefyuwhuotzq';
-
-export function getSupabaseConfig() {
-  let rawUrl = (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
-  if (rawUrl && !rawUrl.includes('.') && !rawUrl.includes('/')) {
-    rawUrl = `https://${rawUrl}.supabase.co`;
-  } else if (rawUrl && !/^https?:\/\//i.test(rawUrl)) {
-    rawUrl = `https://${rawUrl}`;
-  }
-  const url = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '').trim();
-  const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
-  const projectId = process.env.SUPABASE_PROJECT_ID || (url.includes('.supabase.co') ? url.replace(/^https?:\/\//, '').split('.')[0] : DEFAULT_PROJECT_ID);
-
-  return {
-    url,
-    anonKey,
-    projectId,
-    isConfigured: Boolean(url && anonKey)
-  };
-}
-
-let supabaseClient = null;
-export function getSupabaseClient() {
-  if (!supabaseClient) {
-    const config = getSupabaseConfig();
-    supabaseClient = createClient(config.url, config.anonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
-      }
-    });
-  }
-  return supabaseClient;
-}
-
-export const supabase = getSupabaseClient();
-
-/**
- * Direct Supabase JavaScript Query Builders & Operations
- */
-export function supabaseFrom(tableName) {
-  return getSupabaseClient().from(tableName);
-}
-
-export async function supabaseSelect(tableName, columns = '*', queryBuilderFn = null) {
-  const client = getSupabaseClient();
-  let q = client.from(tableName).select(columns);
-  if (typeof queryBuilderFn === 'function') {
-    q = queryBuilderFn(q);
-  }
-  const { data, error } = await q;
-  return { data: data || [], error };
-}
-
-export async function supabaseInsert(tableName, recordOrRecords) {
-  const client = getSupabaseClient();
-  const { data, error } = await client.from(tableName).insert(recordOrRecords).select();
-  return { data, error };
-}
-
-export async function supabaseUpdate(tableName, updates, matchFn) {
-  const client = getSupabaseClient();
-  let q = client.from(tableName).update(updates);
-  if (typeof matchFn === 'function') {
-    q = matchFn(q);
-  }
-  const { data, error } = await q.select();
-  return { data, error };
-}
-
-export async function supabaseDelete(tableName, matchFn) {
-  const client = getSupabaseClient();
-  let q = client.from(tableName).delete();
-  if (typeof matchFn === 'function') {
-    q = matchFn(q);
-  }
-  const { data, error } = await q;
-  return { data, error };
-}
-
-export async function supabaseUpsert(tableName, recordOrRecords, options = {}) {
-  const client = getSupabaseClient();
-  const { data, error } = await client.from(tableName).upsert(recordOrRecords, options).select();
-  return { data, error };
-}
 
 /* Helper for hashing passwords securely with salt */
 export function hashPassword(password, salt = null) {
@@ -1708,10 +1618,10 @@ export async function initDatabase() {
      ========================================================================== */
   seedDatabaseIfEmpty();
 
-  console.log('VeriPinoy Database Backend initialized successfully with Supabase Cloud Integration.');
+  console.log('VeriPinoy Relational Database Backend initialized successfully.');
 }
 
-/* Query Wrappers powered by JavaScript & Supabase */
+/* Query Wrappers powered by JavaScript & SQL */
 export function queryAll(sqlStr, params = []) {
   const clean = normalizeSql(sqlStr);
   try {
