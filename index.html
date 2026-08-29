@@ -1416,7 +1416,7 @@
           <button class="btn btn-outline" style="background:transparent; color:var(--white); border-color:rgba(255,255,255,0.3);" onclick="window.app.openModal('modal-auth')">
             ✨ Register as Freelancer
           </button>
-          <button class="btn btn-outline" style="background:transparent; color:var(--white); border-color:rgba(255,255,255,0.3);" onclick="window.app.switchUserPersona('freelancer'); window.app.route('freelancer-portal');">
+          <button class="btn btn-outline" style="background:transparent; color:var(--white); border-color:rgba(255,255,255,0.3);" onclick="window.app.switchAuthModalTab('freelancer'); window.app.openModal('modal-auth');">
             🔑 Freelancer Sign In →
           </button>
         </div>
@@ -1902,6 +1902,12 @@
             <div style="font-size:0.75rem; color:var(--red-600);">COMPLIANCE AUDITOR (Staff / Verifier)</div>
           </div>
         </button>
+
+        <div style="border-top:1px solid var(--slate-200); margin-top:6px; padding-top:10px;">
+          <button class="btn btn-outline" style="width:100%; justify-content:center; padding:10px; color:var(--red-600); border-color:#FECDD3; background:#FFF1F2;" onclick="window.app.logout(); window.app.closeModal('modal-switch-persona');">
+            🚪 Log Out / Continue as Guest Visitor
+          </button>
+        </div>
       </div>
     </div>
   </div>

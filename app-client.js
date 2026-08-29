@@ -248,7 +248,7 @@
     closeMobileNav();
   }
 
-  // Persona Switcher
+  // Persona Switcher & Authentication State
   function switchUserPersona(roleKey) {
     const persona = DEMO_PERSONAS[roleKey];
     if (!persona) return;
@@ -266,10 +266,46 @@
     else if (roleKey === 'customer') route('customer-profile');
   }
 
+  function logout() {
+    state.currentUser = null;
+    localStorage.removeItem('veripinoy_user');
+    updateUserUI();
+    showToast('You have been logged out successfully.', 'info');
+    route('home');
+  }
+
   function updateUserUI() {
     const user = state.currentUser;
-    if (!user) return;
+    const navActions = document.getElementById('nav-user-actions-container');
 
+    if (!user) {
+      // Signed Out / Guest State
+      const nameEls = document.querySelectorAll('.user-display-name');
+      nameEls.forEach(el => el.textContent = 'Guest Visitor');
+
+      const roleEls = document.querySelectorAll('.user-display-role');
+      roleEls.forEach(el => el.textContent = 'GUEST');
+
+      const avatarEls = document.querySelectorAll('.user-display-avatar');
+      avatarEls.forEach(el => {
+        if (el.tagName === 'IMG') {
+          el.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80';
+        }
+      });
+
+      if (navActions) {
+        navActions.innerHTML = `
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn btn-navy" style="padding:7px 16px; font-size:0.84rem; font-weight:800; display:inline-flex; align-items:center; gap:6px; box-shadow:var(--shadow-sm);" onclick="window.app.openModal('modal-auth')">
+              <span>🔐</span> Sign In / Register
+            </button>
+          </div>
+        `;
+      }
+      return;
+    }
+
+    // Signed In State
     const nameEls = document.querySelectorAll('.user-display-name');
     nameEls.forEach(el => el.textContent = user.name || 'User');
 
@@ -283,51 +319,50 @@
       }
     });
 
-    // Dynamic Top Navbar Actions with Dashboard Button
-    const navActions = document.getElementById('nav-user-actions-container');
+    // Dynamic Top Navbar Actions with Clean Profile Badge & Polished Logout
     if (navActions) {
-      let dashboardBtnHtml = '';
+      let rolePortalBtn = '';
       if (user.role === 'freelancer') {
-        dashboardBtnHtml = `
-          <button class="btn btn-emerald" style="padding:6px 14px; font-size:0.82rem; font-weight:800;" onclick="window.app.route('portal-freelancer')">
-            💻 Freelancer Dashboard
+        rolePortalBtn = `
+          <button class="btn btn-outline" style="padding:5px 12px; font-size:0.78rem; font-weight:800; color:var(--navy-900); border-color:var(--slate-200); background:var(--white);" onclick="window.app.route('portal-freelancer')" title="Open Freelancer Workspace">
+            💻 My Portal
           </button>
         `;
       } else if (user.role === 'business') {
-        dashboardBtnHtml = `
-          <button class="btn btn-emerald" style="padding:6px 14px; font-size:0.82rem; font-weight:800;" onclick="window.app.route('business-hub')">
+        rolePortalBtn = `
+          <button class="btn btn-outline" style="padding:5px 12px; font-size:0.78rem; font-weight:800; color:var(--navy-900); border-color:var(--slate-200); background:var(--white);" onclick="window.app.route('business-hub')" title="Open Business Management Hub">
             🏢 Business Hub
           </button>
         `;
       } else if (user.role === 'staff') {
-        dashboardBtnHtml = `
-          <button class="btn btn-navy" style="padding:6px 14px; font-size:0.82rem; font-weight:800; background:var(--red-600); border-color:var(--red-600);" onclick="window.app.route('staff-workspace')">
+        rolePortalBtn = `
+          <button class="btn btn-outline" style="padding:5px 12px; font-size:0.78rem; font-weight:800; color:var(--red-600); border-color:#FECDD3; background:#FFF1F2;" onclick="window.app.route('staff-workspace')" title="Open Staff Auditor Workspace">
             🛡️ Staff Workspace
           </button>
         `;
       } else {
-        dashboardBtnHtml = `
-          <button class="btn btn-outline" style="padding:6px 14px; font-size:0.82rem; font-weight:700;" onclick="window.app.route('customer-profile')">
-            👤 My Orders & Escrow
+        rolePortalBtn = `
+          <button class="btn btn-outline" style="padding:5px 12px; font-size:0.78rem; font-weight:800; color:var(--navy-900); border-color:var(--slate-200); background:var(--white);" onclick="window.app.route('customer-profile')" title="Open Customer Profile & Escrow">
+            👤 My Orders
           </button>
         `;
       }
 
       navActions.innerHTML = `
         <div style="display:flex; align-items:center; gap:8px;">
-          ${dashboardBtnHtml}
-          
-          <div style="display:flex; align-items:center; gap:8px; background:var(--slate-100); padding:4px 10px 4px 6px; border-radius:var(--radius-pill); cursor:pointer; border:1px solid var(--slate-200);" onclick="window.app.openModal('modal-switch-persona')" title="Click to switch active testing persona">
-            <img src="${user.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80'}" style="width:26px; height:26px; border-radius:50%; object-fit:cover;">
+          ${rolePortalBtn}
+
+          <div style="display:flex; align-items:center; gap:8px; background:var(--slate-100); padding:4px 10px 4px 6px; border-radius:var(--radius-pill); cursor:pointer; border:1px solid var(--slate-200); transition:all 0.15s ease;" onclick="window.app.openModal('modal-switch-persona')" title="Switch active testing persona / profile">
+            <img src="${user.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80'}" style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:1px solid var(--slate-300);">
             <div style="line-height:1.1; text-align:left;">
-              <div style="font-size:0.75rem; font-weight:800; color:var(--navy-900);">${escapeHtml((user.name || 'User').split(' ')[0])}</div>
+              <div style="font-size:0.75rem; font-weight:800; color:var(--navy-900); max-width:90px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml((user.name || 'User').split(' ')[0])}</div>
               <div style="font-size:0.65rem; font-weight:700; color:var(--emerald-700);">${(user.role || 'USER').toUpperCase()}</div>
             </div>
             <span style="font-size:0.7rem; color:var(--slate-400);">▾</span>
           </div>
 
-          <button class="btn btn-outline" style="padding:6px 10px; font-size:0.78rem;" onclick="window.app.openModal('modal-auth')" title="Sign in with another account">
-            Sign In
+          <button class="btn btn-outline" style="padding:5px 10px; font-size:0.78rem; font-weight:700; color:var(--red-600); border-color:var(--slate-200); background:var(--white); display:inline-flex; align-items:center; gap:4px;" onclick="window.app.logout()" title="Sign out of current account">
+            <span>🚪</span> Log Out
           </button>
         </div>
       `;
@@ -2740,6 +2775,7 @@
     state,
     route,
     switchUserPersona,
+    logout,
     openModal,
     closeModal,
     closeAllModals,
