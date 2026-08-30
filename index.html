@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VeriPinoy — Tatak Pinoy, Tatak Sigurado | Verified Philippine Businesses & Freelancers</title>
+  <title>VeriPinoy — Verified Philippine Businesses & Freelancers</title>
   <meta name="description" content="The premier verified trust directory and escrow-protected marketplace for Philippine businesses, freelancers, and clients. Powered by DTI/SEC verification and UnionBank escrow.">
-  <meta property="og:title" content="VeriPinoy — Tatak Pinoy, Tatak Sigurado">
+  <meta property="og:title" content="VeriPinoy — Verified Philippine Directory">
   <meta property="og:description" content="Verified Philippine businesses and freelancers with escrow protection and E2EE encrypted messaging.">
 
   <!-- Suppress browser extension injection noise -->
@@ -877,8 +877,8 @@
     }
     .footer-grid {
       display: grid;
-      grid-template-columns: 1.3fr 1fr 1fr 1.3fr;
-      gap: 32px;
+      grid-template-columns: 1.2fr 1.1fr 1.4fr;
+      gap: 36px;
       margin-bottom: 36px;
     }
     @media (max-width: 900px) {
@@ -1071,6 +1071,130 @@
       gap: 12px;
       align-items: flex-start;
     }
+
+    /* FAQ Accordion & Knowledge Center */
+    .faq-category-btn {
+      padding: 8px 16px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--slate-200);
+      background: var(--slate-50);
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--slate-600);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .faq-category-btn:hover {
+      background: var(--white);
+      color: var(--navy-900);
+      border-color: var(--slate-300);
+    }
+    .faq-category-btn.active {
+      background: var(--navy-900);
+      color: var(--white);
+      border-color: var(--navy-900);
+      box-shadow: var(--shadow-xs);
+    }
+    .faq-item {
+      border: 1px solid var(--slate-200);
+      border-radius: var(--radius-lg);
+      background: var(--white);
+      margin-bottom: 12px;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+    .faq-item:hover {
+      border-color: var(--slate-300);
+      box-shadow: var(--shadow-xs);
+    }
+    .faq-item.active {
+      border-color: var(--emerald-500);
+      box-shadow: var(--shadow-sm);
+    }
+    .faq-question {
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      background: var(--white);
+      transition: background 0.15s ease;
+    }
+    .faq-question:hover {
+      background: var(--slate-50);
+    }
+    .faq-item.active .faq-question {
+      background: var(--slate-50);
+      border-bottom: 1px solid var(--slate-200);
+    }
+    .faq-title {
+      font-family: var(--font-heading);
+      font-size: 0.96rem;
+      font-weight: 800;
+      color: var(--navy-900);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      line-height: 1.4;
+    }
+    .faq-chevron {
+      font-size: 0.85rem;
+      color: var(--slate-400);
+      transition: transform 0.25s ease;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--slate-100);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .faq-item.active .faq-chevron {
+      transform: rotate(180deg);
+      background: var(--emerald-50);
+      color: var(--emerald-600);
+    }
+    .faq-answer {
+      display: none;
+      padding: 18px 20px;
+      font-size: 0.86rem;
+      color: var(--slate-700);
+      line-height: 1.6;
+      background: var(--white);
+    }
+    .faq-item.active .faq-answer {
+      display: block;
+      animation: fadeIn 0.2s ease-out;
+    }
+    .faq-badge-gov {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      background: #EFF6FF;
+      color: #1E40AF;
+      border: 1px solid #BFDBFE;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    /* Staff & Admin UI Suppression Rules (Compare Tab & Trust Badges) */
+    body.role-staff-admin #nav-link-comparison,
+    body.role-staff-admin [data-route="comparison"],
+    body.role-staff #nav-link-comparison,
+    body.role-staff [data-route="comparison"],
+    body.role-admin #nav-link-comparison,
+    body.role-admin [data-route="comparison"],
+    body.role-staff-admin #footer-trust-badges,
+    body.role-staff #footer-trust-badges,
+    body.role-admin #footer-trust-badges,
+    body.role-staff-admin .footer-trust-badges-wrapper,
+    body.role-staff .footer-trust-badges-wrapper,
+    body.role-admin .footer-trust-badges-wrapper {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
@@ -1081,12 +1205,9 @@
   <!-- Main Navigation Bar -->
   <nav class="vp-navbar">
     <div class="wrap vp-nav-inner">
-      <!-- Logo -->
+      <!-- Brand -->
       <div class="vp-logo" onclick="window.app.route('home')">
-        <div class="vp-logo-icon">🛡️</div>
-        <div>
-          <div class="vp-logo-text">VeriPinoy<span>.</span> <span class="vp-logo-tag">Tatak Sigurado</span></div>
-        </div>
+        <div class="vp-logo-text">VeriPinoy<span>.</span></div>
       </div>
 
       <!-- Navigation Links -->
@@ -1095,8 +1216,9 @@
         <a class="nav-link" data-route="businesses" onclick="window.app.route('businesses')">🏢 Businesses</a>
         <a class="nav-link" data-route="freelancers" onclick="window.app.route('freelancers')">💻 Freelancers</a>
         <a class="nav-link" data-route="reviews" onclick="window.app.route('reviews')">💬 Reviews</a>
-        <a class="nav-link" data-route="comparison" onclick="window.app.route('comparison')">⚖️ Compare <span id="nav-compare-count" class="badge badge-emerald" style="display:none;">0</span></a>
+        <a class="nav-link" data-route="comparison" id="nav-link-comparison" onclick="window.app.route('comparison')">⚖️ Compare <span id="nav-compare-count" class="badge badge-emerald" style="display:none;">0</span></a>
         <a class="nav-link" data-route="pricing" onclick="window.app.route('pricing')">💳 Pricing</a>
+        <a class="nav-link nav-link-reports" data-route="reports" id="nav-link-reports" onclick="window.app.route('reports')">📊 Analytics & Reports</a>
       </div>
 
       <!-- Actions: Dynamic Login / Portals Container -->
@@ -1177,7 +1299,7 @@
           </div>
           <div class="vp-stat-item">
             <div class="vp-stat-value" style="color:var(--emerald-600);">8</div>
-            <div class="vp-stat-label">Tatak Pinoy Verified</div>
+            <div class="vp-stat-label">VeriPinoy Verified</div>
           </div>
           <div class="vp-stat-item">
             <div class="vp-stat-value" style="color:var(--amber-600);">4.7 ★</div>
@@ -1521,9 +1643,6 @@
   <div id="page-pricing" class="page-view">
     <div class="wrap">
       <div style="text-align:center; margin-bottom:36px;">
-        <div style="display:inline-flex; align-items:center; gap:6px; background:var(--emerald-50); color:var(--emerald-700); padding:4px 12px; border-radius:var(--radius-pill); font-size:0.75rem; font-weight:800; margin-bottom:12px; border:1px solid rgba(16,185,129,0.3);">
-          PH TATAK PINOY VERIFICATION FRAMEWORK
-        </div>
         <h2 style="font-family:var(--font-heading); font-size:2.3rem; font-weight:900; color:var(--navy-900);">
           Transparent Enterprise & Verification Plans
         </h2>
@@ -1539,7 +1658,7 @@
           <div>
             <span class="badge badge-emerald" style="margin-bottom:12px;">BASE ACCREDITATION</span>
             <h3 style="font-size:1.4rem; font-weight:900; color:var(--navy-900); margin-bottom:4px;">Verified Business</h3>
-            <p style="font-size:0.82rem; color:var(--slate-500); min-height:40px;">Official Tatak Pinoy verification badge and SEC/DTI registration vetting.</p>
+            <p style="font-size:0.82rem; color:var(--slate-500); min-height:40px;">Official VeriPinoy verification badge and SEC/DTI registration vetting.</p>
             
             <div style="margin:20px 0;">
               <span style="font-size:2.4rem; font-weight:900; color:var(--navy-900);">₱499</span>
@@ -1623,7 +1742,7 @@
               <span class="badge badge-emerald" id="feat-card-savings-badge" style="display:none; font-size:0.7rem;">SAVE 20%</span>
             </div>
             <h3 style="font-size:1.4rem; font-weight:900; color:var(--navy-900); margin-bottom:4px;">Featured Listings</h3>
-            <p style="font-size:0.82rem; color:var(--slate-500); min-height:40px;">Prime spotlight placement designed to maximize brand prestige, consumer trust, and marketplace authority.</p>
+            <p style="font-size:0.82rem; color:var(--slate-500); min-height:40px;">Prime spotlight placement designed to deliver maximum customer trust, verified promo distribution, and buyer protection.</p>
 
             <!-- Duration Selector -->
             <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:4px; margin:16px 0 12px; display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; font-size:0.75rem; text-align:center;">
@@ -1634,51 +1753,110 @@
                 3 Mos <span style="font-size:0.65rem; color:var(--emerald-600); display:block;">-20%</span>
               </button>
               <button type="button" class="btn-feat-duration" id="btn-dur-6" onclick="window.app.selectFeaturedDuration(6)" style="padding:6px 2px; border-radius:4px; font-weight:700; border:none; background:transparent; color:var(--slate-700); cursor:pointer;">
-                6 Mos <span style="font-size:0.65rem; color:var(--emerald-600); display:block;">-28%</span>
+                6 Mos <span style="font-size:0.65rem; color:var(--emerald-600); display:block;">-33%</span>
               </button>
               <button type="button" class="btn-feat-duration" id="btn-dur-12" onclick="window.app.selectFeaturedDuration(12)" style="padding:6px 2px; border-radius:4px; font-weight:700; border:none; background:transparent; color:var(--slate-700); cursor:pointer;">
-                1 Yr <span style="font-size:0.65rem; color:var(--amber-600); display:block;">-40%</span>
+                1 Yr <span style="font-size:0.65rem; color:var(--amber-600); display:block;">-52%</span>
               </button>
             </div>
             
             <div style="margin:16px 0;">
               <div>
-                <span style="font-size:2.3rem; font-weight:900; color:var(--amber-600);" id="feat-card-price">₱4,999</span>
+                <span style="font-size:2.3rem; font-weight:900; color:var(--amber-600);" id="feat-card-price">₱2,499</span>
                 <span style="color:var(--slate-500); font-size:0.85rem;" id="feat-card-tenure">/ 30-day slot</span>
               </div>
               <div id="feat-card-orig-price" style="font-size:0.75rem; color:var(--slate-400); text-decoration:line-through; display:none; margin-top:2px;">
-                Regular: ₱14,997
+                Regular: ₱4,999
               </div>
             </div>
 
             <ul style="list-style:none; padding:0; margin:0 0 24px; font-size:0.85rem; color:var(--slate-700); display:flex; flex-direction:column; gap:10px;">
-              <li>✓ <strong>Tier-3 Credibility & Compliance Background Audit</strong></li>
-              <li>✓ <strong>₱25,000 Verified Trust & Buyer Protection Guarantee</strong></li>
-              <li>✓ <strong>Prime Top-of-Category Spotlight & Featured Placement</strong></li>
-              <li>✓ <strong>3x Higher Conversion with Elite Brand Badging</strong></li>
-              <li>✓ <strong>Senior Compliance Officer Sign-off & Seal of Authenticity</strong></li>
+              <li>✓ <strong>₱25,000 Verified Customer & Buyer Protection Guarantee</strong></li>
+              <li>✓ <strong>Prime Top-of-Category Sticky Spotlight Placement</strong></li>
+              <li>✓ <strong>Verified Customer Perks & Promo Badge on Storefront</strong></li>
+              <li>✓ <strong>3.4x Higher Inquiries with Gold Verified Seal</strong></li>
+              <li>✓ <strong>24-Hour Consumer Inquiry & Support Response SLA</strong></li>
             </ul>
           </div>
 
-          <button class="btn btn-navy" id="feat-card-cta-btn" style="width:100%;" onclick="window.app.openCheckoutModal('plan-boost-1', 'Featured Listing Spotlight (1 Month)', 4999, '1 Month')">
-            Apply for Featured Spotlight Slot
+          <button class="btn btn-navy" id="feat-card-cta-btn" style="width:100%;" onclick="window.app.openCheckoutModal('plan-boost-1', 'Featured Listing Spotlight (1 Month)', 2499, '1 Month')">
+            Apply for Featured Spotlight Slot (₱2,499)
           </button>
+        </div>
+      </div>
+
+      <!-- =========================================================================
+           CUSTOMER VALUE ASSURANCE PILLARS
+           ========================================================================= -->
+      <div style="background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius-xl); padding:32px 28px; margin-bottom:48px; box-shadow:var(--shadow-sm);">
+        <div style="text-align:center; max-width:680px; margin:0 auto 28px;">
+          <div style="display:inline-flex; align-items:center; gap:6px; background:var(--emerald-50); color:var(--emerald-800); padding:4px 12px; border-radius:var(--radius-pill); font-size:0.75rem; font-weight:800; margin-bottom:8px;">
+            🇵🇭 THE VERIPINOY CUSTOMER VALUE PROMISE
+          </div>
+          <h3 style="font-family:var(--font-heading); font-size:1.6rem; font-weight:900; color:var(--navy-900); margin:0 0 6px;">
+            Why Philippine Consumers Trust Featured Listings
+          </h3>
+          <p style="font-size:0.88rem; color:var(--slate-600); margin:0;">
+            Featured listings on VeriPinoy are not just advertisements—they are fully credentialed, escrow-bonded merchants committed to genuine customer value and fraud-free transactions.
+          </p>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:20px;">
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:20px;">
+            <div style="width:40px; height:40px; border-radius:var(--radius-md); background:var(--emerald-100); color:var(--emerald-800); display:flex; align-items:center; justify-content:center; font-size:1.3rem; margin-bottom:12px;">
+              🛡️
+            </div>
+            <h4 style="font-size:1rem; font-weight:800; color:var(--navy-900); margin-bottom:6px;">100% Anti-Scam Verification</h4>
+            <p style="font-size:0.82rem; color:var(--slate-600); line-height:1.5; margin:0;">
+              Every featured merchant undergoes multi-agency vetting (DTI/SEC, BIR Form 2303, Mayor's Permit) to guarantee zero ghost stores or fly-by-night sellers.
+            </p>
+          </div>
+
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:20px;">
+            <div style="width:40px; height:40px; border-radius:var(--radius-md); background:var(--blue-100); color:var(--blue-800); display:flex; align-items:center; justify-content:center; font-size:1.3rem; margin-bottom:12px;">
+              💰
+            </div>
+            <h4 style="font-size:1rem; font-weight:800; color:var(--navy-900); margin-bottom:6px;">₱25k - ₱100k Buyer Shield</h4>
+            <p style="font-size:0.82rem; color:var(--slate-600); line-height:1.5; margin:0;">
+              Shoppers are protected by VeriPinoy's Escrow Dispute Fund. In the rare case of an unfulfilled verified order, clients receive direct dispute claim mediation.
+            </p>
+          </div>
+
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:20px;">
+            <div style="width:40px; height:40px; border-radius:var(--radius-md); background:var(--amber-100); color:var(--amber-800); display:flex; align-items:center; justify-content:center; font-size:1.3rem; margin-bottom:12px;">
+              🎟️
+            </div>
+            <h4 style="font-size:1rem; font-weight:800; color:var(--navy-900); margin-bottom:6px;">Exclusive Customer Deals</h4>
+            <p style="font-size:0.82rem; color:var(--slate-600); line-height:1.5; margin:0;">
+              Featured merchants distribute exclusive discounts, free consultations, and verified promo vouchers directly to VeriPinoy community shoppers.
+            </p>
+          </div>
+
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:20px;">
+            <div style="width:40px; height:40px; border-radius:var(--radius-md); background:var(--emerald-100); color:var(--emerald-800); display:flex; align-items:center; justify-content:center; font-size:1.3rem; margin-bottom:12px;">
+              ⚡
+            </div>
+            <h4 style="font-size:1rem; font-weight:800; color:var(--navy-900); margin-bottom:6px;">24h Fast Dispute & Support SLA</h4>
+            <p style="font-size:0.82rem; color:var(--slate-600); line-height:1.5; margin:0;">
+              Featured accounts are monitored under a strict 24-hour customer inquiry response service level agreement with dedicated compliance team oversight.
+            </p>
+          </div>
         </div>
       </div>
 
       <!-- =========================================================================
            FEATURED LISTINGS PROMOTIONAL CAMPAIGNS SECTION (3 Mos, 6 Mos, 1 Yr)
            ========================================================================= -->
-      <div style="margin-top:56px; border-top:1px solid var(--slate-200); padding-top:40px;">
+      <div style="margin-top:20px; border-top:1px solid var(--slate-200); padding-top:40px;">
         <div style="text-align:center; margin-bottom:32px;">
           <div style="display:inline-flex; align-items:center; gap:6px; background:var(--amber-50); color:var(--amber-700); padding:4px 14px; border-radius:var(--radius-pill); font-size:0.75rem; font-weight:800; margin-bottom:10px; border:1px solid rgba(245,158,11,0.3);">
-            🔥 LIMITED-TIME SPOTLIGHT PROMOTIONS
+            🔥 HIGH-VALUE SPOTLIGHT PROMOTIONAL CAMPAIGNS
           </div>
           <h3 style="font-family:var(--font-heading); font-size:1.85rem; font-weight:900; color:var(--navy-900); margin:0 0 6px;">
-            Long-Term Featured Spotlight Bundles
+            High-ROI Featured Spotlight Bundles
           </h3>
           <p style="color:var(--slate-500); font-size:0.9rem; max-width:650px; margin:0 auto;">
-            Lock in sustained top-tier visibility, build unshakeable customer credibility, and save up to 40% with extended brand placement campaigns.
+            Deliver verified customer savings, build long-term market authority, and save up to 52% with extended featured placement packages.
           </p>
         </div>
 
@@ -1691,32 +1869,32 @@
                 <span class="badge badge-emerald" style="font-size:0.75rem; font-weight:800;">SAVE 20%</span>
               </div>
               <h4 style="font-size:1.25rem; font-weight:900; color:var(--navy-900); margin-bottom:4px;">3-Month Spotlight Boost</h4>
-              <p style="font-size:0.82rem; color:var(--slate-500); margin-bottom:16px;">Ideal for seasonal brand launches, holiday peaks, and established customer acquisition.</p>
+              <p style="font-size:0.82rem; color:var(--slate-500); margin-bottom:16px;">Ideal for seasonal brand launches, holiday peaks, and acquiring high-intent verified shoppers.</p>
               
               <div style="margin-bottom:18px;">
                 <div style="display:flex; align-items:baseline; gap:8px;">
-                  <span style="font-size:2rem; font-weight:900; color:var(--navy-900);">₱11,999</span>
-                  <span style="font-size:0.85rem; color:var(--slate-400); text-decoration:line-through;">₱14,997</span>
+                  <span style="font-size:2rem; font-weight:900; color:var(--navy-900);">₱5,999</span>
+                  <span style="font-size:0.85rem; color:var(--slate-400); text-decoration:line-through;">₱7,497</span>
                 </div>
                 <div style="font-size:0.78rem; color:var(--emerald-600); font-weight:700; margin-top:2px;">
-                  Equivalent to only ₱3,999/month (Save ₱2,998)
+                  Equivalent to only ₱1,999/month (Save ₱1,498)
                 </div>
               </div>
 
               <div style="border-top:1px solid var(--slate-100); padding-top:14px; margin-bottom:20px;">
-                <div style="font-size:0.72rem; font-weight:800; color:var(--slate-400); text-transform:uppercase; margin-bottom:8px;">INCLUDED PROMO PERKS:</div>
+                <div style="font-size:0.72rem; font-weight:800; color:var(--slate-400); text-transform:uppercase; margin-bottom:8px;">INCLUDED CUSTOMER VALUE PERKS:</div>
                 <ul style="list-style:none; padding:0; margin:0; font-size:0.82rem; color:var(--slate-700); display:flex; flex-direction:column; gap:8px;">
-                  <li>✓ <strong>90-Day Continuous Sticky Placement</strong> in Primary Category</li>
-                  <li>✓ <strong>Bonus: 2 Additional Search Tags</strong> for wider reach</li>
-                  <li>✓ <strong>Quarterly Traffic & Impression KPI Report</strong></li>
-                  <li>✓ <strong>₱35,000 Verified Trust Buyer Protection Guarantee</strong></li>
-                  <li>✓ <strong>Featured Shoutout in VeriPinoy Monthly Newsletter</strong></li>
+                  <li>✓ <strong>₱50,000 Enhanced Buyer Protection Escrow Shield</strong></li>
+                  <li>✓ <strong>90-Day Continuous Sticky Placement</strong> in 2 Categories</li>
+                  <li>✓ <strong>Customer Voucher Distribution</strong> in Weekly Perks Digest</li>
+                  <li>✓ <strong>Quarterly Traffic & Customer Inquiry Analytics</strong></li>
+                  <li>✓ <strong>24/7 Verified Direct Inquiries & Messaging SLA</strong></li>
                 </ul>
               </div>
             </div>
 
-            <button class="btn btn-outline" style="width:100%; padding:10px;" onclick="window.app.openCheckoutModal('plan-boost-3', 'Featured Listing 3-Month Spotlight Promo (Save 20%)', 11999, '3 Months')">
-              Claim 3-Month Promo (₱11,999)
+            <button class="btn btn-outline" style="width:100%; padding:10px;" onclick="window.app.openCheckoutModal('plan-boost-3', 'Featured Listing 3-Month Spotlight Promo (Save 20%)', 5999, '3 Months')">
+              Claim 3-Month Promo (₱5,999)
             </button>
           </div>
 
@@ -1728,82 +1906,196 @@
             <div>
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span class="badge badge-gold" style="font-size:0.75rem;">SEMI-ANNUAL GROWTH</span>
-                <span class="badge badge-emerald" style="font-size:0.75rem; font-weight:800;">SAVE 28%</span>
+                <span class="badge badge-emerald" style="font-size:0.75rem; font-weight:800;">SAVE 33%</span>
               </div>
               <h4 style="font-size:1.25rem; font-weight:900; color:var(--navy-900); margin-bottom:4px;">6-Month Spotlight Boost</h4>
-              <p style="font-size:0.82rem; color:var(--slate-500); margin-bottom:16px;">The ultimate mid-term growth plan for rapid market share and brand dominance.</p>
+              <p style="font-size:0.82rem; color:var(--slate-500); margin-bottom:16px;">The ultimate mid-term growth plan for rapid market share, customer trust, and brand dominance.</p>
               
               <div style="margin-bottom:18px;">
                 <div style="display:flex; align-items:baseline; gap:8px;">
-                  <span style="font-size:2rem; font-weight:900; color:var(--amber-600);">₱21,499</span>
-                  <span style="font-size:0.85rem; color:var(--slate-400); text-decoration:line-through;">₱29,994</span>
+                  <span style="font-size:2rem; font-weight:900; color:var(--amber-600);">₱9,999</span>
+                  <span style="font-size:0.85rem; color:var(--slate-400); text-decoration:line-through;">₱14,994</span>
                 </div>
                 <div style="font-size:0.78rem; color:var(--emerald-600); font-weight:700; margin-top:2px;">
-                  Equivalent to only ₱3,583/month (Save ₱8,495)
+                  Equivalent to only ₱1,666/month (Save ₱4,995)
                 </div>
               </div>
 
               <div style="border-top:1px solid var(--slate-100); padding-top:14px; margin-bottom:20px;">
-                <div style="font-size:0.72rem; font-weight:800; color:var(--slate-400); text-transform:uppercase; margin-bottom:8px;">INCLUDED PROMO PERKS:</div>
+                <div style="font-size:0.72rem; font-weight:800; color:var(--slate-400); text-transform:uppercase; margin-bottom:8px;">INCLUDED CUSTOMER VALUE PERKS:</div>
                 <ul style="list-style:none; padding:0; margin:0; font-size:0.82rem; color:var(--slate-700); display:flex; flex-direction:column; gap:8px;">
-                  <li>✓ <strong>180-Day Continuous Top-of-Category Banner</strong></li>
-                  <li>✓ <strong>Priority Homepage Discovery Carousel Spotlight</strong></li>
-                  <li>✓ <strong>VeriPinoy Verified Brand Editorial Article Feature</strong></li>
-                  <li>✓ <strong>₱50,000 Trust Guarantee Escrow Bond</strong></li>
-                  <li>✓ <strong>Dedicated Senior Compliance Account Representative</strong></li>
+                  <li>✓ <strong>₱75,000 Institutional Escrow Protection Bond</strong></li>
+                  <li>✓ <strong>Homepage Verified Brands Discovery Spotlight</strong></li>
+                  <li>✓ <strong>VeriPinoy Verified Brand Editorial Story Feature</strong></li>
                   <li>✓ <strong>Search Auto-Suggest Priority for Brand Keywords</strong></li>
+                  <li>✓ <strong>Fast-Track 12-Hour Priority Dispute Arbitration</strong></li>
+                  <li>✓ <strong>Dedicated Senior Compliance Account Lead</strong></li>
                 </ul>
               </div>
             </div>
 
-            <button class="btn btn-navy" style="width:100%; padding:10px; background:var(--amber-600); border-color:var(--amber-600);" onclick="window.app.openCheckoutModal('plan-boost-6', 'Featured Listing 6-Month Spotlight Promo (Save 28%)', 21499, '6 Months')">
-              Claim 6-Month Promo (₱21,499)
+            <button class="btn btn-navy" style="width:100%; padding:10px; background:var(--amber-600); border-color:var(--amber-600);" onclick="window.app.openCheckoutModal('plan-boost-6', 'Featured Listing 6-Month Spotlight Promo (Save 33%)', 9999, '6 Months')">
+              Claim 6-Month Promo (₱9,999)
             </button>
           </div>
 
           <!-- Promo Bundle 3: 1 Year Annual VIP Authority (Best Value) -->
           <div class="vp-card" style="padding:24px; border-radius:var(--radius-xl); border:2px solid var(--emerald-500); position:relative; background:var(--emerald-50); display:flex; flex-direction:column; justify-content:space-between; box-shadow:var(--shadow-md);">
             <div style="position:absolute; top:-12px; right:20px; background:var(--emerald-600); color:var(--white); font-size:0.7rem; font-weight:800; padding:3px 10px; border-radius:var(--radius-pill); letter-spacing:0.5px;">
-              BEST VALUE • 40% OFF
+              BEST VALUE • 52% OFF
             </div>
             <div>
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span class="badge badge-emerald" style="font-size:0.75rem;">ANNUAL VIP AUTHORITY</span>
-                <span class="badge badge-gold" style="font-size:0.75rem; font-weight:800;">SAVE 40%</span>
+                <span class="badge badge-gold" style="font-size:0.75rem; font-weight:800;">SAVE 52%</span>
               </div>
               <h4 style="font-size:1.25rem; font-weight:900; color:var(--navy-900); margin-bottom:4px;">1-Year Annual Spotlight VIP</h4>
-              <p style="font-size:0.82rem; color:var(--slate-600); margin-bottom:16px;">Complete nationwide leadership package with permanent trust badging and high-authority reach.</p>
+              <p style="font-size:0.82rem; color:var(--slate-600); margin-bottom:16px;">Complete nationwide leadership package with permanent trust badging, PR release, and ₱100k buyer guarantee.</p>
               
               <div style="margin-bottom:18px;">
                 <div style="display:flex; align-items:baseline; gap:8px;">
-                  <span style="font-size:2rem; font-weight:900; color:var(--emerald-700);">₱35,999</span>
-                  <span style="font-size:0.85rem; color:var(--slate-400); text-decoration:line-through;">₱59,988</span>
+                  <span style="font-size:2rem; font-weight:900; color:var(--emerald-700);">₱14,499</span>
+                  <span style="font-size:0.85rem; color:var(--slate-400); text-decoration:line-through;">₱29,988</span>
                 </div>
                 <div style="font-size:0.78rem; color:var(--emerald-700); font-weight:800; margin-top:2px;">
-                  Equivalent to only ₱2,999/month (Save ₱23,989!)
+                  Equivalent to only ₱1,208/month (Save ₱15,489!)
                 </div>
               </div>
 
               <div style="border-top:1px solid rgba(16,185,129,0.2); padding-top:14px; margin-bottom:20px;">
-                <div style="font-size:0.72rem; font-weight:800; color:var(--emerald-800); text-transform:uppercase; margin-bottom:8px;">VIP ANNUAL PERKS:</div>
+                <div style="font-size:0.72rem; font-weight:800; color:var(--emerald-800); text-transform:uppercase; margin-bottom:8px;">VIP ANNUAL CUSTOMER VALUE PERKS:</div>
                 <ul style="list-style:none; padding:0; margin:0; font-size:0.82rem; color:var(--slate-800); display:flex; flex-direction:column; gap:8px;">
+                  <li>✓ <strong>₱100,000 Full VeriPinoy Escrow Guarantee Protection</strong></li>
                   <li>✓ <strong>365-Day Permanent Elite Category & Homepage Anchor</strong></li>
                   <li>✓ <strong>Official "Featured Enterprise of the Year" Gold Trustmark</strong></li>
-                  <li>✓ <strong>Full Video Brand Documentary Feature & National PR Release</strong></li>
-                  <li>✓ <strong>₱100,000 Institutional Escrow Protection Shield</strong></li>
+                  <li>✓ <strong>Brand Video Showcase & National PR Press Release</strong></li>
                   <li>✓ <strong>Unlimited Multi-Tag Subcategory Pinning</strong></li>
-                  <li>✓ <strong>Direct Hotline to Executive Compliance Directorate</strong></li>
+                  <li>✓ <strong>VIP Shopper Concierge & Directorate Hotline</strong></li>
                 </ul>
               </div>
             </div>
 
-            <button class="btn btn-emerald" style="width:100%; padding:10px; font-weight:800;" onclick="window.app.openCheckoutModal('plan-boost-12', 'Featured Listing 1-Year VIP Spotlight Promo (Save 40%)', 35999, '1 Year')">
-              Claim 1-Year VIP (₱35,999)
+            <button class="btn btn-emerald" style="width:100%; padding:10px; font-weight:800;" onclick="window.app.openCheckoutModal('plan-boost-12', 'Featured Listing 1-Year VIP Spotlight Promo (Save 52%)', 14499, '1 Year')">
+              Claim 1-Year VIP (₱14,499)
             </button>
           </div>
         </div>
       </div>
+
+      <!-- =========================================================================
+           INTERACTIVE CUSTOMER VALUE & ROI CALCULATOR
+           ========================================================================= -->
+      <div style="margin-top:48px; background:var(--white); border:1.5px solid var(--slate-200); border-radius:var(--radius-xl); padding:32px 28px; box-shadow:var(--shadow-sm);">
+        <div style="text-align:center; max-width:680px; margin:0 auto 24px;">
+          <div style="display:inline-flex; align-items:center; gap:6px; background:var(--navy-50); color:var(--navy-900); padding:4px 12px; border-radius:var(--radius-pill); font-size:0.75rem; font-weight:800; margin-bottom:8px;">
+            📊 INTERACTIVE CALCULATOR
+          </div>
+          <h3 style="font-family:var(--font-heading); font-size:1.6rem; font-weight:900; color:var(--navy-900); margin:0 0 6px;">
+            Estimate Your Customer Value & Spotlight ROI
+          </h3>
+          <p style="font-size:0.88rem; color:var(--slate-600); margin:0;">
+            See projected customer reach, verified promo conversions, buyer protection shield, and net revenue impact.
+          </p>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:28px; align-items:center;">
+          <!-- Controls -->
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-lg); padding:24px;">
+            <div style="margin-bottom:20px;">
+              <label style="display:block; font-size:0.84rem; font-weight:800; color:var(--navy-900); margin-bottom:8px;">
+                1. Select Industry / Sector:
+              </label>
+              <select id="roi-calc-industry" class="form-control" onchange="window.app.updateRoiCalculator()" style="font-size:0.88rem; height:42px;">
+                <option value="retail">🛒 Retail & E-Commerce (Avg. Order: ₱1,800)</option>
+                <option value="food">🍽️ Food, Dining & Hospitality (Avg. Order: ₱1,200)</option>
+                <option value="services">💼 Professional Services & Agencies (Avg. Deal: ₱25,000)</option>
+                <option value="freelance">💻 Tech & Freelance Consulting (Avg. Deal: ₱35,000)</option>
+                <option value="manufacturing">🏭 Manufacturing & B2B Supply (Avg. Deal: ₱80,000)</option>
+              </select>
+            </div>
+
+            <div style="margin-bottom:20px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label style="font-size:0.84rem; font-weight:800; color:var(--navy-900); margin:0;">
+                  2. Monthly Shopper Impressions:
+                </label>
+                <span id="roi-calc-views-display" style="font-size:0.95rem; font-weight:900; color:var(--emerald-600);">5,000 views</span>
+              </div>
+              <input type="range" id="roi-calc-views" min="1000" max="50000" step="1000" value="5000" oninput="window.app.updateRoiCalculator()" style="width:100%; accent-color:var(--emerald-600); cursor:pointer;">
+              <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--slate-400); margin-top:4px;">
+                <span>1,000 views/mo</span>
+                <span>25,000</span>
+                <span>50,000 views/mo</span>
+              </div>
+            </div>
+
+            <div>
+              <label style="display:block; font-size:0.84rem; font-weight:800; color:var(--navy-900); margin-bottom:8px;">
+                3. Choose Spotlight Campaign:
+              </label>
+              <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px;">
+                <button type="button" class="btn btn-outline roi-plan-btn" id="roi-plan-1" onclick="window.app.selectRoiPlan(1)" style="padding:6px 2px; font-size:0.75rem; font-weight:700;">1 Mo</button>
+                <button type="button" class="btn btn-outline roi-plan-btn" id="roi-plan-3" onclick="window.app.selectRoiPlan(3)" style="padding:6px 2px; font-size:0.75rem; font-weight:700;">3 Mos</button>
+                <button type="button" class="btn btn-navy roi-plan-btn active" id="roi-plan-6" onclick="window.app.selectRoiPlan(6)" style="padding:6px 2px; font-size:0.75rem; font-weight:700;">6 Mos</button>
+                <button type="button" class="btn btn-outline roi-plan-btn" id="roi-plan-12" onclick="window.app.selectRoiPlan(12)" style="padding:6px 2px; font-size:0.75rem; font-weight:700;">1 Yr</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Real-Time Projections Display -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div style="background:var(--emerald-50); border:1px solid var(--emerald-200); border-radius:var(--radius-lg); padding:18px; text-align:center;">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--emerald-800); text-transform:uppercase; margin-bottom:4px;">
+                EST. MONTHLY INQUIRIES
+              </div>
+              <div id="roi-calc-inquiries" style="font-size:2rem; font-weight:900; color:var(--emerald-700);">
+                170 Inquiries
+              </div>
+              <div style="font-size:0.72rem; color:var(--emerald-900); margin-top:2px;">
+                +340% Verification Trust Lift
+              </div>
+            </div>
+
+            <div style="background:var(--amber-50); border:1px solid var(--amber-200); border-radius:var(--radius-lg); padding:18px; text-align:center;">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--amber-800); text-transform:uppercase; margin-bottom:4px;">
+                CUSTOMER PROMO SAVINGS
+              </div>
+              <div id="roi-calc-savings" style="font-size:2rem; font-weight:900; color:var(--amber-700);">
+                ₱30,600
+              </div>
+              <div style="font-size:0.72rem; color:var(--amber-900); margin-top:2px;">
+                Verified customer discount value
+              </div>
+            </div>
+
+            <div style="background:var(--blue-50); border:1px solid var(--blue-200); border-radius:var(--radius-lg); padding:18px; text-align:center;">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--blue-800); text-transform:uppercase; margin-bottom:4px;">
+                BUYER ESCROW SHIELD
+              </div>
+              <div id="roi-calc-shield" style="font-size:2rem; font-weight:900; color:var(--blue-700);">
+                ₱75,000
+              </div>
+              <div style="font-size:0.72rem; color:var(--blue-900); margin-top:2px;">
+                VeriPinoy Protected Coverage
+              </div>
+            </div>
+
+            <div style="background:var(--slate-900); color:var(--white); border-radius:var(--radius-lg); padding:18px; text-align:center;">
+              <div style="font-size:0.75rem; font-weight:800; color:var(--emerald-400); text-transform:uppercase; margin-bottom:4px;">
+                EST. RETURN ON SPOTLIGHT
+              </div>
+              <div id="roi-calc-return" style="font-size:2rem; font-weight:900; color:var(--white);">
+                9.2x ROI
+              </div>
+              <div id="roi-calc-net-rev" style="font-size:0.72rem; color:var(--slate-300); margin-top:2px;">
+                Est. ₱91,800 gross sales
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+      </div>
+    </div>
     </div>
   </div>
 
@@ -1830,26 +2122,49 @@
   </div>
 
   <!-- =========================================================================
+       VIEW 12: ROLE-BASED REPORTING & ANALYTICS MODULE (Auditors, Sales, Admin, Super Admin)
+       ========================================================================= -->
+  <div id="page-reports" class="page-view">
+    <div class="wrap">
+      <div id="role-reports-container">
+        <!-- Rendered dynamically with tailored RBAC views by app-client.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
        UNIVERSAL SIGN IN & AUTHENTICATION MODAL (Login.png & Business Hub.png)
        ========================================================================= -->
   <div class="modal-overlay" id="modal-auth" onclick="if(event.target===this) window.app.closeModal('modal-auth')">
-    <div class="modal-content" style="max-width:540px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <div class="modal-content" style="max-width:640px; max-height:92vh; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; border-bottom:1px solid var(--slate-200); padding-bottom:12px;">
         <div>
-          <h3 style="font-family:var(--font-heading); font-size:1.5rem; font-weight:900; color:var(--navy-900);">
-            VeriPinoy Portal Sign In
+          <h3 style="font-family:var(--font-heading); font-size:1.4rem; font-weight:900; color:var(--navy-900); margin:0;" id="auth-modal-title">
+            VeriPinoy Portal Access
           </h3>
-          <p style="font-size:0.82rem; color:var(--slate-500);">Select your track to access verified Philippine tools</p>
+          <p style="font-size:0.8rem; color:var(--slate-500); margin:2px 0 0;" id="auth-modal-subtitle">
+            Philippine National Trust & Compliance Infrastructure
+          </p>
         </div>
         <button class="btn btn-outline" style="padding:4px 8px; border:none;" onclick="window.app.closeModal('modal-auth')">✕</button>
       </div>
 
+      <!-- Mode Switcher (Sign In vs Register) -->
+      <div style="display:flex; background:var(--slate-100); padding:4px; border-radius:var(--radius-pill); margin-bottom:14px; border:1px solid var(--slate-200);" id="auth-mode-pill-toggle">
+        <button type="button" id="auth-pill-login" class="btn" style="flex:1; border-radius:var(--radius-pill); font-size:0.82rem; font-weight:800; padding:6px 12px; transition:all 0.2s;" onclick="window.app.setAuthModalMode('login')">
+          🔑 Sign In to Existing Account
+        </button>
+        <button type="button" id="auth-pill-register" class="btn" style="flex:1; border-radius:var(--radius-pill); font-size:0.82rem; font-weight:800; padding:6px 12px; transition:all 0.2s;" onclick="window.app.setAuthModalMode('register')">
+          ✨ Register New Account
+        </button>
+      </div>
+
       <!-- Role Tabs (Customer / Business / Freelancer / Staff) -->
-      <div class="auth-tab-bar" id="auth-modal-tabs">
+      <div class="auth-tab-bar" id="auth-modal-tabs" style="margin-bottom:14px;">
         <button class="auth-tab-btn active" data-role="customer" onclick="window.app.switchAuthModalTab('customer')">👤 Customer</button>
         <button class="auth-tab-btn" data-role="business" onclick="window.app.switchAuthModalTab('business')">🏢 Business</button>
         <button class="auth-tab-btn" data-role="freelancer" onclick="window.app.switchAuthModalTab('freelancer')">💻 Freelancer</button>
-        <button class="auth-tab-btn" data-role="staff" onclick="window.app.switchAuthModalTab('staff')">🛡️ Staff</button>
+        <button class="auth-tab-btn" data-role="staff" id="auth-tab-btn-staff" onclick="window.app.switchAuthModalTab('staff')">🛡️ Staff / Admin</button>
       </div>
 
       <!-- Tab Content Form -->
@@ -1870,36 +2185,60 @@
         Select an active demo persona to instantly experience the application from different user perspectives:
       </p>
 
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <button class="btn btn-outline" style="justify-content:flex-start; padding:12px;" onclick="window.app.switchUserPersona('customer'); window.app.closeModal('modal-switch-persona');">
-          <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" style="width:32px; height:32px; border-radius:50%;">
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-outline" style="justify-content:flex-start; padding:10px 12px; gap:12px;" onclick="window.app.switchUserPersona('customer'); window.app.closeModal('modal-switch-persona');">
+          <div style="width:34px; height:34px; border-radius:var(--radius-md); background:var(--emerald-100); color:var(--emerald-800); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; flex-shrink:0;">MS</div>
           <div style="text-align:left;">
-            <div style="font-weight:700;">Maria Santos</div>
-            <div style="font-size:0.75rem; color:var(--emerald-600);">CUSTOMER (Client seeking services)</div>
+            <div style="font-weight:700; font-size:0.88rem;">Maria Santos</div>
+            <div style="font-size:0.72rem; color:var(--emerald-600); font-weight:600;">CUSTOMER (Consumer Reviewer & Client)</div>
           </div>
         </button>
 
-        <button class="btn btn-outline" style="justify-content:flex-start; padding:12px;" onclick="window.app.switchUserPersona('business'); window.app.closeModal('modal-switch-persona');">
-          <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80" style="width:32px; height:32px; border-radius:50%;">
+        <button class="btn btn-outline" style="justify-content:flex-start; padding:10px 12px; gap:12px;" onclick="window.app.switchUserPersona('business'); window.app.closeModal('modal-switch-persona');">
+          <div style="width:34px; height:34px; border-radius:var(--radius-md); background:var(--blue-100); color:var(--blue-800); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; flex-shrink:0;">BK</div>
           <div style="text-align:left;">
-            <div style="font-weight:700;">Bahay Kubo Restaurant (Merchant)</div>
-            <div style="font-size:0.75rem; color:var(--blue-600);">BUSINESS OWNER (Food & Dining • Makati)</div>
+            <div style="font-weight:700; font-size:0.88rem;">Bahay Kubo Restaurant (Juan Dela Cruz)</div>
+            <div style="font-size:0.72rem; color:var(--blue-600); font-weight:600;">BUSINESS OWNER (Verified Merchant • Makati)</div>
           </div>
         </button>
 
-        <button class="btn btn-outline" style="justify-content:flex-start; padding:12px;" onclick="window.app.switchUserPersona('freelancer'); window.app.closeModal('modal-switch-persona');">
-          <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80" style="width:32px; height:32px; border-radius:50%;">
+        <button class="btn btn-outline" style="justify-content:flex-start; padding:10px 12px; gap:12px;" onclick="window.app.switchUserPersona('freelancer'); window.app.closeModal('modal-switch-persona');">
+          <div style="width:34px; height:34px; border-radius:var(--radius-md); background:var(--amber-100); color:var(--amber-800); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; flex-shrink:0;">MR</div>
           <div style="text-align:left;">
-            <div style="font-weight:700;">Marco Antonio Reyes</div>
-            <div style="font-size:0.75rem; color:var(--amber-600);">FREELANCER PRO (Senior Web Developer)</div>
+            <div style="font-weight:700; font-size:0.88rem;">Marco Antonio Reyes</div>
+            <div style="font-size:0.72rem; color:var(--amber-600); font-weight:600;">FREELANCER PRO (Senior Web Developer)</div>
           </div>
         </button>
 
-        <button class="btn btn-outline" style="justify-content:flex-start; padding:12px;" onclick="window.app.switchUserPersona('staff'); window.app.closeModal('modal-switch-persona');">
-          <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&q=80" style="width:32px; height:32px; border-radius:50%;">
+        <button class="btn btn-outline" style="justify-content:flex-start; padding:10px 12px; gap:12px; border-color:#FECDD3; background:#FFF1F2;" onclick="window.app.switchUserPersona('auditor'); window.app.closeModal('modal-switch-persona');">
+          <div style="width:34px; height:34px; border-radius:var(--radius-md); background:var(--rose-100); color:var(--rose-800); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; flex-shrink:0;">RS</div>
           <div style="text-align:left;">
-            <div style="font-weight:700;">Auditor Roberto Santos</div>
-            <div style="font-size:0.75rem; color:var(--red-600);">COMPLIANCE AUDITOR (Staff / Verifier)</div>
+            <div style="font-weight:700; font-size:0.88rem; color:var(--navy-900);">Auditor Roberto Santos</div>
+            <div style="font-size:0.72rem; color:var(--red-600); font-weight:700;">AUDITOR ROLE (Compliance Logs & Security Audit)</div>
+          </div>
+        </button>
+
+        <button class="btn btn-outline" style="justify-content:flex-start; padding:10px 12px; gap:12px; border-color:#FED7AA; background:#FFF7ED;" onclick="window.app.switchUserPersona('sales'); window.app.closeModal('modal-switch-persona');">
+          <div style="width:34px; height:34px; border-radius:var(--radius-md); background:#FFEDD5; color:#9A3412; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; flex-shrink:0;">CD</div>
+          <div style="text-align:left;">
+            <div style="font-weight:700; font-size:0.88rem; color:var(--navy-900);">Camille Dizon</div>
+            <div style="font-size:0.72rem; color:#C2410C; font-weight:700;">SALES TEAM ROLE (Pipeline & Merchant Acquisition)</div>
+          </div>
+        </button>
+
+        <button class="btn btn-outline" style="justify-content:flex-start; padding:10px 12px; gap:12px; border-color:#BAE6FD; background:#F0F9FF;" onclick="window.app.switchUserPersona('admin'); window.app.closeModal('modal-switch-persona');">
+          <div style="width:34px; height:34px; border-radius:var(--radius-md); background:#E0F2FE; color:#0369A1; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; flex-shrink:0;">MR</div>
+          <div style="text-align:left;">
+            <div style="font-weight:700; font-size:0.88rem; color:var(--navy-900);">Maria Elena Ramos</div>
+            <div style="font-size:0.72rem; color:#0284C7; font-weight:700;">ADMIN ROLE (Operations & Staff Management)</div>
+          </div>
+        </button>
+
+        <button class="btn btn-outline" style="justify-content:flex-start; padding:10px 12px; gap:12px; border-color:var(--navy-900); background:#F8FAFC;" onclick="window.app.switchUserPersona('super_admin'); window.app.closeModal('modal-switch-persona');">
+          <div style="width:34px; height:34px; border-radius:var(--radius-md); background:var(--navy-900); color:var(--emerald-400); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; flex-shrink:0;">AC</div>
+          <div style="text-align:left;">
+            <div style="font-weight:700; font-size:0.88rem; color:var(--navy-900);">Director Alejandro Cruz</div>
+            <div style="font-size:0.72rem; color:var(--navy-900); font-weight:700;">SUPER ADMIN ROLE (Executive Directorate • Full Access)</div>
           </div>
         </button>
 
@@ -1983,6 +2322,158 @@
     </div>
   </div>
 
+  <!-- Staff Invite / Add Modal (Super Admin & Admin) -->
+  <div class="modal-overlay" id="modal-staff-invite" onclick="if(event.target===this) window.app.closeModal('modal-staff-invite')">
+    <div class="modal-content" style="max-width:560px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:36px; height:36px; border-radius:var(--radius-md); background:var(--navy-900); color:var(--amber-400); display:flex; align-items:center; justify-content:center; font-size:1.1rem;">
+            👥
+          </div>
+          <div>
+            <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin:0;">
+              Invite New Staff Member
+            </h3>
+            <p style="font-size:0.78rem; color:var(--slate-500); margin:0;">Provision employee account and trigger Supabase Auth invitation</p>
+          </div>
+        </div>
+        <button class="btn btn-outline" style="padding:4px 8px; border:none;" onclick="window.app.closeModal('modal-staff-invite')">✕</button>
+      </div>
+
+      <form id="form-staff-invite" onsubmit="event.preventDefault(); window.app.submitStaffInvite();">
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div>
+            <label style="display:block; font-size:0.82rem; font-weight:700; color:var(--navy-900); margin-bottom:4px;">
+              Employee Full Name *
+            </label>
+            <input type="text" id="staff-invite-name" class="input-field" placeholder="e.g. Maria Teresa Gomez" required style="width:100%;">
+          </div>
+
+          <div>
+            <label style="display:block; font-size:0.82rem; font-weight:700; color:var(--navy-900); margin-bottom:4px;">
+              Official Work Email *
+            </label>
+            <input type="email" id="staff-invite-email" class="input-field" placeholder="e.g. maria.gomez@veripinoy.ph" required style="width:100%;">
+            <div style="font-size:0.72rem; color:var(--slate-500); margin-top:2px;">Must be an active work email for credential delivery</div>
+          </div>
+
+          <div>
+            <label style="display:block; font-size:0.82rem; font-weight:700; color:var(--navy-900); margin-bottom:4px;">
+              Assigned Role Hierarchy *
+            </label>
+            <select id="staff-invite-role" class="input-field" style="width:100%;">
+              <option value="auditor">Lead Compliance Auditor (KYC/KYB/Vault Verification)</option>
+              <option value="verifier">KYC & DTI Verification Specialist</option>
+              <option value="support">Support Concierge & Escrow Dispute Agent</option>
+              <option value="admin">Compliance Director (Admin - Manage Staff & Cases)</option>
+              <option value="super_admin">Super Administrator (Full System & Security Access)</option>
+            </select>
+          </div>
+
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:12px; display:flex; flex-direction:column; gap:8px;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; color:var(--slate-700); cursor:pointer;">
+              <input type="checkbox" id="staff-invite-mfa" checked>
+              <span><strong>Enforce Two-Factor / MFA Authentication</strong> on initial login</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; color:var(--slate-700); cursor:pointer;">
+              <input type="checkbox" id="staff-invite-send-email" checked>
+              <span><strong>Trigger Automated Supabase Auth Email</strong> with secure activation link</span>
+            </label>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+            <button type="button" class="btn btn-outline" onclick="window.app.closeModal('modal-staff-invite')">Cancel</button>
+            <button type="submit" class="btn btn-navy" id="btn-submit-staff-invite">
+              🚀 Send Invitation & Provision
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Staff Edit Modal (Super Admin & Admin) -->
+  <div class="modal-overlay" id="modal-staff-edit" onclick="if(event.target===this) window.app.closeModal('modal-staff-edit')">
+    <div class="modal-content" style="max-width:540px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div>
+          <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--navy-900); margin:0;">
+            Edit Staff Member Profile
+          </h3>
+          <p style="font-size:0.78rem; color:var(--slate-500); margin:0;">Modify assigned role hierarchy, status, or MFA settings</p>
+        </div>
+        <button class="btn btn-outline" style="padding:4px 8px; border:none;" onclick="window.app.closeModal('modal-staff-edit')">✕</button>
+      </div>
+
+      <form id="form-staff-edit" onsubmit="event.preventDefault(); window.app.submitStaffEdit();">
+        <input type="hidden" id="staff-edit-id">
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div>
+            <label style="display:block; font-size:0.82rem; font-weight:700; color:var(--navy-900); margin-bottom:4px;">
+              Full Name
+            </label>
+            <input type="text" id="staff-edit-name" class="input-field" required style="width:100%;">
+          </div>
+
+          <div>
+            <label style="display:block; font-size:0.82rem; font-weight:700; color:var(--navy-900); margin-bottom:4px;">
+              Work Email Address
+            </label>
+            <input type="email" id="staff-edit-email" class="input-field" readonly style="width:100%; background:var(--slate-100); color:var(--slate-600);">
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="display:block; font-size:0.82rem; font-weight:700; color:var(--navy-900); margin-bottom:4px;">
+                Assigned Role
+              </label>
+              <select id="staff-edit-role" class="input-field" style="width:100%;">
+                <option value="super_admin">Super Administrator</option>
+                <option value="admin">Compliance Director (Admin)</option>
+                <option value="auditor">Lead Compliance Auditor</option>
+                <option value="verifier">Verification Specialist</option>
+                <option value="support">Support Concierge</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block; font-size:0.82rem; font-weight:700; color:var(--navy-900); margin-bottom:4px;">
+                Account Status
+              </label>
+              <select id="staff-edit-status" class="input-field" style="width:100%;">
+                <option value="active">Active (Full Access)</option>
+                <option value="suspended">Suspended (Blocked)</option>
+                <option value="invited">Invited (Pending Activation)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:12px; display:flex; flex-direction:column; gap:8px;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; color:var(--slate-700); cursor:pointer;">
+              <input type="checkbox" id="staff-edit-mfa">
+              <span><strong>Enforce MFA / Two-Factor Verification</strong></span>
+            </label>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--slate-200); padding-top:8px; margin-top:2px;">
+              <span style="font-size:0.78rem; color:var(--slate-600);">Password Security</span>
+              <button type="button" class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px;" onclick="window.app.triggerStaffPasswordResetModal()">
+                🔑 Send Password Reset Link
+              </button>
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <button type="button" class="btn btn-outline" style="color:var(--red-600); border-color:#FECDD3; background:#FFF1F2; font-size:0.8rem;" onclick="window.app.deleteStaffFromEditModal()">
+              🗑️ Delete Account
+            </button>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-outline" onclick="window.app.closeModal('modal-staff-edit')">Cancel</button>
+              <button type="submit" class="btn btn-navy">Save Updates</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- =========================================================================
        INFORMATIVE MODALS: ABOUT US, CONTACT US, TERMS, GOV REQUIREMENTS
        ========================================================================= -->
@@ -1997,7 +2488,7 @@
           </div>
           <div>
             <h3 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:900; color:var(--navy-900); margin:0;">About VeriPinoy</h3>
-            <div style="font-size:0.78rem; color:var(--slate-500);">Tatak Pinoy, Tatak Sigurado — Philippine Trust Infrastructure</div>
+            <div style="font-size:0.78rem; color:var(--slate-500);">Philippine Digital Trust & Verification Infrastructure</div>
           </div>
         </div>
         <button class="btn btn-outline" style="padding:4px 8px; border:none;" onclick="window.app.closeModal('modal-about')">✕</button>
@@ -2183,7 +2674,7 @@
 
   <!-- 4. Philippine Government Requirements for a Website Modal -->
   <div class="modal-overlay" id="modal-gov-requirements" onclick="if(event.target===this) window.app.closeModal('modal-gov-requirements')">
-    <div class="modal-content" style="max-width:820px; max-height:90vh; overflow-y:auto;">
+    <div class="modal-content" style="max-width:840px; max-height:90vh; overflow-y:auto;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; border-bottom:1px solid var(--slate-200); padding-bottom:14px;">
         <div style="display:flex; align-items:center; gap:10px;">
           <div style="width:38px; height:38px; border-radius:var(--radius-md); background:var(--navy-900); color:var(--emerald-400); display:flex; align-items:center; justify-content:center; font-size:1.2rem;">
@@ -2195,6 +2686,19 @@
           </div>
         </div>
         <button class="btn btn-outline" style="padding:4px 8px; border:none;" onclick="window.app.closeModal('modal-gov-requirements')">✕</button>
+      </div>
+
+      <!-- FAQ Cross-Navigation Callout Banner -->
+      <div style="background:#EFF6FF; border:1.5px solid #BFDBFE; border-radius:var(--radius-md); padding:12px 16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1.2rem;">💡</span>
+          <div style="font-size:0.84rem; color:#1E40AF;">
+            <strong>Looking for answers to common compliance questions?</strong> View the interactive Government Requirements FAQs.
+          </div>
+        </div>
+        <button class="btn btn-navy" style="font-size:0.78rem; padding:6px 14px;" onclick="window.app.closeModal('modal-gov-requirements'); window.app.openFaqModal('gov');">
+          ❓ View Government Requirements FAQs →
+        </button>
       </div>
 
       <div style="font-size:0.86rem; color:var(--slate-700); line-height:1.6; display:flex; flex-direction:column; gap:14px;">
@@ -2274,7 +2778,366 @@
 
         <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--slate-200); padding-top:14px; margin-top:8px;">
           <div style="font-size:0.75rem; color:var(--slate-500);">Curated in cooperation with Philippine DTI, SEC, BIR, and NPC regulatory standards.</div>
-          <button class="btn btn-navy" style="padding:6px 16px; font-size:0.85rem;" onclick="window.app.closeModal('modal-gov-requirements')">Close Guide</button>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-outline" style="padding:6px 14px; font-size:0.82rem;" onclick="window.app.closeModal('modal-gov-requirements'); window.app.openFaqModal('gov');">❓ Open FAQs</button>
+            <button class="btn btn-navy" style="padding:6px 16px; font-size:0.85rem;" onclick="window.app.closeModal('modal-gov-requirements')">Close Guide</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4b. COMPREHENSIVE FREQUENTLY ASKED QUESTIONS (FAQs) & COMPLIANCE HUB MODAL -->
+  <div class="modal-overlay" id="modal-faq" onclick="if(event.target===this) window.app.closeModal('modal-faq')">
+    <div class="modal-content" style="max-width:880px; max-height:92vh; overflow-y:auto; padding:28px;">
+      <!-- Modal Header -->
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; border-bottom:1px solid var(--slate-200); padding-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="width:44px; height:44px; border-radius:var(--radius-md); background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color:var(--emerald-400); display:flex; align-items:center; justify-content:center; font-size:1.4rem; box-shadow:var(--shadow-sm);">
+            ❓
+          </div>
+          <div>
+            <h3 style="font-family:var(--font-heading); font-size:1.4rem; font-weight:900; color:var(--navy-900); margin:0;">
+              Frequently Asked Questions (FAQs)
+            </h3>
+            <div style="font-size:0.8rem; color:var(--slate-500); margin-top:2px;">
+              Philippine Government Requirements, Statutory Website Compliance, Verification & Escrow Guides
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-outline" style="padding:4px 8px; border:none;" onclick="window.app.closeModal('modal-faq')">✕</button>
+      </div>
+
+      <!-- FAQ Search Input Bar -->
+      <div style="position:relative; margin-bottom:20px;">
+        <input type="text" id="faq-search-input" class="form-control" placeholder="🔍 Search questions, Philippine laws (e.g. DTI, BIR 2303, RA 11967, Privacy, Escrow, Refund)..." style="padding-left:16px; padding-right:40px; font-size:0.92rem; height:46px; border-radius:var(--radius-lg);" oninput="window.app.filterFaqItems(this.value)">
+        <span id="faq-search-count" style="position:absolute; right:14px; top:13px; font-size:0.75rem; font-weight:700; color:var(--slate-400);">12 FAQs</span>
+      </div>
+
+      <!-- FAQ Category Tabs -->
+      <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:20px;" id="faq-category-tabs-container">
+        <button class="faq-category-btn active" id="faq-tab-gov" onclick="window.app.switchFaqCategory('gov')">
+          🏛️ Philippine Gov't Requirements (6)
+        </button>
+        <button class="faq-category-btn" id="faq-tab-business" onclick="window.app.switchFaqCategory('business')">
+          🏢 Business Verification (2)
+        </button>
+        <button class="faq-category-btn" id="faq-tab-freelancer" onclick="window.app.switchFaqCategory('freelancer')">
+          💻 Freelancer KYC & Escrow (2)
+        </button>
+        <button class="faq-category-btn" id="faq-tab-reviews" onclick="window.app.switchFaqCategory('reviews')">
+          💬 Reviews & DPA Privacy (2)
+        </button>
+        <button class="faq-category-btn" id="faq-tab-all" onclick="window.app.switchFaqCategory('all')">
+          🌐 All Questions (12)
+        </button>
+      </div>
+
+      <!-- FAQ Items Accordion Container -->
+      <div id="faq-items-list">
+        <!-- ==========================================
+             CATEGORY 1: PHILIPPINE GOVERNMENT REQUIREMENTS
+             ========================================== -->
+
+        <!-- FAQ 1 -->
+        <div class="faq-item active" data-category="gov" id="faq-item-1">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-1')">
+            <div class="faq-title">
+              <span class="faq-badge-gov">STATUTORY REQUIREMENT</span>
+              What are the mandatory Philippine government requirements for operating a website or e-commerce store?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 10px;">
+              Under Philippine laws and national e-commerce regulations, all commercial websites, digital marketplaces, online storefronts, and digital service providers operating in the Philippines must comply with five core statutory requirements:
+            </p>
+            <div style="display:grid; grid-template-columns:1fr; gap:8px; margin-bottom:12px;">
+              <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:10px 14px;">
+                <strong style="color:var(--navy-900);">1. DTI or SEC Registration Certificate:</strong> Sole proprietors must hold a valid <em>DTI Business Name Certificate</em>; corporations and partnerships must have an active <em>SEC Certificate of Incorporation</em>.
+              </div>
+              <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:10px 14px;">
+                <strong style="color:var(--navy-900);">2. BIR Form 2303 & Electronic Invoicing:</strong> Must be registered with the Bureau of Internal Revenue (BIR Form 2303) under appropriate digital commerce PSIC codes, issue BIR-compliant Sales Invoices/ORs, and comply with 1% creditable withholding tax regulations (RR 16-2023).
+              </div>
+              <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:10px 14px;">
+                <strong style="color:var(--navy-900);">3. LGU Mayor's Business Permit:</strong> A valid business permit issued by the Local Government Unit (City or Municipality) where business operations or fulfillment hubs are stationed.
+              </div>
+              <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:10px 14px;">
+                <strong style="color:var(--navy-900);">4. Internet Transactions Act Compliance (RA 11967):</strong> Mandatory registration with the DTI E-Commerce Bureau (ECB) Online Business Database and full disclosure of corporate identity, physical location, and contact numbers.
+              </div>
+              <div style="background:var(--slate-50); border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:10px 14px;">
+                <strong style="color:var(--navy-900);">5. NPC Data Privacy Compliance (RA 10173):</strong> Published Privacy Policy, appointment of a registered Data Protection Officer (DPO), and secure AES-256-GCM encryption of personal data.
+              </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+              <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px;" onclick="window.app.openModal('modal-gov-requirements')">
+                📋 View Full Statutory Checklist Modal →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ 2 -->
+        <div class="faq-item" data-category="gov" id="faq-item-2">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-2')">
+            <div class="faq-title">
+              <span class="faq-badge-gov">RA 11967</span>
+              What disclosures are mandatory on a website under the Internet Transactions Act (RA 11967)?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 10px;">
+              The <strong>Internet Transactions Act of 2023 (Republic Act No. 11967)</strong> mandates that every digital platform, commercial website, and online vendor must prominently disclose the following details on all public web pages (typically within the website header or footer):
+            </p>
+            <ul style="margin:0 0 12px; padding-left:20px; font-size:0.85rem; line-height:1.5;">
+              <li><strong>Registered Business Name:</strong> Exactly as registered with DTI or SEC.</li>
+              <li><strong>Official Registration Numbers:</strong> DTI Certificate Number or SEC Company Registration Number.</li>
+              <li><strong>Physical Office Address:</strong> Verified physical address of the principal office or brick-and-mortar hub (not merely a P.O. Box).</li>
+              <li><strong>Active Contact Details:</strong> Operational telephone hotlines, mobile contact numbers, and official business email address.</li>
+              <li><strong>E-Commerce Trustmark:</strong> Display of the government-recognized Philippine E-Commerce Trustmark once verified by accredited registries like VeriPinoy.</li>
+            </ul>
+            <div style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:var(--radius-md); padding:10px 14px; font-size:0.8rem; color:#92400E;">
+              ⚠️ <em>Failure to disclose these statutory identifiers constitutes an unfair or deceptive sales act punishable by administrative fines and website blocking by the DTI Secretary.</em>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ 3 -->
+        <div class="faq-item" data-category="gov" id="faq-item-3">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-3')">
+            <div class="faq-title">
+              <span class="faq-badge-gov">BIR & TAXATION</span>
+              What are the BIR tax compliance and e-invoicing rules for online stores (RR 16-2023 & RMC 8-2024)?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 10px;">
+              Under <strong>BIR Revenue Regulations No. 16-2023</strong> and <strong>Revenue Memorandum Circular No. 8-2024</strong>, online merchants and freelancers must abide by the following tax directives:
+            </p>
+            <ul style="margin:0 0 12px; padding-left:20px; font-size:0.85rem; line-height:1.5;">
+              <li><strong>Valid BIR Form 2303:</strong> Merchants must upload and maintain an active Certificate of Registration reflecting online sales or digital service activities.</li>
+              <li><strong>Issuance of Invoices:</strong> Electronic Sales Invoices or Official Receipts (OR) must be generated for all online sales transactions, detailing the Tax Identification Number (TIN) and itemized VAT breakdown.</li>
+              <li><strong>1% Creditable Withholding Tax:</strong> Digital marketplace operators (e.g., e-commerce platforms, payment aggregators) are mandated to withhold a 1% tax on 50% of the gross remittances to online sellers/merchants, unless exempted by BIR annual gross threshold limits.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- FAQ 4 -->
+        <div class="faq-item" data-category="gov" id="faq-item-4">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-4')">
+            <div class="faq-title">
+              <span class="faq-badge-gov">RA 10173 & NPC</span>
+              How must a Philippine website comply with the Data Privacy Act (DPA 2012) and the NPC?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 10px;">
+              The <strong>Data Privacy Act of 2012 (Republic Act No. 10173)</strong> enforced by the National Privacy Commission (NPC) requires websites handling user accounts, orders, or sensitive personal data to implement:
+            </p>
+            <ul style="margin:0 0 12px; padding-left:20px; font-size:0.85rem; line-height:1.5;">
+              <li><strong>Comprehensive Privacy Policy:</strong> Clearly stating the purpose of data collection, processing mechanisms, third-party sharing policies, and data retention schedules.</li>
+              <li><strong>Designated Data Protection Officer (DPO):</strong> An appointed and NPC-registered DPO responsible for organizational privacy compliance.</li>
+              <li><strong>Explicit Consent Checkboxes:</strong> Opt-in mechanisms on registration and checkout forms before any personal data is gathered.</li>
+              <li><strong>AES-256 Encryption at Rest:</strong> Cryptographic security protecting sensitive identification documents and payment tokens.</li>
+              <li><strong>72-Hour Breach Notification:</strong> Established protocol to report any security incident or personal data breach to the NPC within 72 hours.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- FAQ 5 -->
+        <div class="faq-item" data-category="gov" id="faq-item-5">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-5')">
+            <div class="faq-title">
+              <span class="faq-badge-gov">RA 7394 & PRICE ACT</span>
+              What does DTI's "No PM for Price" policy and the Consumer Act require?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 10px;">
+              Under the <strong>Consumer Act of the Philippines (RA 7394)</strong> and the <strong>Price Act (RA 7581)</strong>, as reinforced by DTI Joint Administrative Orders:
+            </p>
+            <ul style="margin:0 0 12px; padding-left:20px; font-size:0.85rem; line-height:1.5;">
+              <li><strong>Mandatory Price Display:</strong> All prices of goods and services displayed online must be clearly indicated in Philippine Peso (₱ / PHP) inclusive of VAT. Requiring customers to send private messages ("PM is key" / "PM for price") is strictly prohibited by law.</li>
+              <li><strong>Clear Return & Refund Policy:</strong> Online sellers must provide transparent return, exchange, or refund terms. Unconditional "No Return, No Exchange" statements are illegal under Philippine consumer law if goods are defective, misrepresented, or damaged.</li>
+              <li><strong>Truth in Advertising:</strong> Prohibiting misleading promotional discounts, bait-and-switch pricing, or fake countdown timers.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- FAQ 6 -->
+        <div class="faq-item" data-category="gov" id="faq-item-6">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-6')">
+            <div class="faq-title">
+              <span class="faq-badge-gov">RA 8792</span>
+              Are digital milestone contracts and electronic signatures legally binding in the Philippines?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0;">
+              Yes. Under the <strong>Electronic Commerce Act of 2000 (Republic Act No. 8792)</strong> and the Supreme Court Rules on Electronic Evidence, electronic documents, milestone agreements, digital consent logs, and cryptographically verified signatures hold the same legal validity, admissibility, and enforceability in Philippine courts as traditional paper contracts.
+            </p>
+          </div>
+        </div>
+
+        <!-- ==========================================
+             CATEGORY 2: BUSINESS ACCREDITATION (KYB)
+             ========================================== -->
+
+        <!-- FAQ 7 -->
+        <div class="faq-item" data-category="business" id="faq-item-7">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-7')">
+            <div class="faq-title">
+              <span class="badge badge-emerald">BUSINESS KYB</span>
+              How does a business earn the VeriPinoy Verified Trustmark?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 8px;">
+              The VeriPinoy verification process follows a rigorous 3-tier auditing protocol:
+            </p>
+            <ol style="margin:0 0 10px; padding-left:20px; font-size:0.85rem; line-height:1.5;">
+              <li><strong>Document Upload:</strong> Submit DTI/SEC registration, BIR Form 2303, and current Mayor's Permit via the AES-256 Encrypted Vault.</li>
+              <li><strong>Automated Registry Cross-Check:</strong> Verification algorithms check official government databases for active standing and authenticity.</li>
+              <li><strong>Auditor Directorate Sign-off:</strong> A certified VeriPinoy Compliance Auditor reviews and signs the cryptographic credential, granting the official VeriPinoy trust seal.</li>
+            </ol>
+            <button class="btn btn-navy" style="font-size:0.78rem; padding:6px 14px;" onclick="window.app.closeModal('modal-faq'); window.app.route('pricing');">
+              🛡️ Get Business Verified →
+            </button>
+          </div>
+        </div>
+
+        <!-- FAQ 8 -->
+        <div class="faq-item" data-category="business" id="faq-item-8">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-8')">
+            <div class="faq-title">
+              <span class="badge badge-emerald">TRUST EMBED</span>
+              How do I embed the interactive VeriPinoy Trust Badge on my own company website?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 8px;">
+              Once your business is verified, you can paste our lightweight HTML embed code into your website's footer or checkout page:
+            </p>
+            <div style="background:var(--slate-900); color:var(--emerald-400); padding:10px 14px; border-radius:var(--radius-md); font-family:monospace; font-size:0.8rem; margin-bottom:10px; overflow-x:auto;">
+              &lt;script src="https://veripinoy.ph/seal.js" data-seal-id="YOUR_BIZ_ID"&gt;&lt;/script&gt;
+            </div>
+            <p style="margin:0; font-size:0.82rem; color:var(--slate-600);">
+              When clicked by customers, the badge displays a real-time verification modal verifying your DTI/SEC credentials and fraud-free record.
+            </p>
+          </div>
+        </div>
+
+        <!-- ==========================================
+             CATEGORY 3: FREELANCER KYC & ESCROW
+             ========================================== -->
+
+        <!-- FAQ 9 -->
+        <div class="faq-item" data-category="freelancer" id="faq-item-9">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-9')">
+            <div class="faq-title">
+              <span class="badge badge-blue">FREELANCER KYC</span>
+              What credentials do Filipino freelancers need to become verified on VeriPinoy?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 8px;">
+              To ensure client trust and qualify for high-tier milestone projects, freelancers submit:
+            </p>
+            <ul style="margin:0 0 10px; padding-left:20px; font-size:0.85rem; line-height:1.5;">
+              <li><strong>Philippine Primary Government ID:</strong> Passport, UMID, Driver's License, or PhilID (National ID).</li>
+              <li><strong>Tax Identification Number (TIN):</strong> Verification with BIR tax records.</li>
+              <li><strong>NBI Clearance / Background Check:</strong> Proof of clean legal record.</li>
+              <li><strong>Verified Bank or E-Wallet Account:</strong> UnionBank, BDO, BPI, GCash, or Maya for secure InstaPay escrow payouts.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- FAQ 10 -->
+        <div class="faq-item" data-category="freelancer" id="faq-item-10">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-10')">
+            <div class="faq-title">
+              <span class="badge badge-gold">ESCROW SAFEGUARD</span>
+              How does the BSP-regulated Milestone Escrow protect clients and freelancers?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 8px;">
+              VeriPinoy collaborates with BSP-regulated banking partners (UnionBank) to provide locked escrow accounts:
+            </p>
+            <ul style="margin:0 0 10px; padding-left:20px; font-size:0.85rem; line-height:1.5;">
+              <li><strong>Client Deposit:</strong> Project funds are held securely in escrow before work begins—protecting freelancers from non-payment.</li>
+              <li><strong>Milestone Review:</strong> Work deliverables are reviewed by the client against defined deliverables.</li>
+              <li><strong>Instant Payout:</strong> Upon client sign-off, funds are immediately released via InstaPay / PESONet with 0% hidden deductions.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ==========================================
+             CATEGORY 4: REVIEWS & DATA PRIVACY
+             ========================================== -->
+
+        <!-- FAQ 11 -->
+        <div class="faq-item" data-category="reviews" id="faq-item-11">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-11')">
+            <div class="faq-title">
+              <span class="badge badge-emerald">FRAUD RADAR</span>
+              How does VeriPinoy detect and stop fake reviews or review extortion?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 8px;">
+              Our proprietary <strong>AI Fraud Radar</strong> monitors sentiment patterns, IP clusters, and transactional proofs to eliminate astroturfing.
+            </p>
+            <ul style="margin:0; padding-left:20px; font-size:0.85rem; line-height:1.5;">
+              <li><strong>Proof-of-Purchase Matching:</strong> Customer reviews require verified transaction records or official receipts.</li>
+              <li><strong>DPA Reviewer Privacy:</strong> Consumers can mask their full legal name (e.g. Maria S. or Verified Buyer #891) to protect themselves against retaliation while maintaining verified status.</li>
+              <li><strong>Merchant Dispute Channel:</strong> Business owners can challenge unfair or competitor-funded reviews through the 72-hour arbitration desk.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- FAQ 12 -->
+        <div class="faq-item" data-category="reviews" id="faq-item-12">
+          <div class="faq-question" onclick="window.app.toggleFaqItem('faq-item-12')">
+            <div class="faq-title">
+              <span class="badge badge-navy">DISPUTE DESK</span>
+              What happens if a dispute occurs during a milestone project?
+            </div>
+            <div class="faq-chevron">▾</div>
+          </div>
+          <div class="faq-answer">
+            <p style="margin:0 0 8px;">
+              If a client or freelancer encounters an impasse, either party can trigger the <strong>Compliance Dispute Desk</strong>:
+            </p>
+            <p style="margin:0; font-size:0.84rem; color:var(--slate-600); line-height:1.5;">
+              A certified VeriPinoy arbiter reviews project brief documents, chat logs, time logs, and delivered assets to make an impartial determination within 72 hours (Full Release, 100% Client Refund, or 50/50 Mediated Settlement).
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- FAQ Modal Footer Bar -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--slate-200); padding-top:18px; margin-top:20px; flex-wrap:wrap; gap:12px;">
+        <div style="font-size:0.8rem; color:var(--slate-500);">
+          Need further regulatory assistance? Contact the VeriPinoy Legal Desk at <strong>assistance@veripinoy.ph</strong>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-outline" style="font-size:0.82rem; padding:6px 14px;" onclick="window.app.closeModal('modal-faq'); window.app.openModal('modal-contact');">
+            ✉️ Contact Support
+          </button>
+          <button class="btn btn-navy" style="font-size:0.82rem; padding:6px 16px;" onclick="window.app.closeModal('modal-faq')">
+            Close FAQs
+          </button>
         </div>
       </div>
     </div>
@@ -2294,18 +3157,17 @@
        ========================================================================= -->
   <footer class="vp-footer">
     <div class="wrap">
-      <!-- 4-Column Structured Footer -->
+      <!-- 3-Column Structured Footer -->
       <div class="footer-grid">
         <!-- Column 1: About Us -->
         <div class="footer-col">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-            <div style="font-size:1.5rem;">🛡️</div>
-            <div style="font-weight:900; font-size:1.15rem; color:var(--white);">
+          <div style="display:flex; align-items:center; margin-bottom:12px;">
+            <div style="font-weight:900; font-size:1.25rem; color:var(--white);">
               VeriPinoy<span style="color:var(--emerald-400);">.</span>
             </div>
           </div>
           <p style="font-size:0.82rem; color:var(--slate-400); line-height:1.5; margin-bottom:14px;">
-            Tatak Pinoy, Tatak Sigurado. The national digital trust registry verifying Philippine enterprises, MSMEs, and background-cleared professionals.
+            The national digital trust registry verifying Philippine enterprises, MSMEs, and background-cleared professionals.
           </p>
           <div class="footer-links">
             <button onclick="window.app.openModal('modal-about')">
@@ -2340,59 +3202,23 @@
           </div>
         </div>
 
-        <!-- Column 3: Terms & Conditions -->
+        <!-- Column 3: Frequently Asked Questions (FAQs) -->
         <div class="footer-col">
-          <h4>⚖️ Terms & Policies</h4>
-          <div class="footer-links">
-            <button onclick="window.app.openModal('modal-terms')">
-              📜 <span>Terms and Conditions</span>
+          <h4>
+            <button onclick="window.app.openFaqModal('all')" style="background:none; border:none; color:inherit; font:inherit; padding:0; cursor:pointer; display:inline-flex; align-items:center; gap:6px; text-align:left; transition:color 0.2s;" onmouseover="this.style.color='var(--emerald-400)'" onmouseout="this.style.color='inherit'" title="Open FAQs">
+              ❓ <span>Frequently Asked Questions (FAQs)</span>
             </button>
-            <button onclick="window.app.openModal('modal-terms')">
-              🔒 <span>Data Privacy (DPA 2012)</span>
-            </button>
-            <button onclick="window.app.openModal('modal-terms')">
-              ⭐ <span>Review Authenticity Policy</span>
-            </button>
-            <button onclick="window.app.openModal('modal-terms')">
-              💳 <span>Escrow & Refund Rules</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Column 4: Philippine Government Requirements -->
-        <div class="footer-col">
-          <h4>🏛️ Government Requirements</h4>
+          </h4>
           <p style="font-size:0.82rem; color:var(--slate-400); line-height:1.4; margin-bottom:12px;">
-            Statutory disclosures & compliance standards for Philippine websites and online sellers.
+            Answers to statutory requirements, business accreditation, freelancer escrow, and compliance policies.
           </p>
-          <div class="footer-links">
-            <button onclick="window.app.openModal('modal-gov-requirements')">
-              🇵🇭 <span>Gov't Website Requirements Guide</span>
-            </button>
-            <button onclick="window.app.openModal('modal-gov-requirements')">
-              📜 <span>Internet Transactions Act (RA 11967)</span>
-            </button>
-            <button onclick="window.app.openModal('modal-gov-requirements')">
-              🔒 <span>NPC Privacy Regulations (RA 10173)</span>
-            </button>
-            <button onclick="window.app.openModal('modal-gov-requirements')">
-              🧾 <span>BIR 2303 & E-Invoice Rules</span>
-            </button>
-          </div>
         </div>
       </div>
 
       <!-- Bottom Sub-Footer Bar -->
-      <div class="footer-divider">
+      <div class="footer-divider" style="display:flex; justify-content:center; text-align:center;">
         <div>
           &copy; 2026 VeriPinoy Inc. All rights reserved. Registered with DTI, SEC, and the National Privacy Commission (NPC).
-        </div>
-        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-          <span style="color:var(--emerald-400);">🟢 Active Trust Registry</span>
-          <span>•</span>
-          <span>🔒 256-Bit Encrypted Vault</span>
-          <span>•</span>
-          <span>🇵🇭 Republic of the Philippines</span>
         </div>
       </div>
     </div>

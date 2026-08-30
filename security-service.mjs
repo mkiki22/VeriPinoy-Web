@@ -613,7 +613,7 @@ export class SecurityService {
       riskFactors.push({ factor: 'Unverified Account Credentials', weight: '+25' });
     } else if (verificationStatus === 'verified') {
       score = Math.max(0, score - 10);
-      riskFactors.push({ factor: 'Tatak Pinoy KYB Verified Badge Granted', weight: '-10' });
+      riskFactors.push({ factor: 'VeriPinoy KYB Verified Badge Granted', weight: '-10' });
     }
 
     // Factor 2: Account Age Velocity (< 14 days)

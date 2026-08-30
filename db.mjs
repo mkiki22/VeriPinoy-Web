@@ -1459,6 +1459,101 @@ export async function initDatabase() {
     );
   `);
 
+  /* ==========================================================================
+     6. ROLE-BASED REPORTING, PROFILES & PIPELINE SCHEMA (RBAC)
+     ========================================================================== */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS profiles (
+      id TEXT PRIMARY KEY,
+      user_id TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      role TEXT NOT NULL, -- 'auditor', 'sales', 'admin', 'super_admin', 'business', 'freelancer', 'customer'
+      role_title TEXT NOT NULL,
+      department TEXT NOT NULL,
+      permissions_json TEXT,
+      phone TEXT,
+      status TEXT DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS merchant_pipeline (
+      id TEXT PRIMARY KEY,
+      business_name TEXT NOT NULL,
+      owner_name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT,
+      industry TEXT NOT NULL,
+      city TEXT NOT NULL,
+      stage TEXT NOT NULL, -- 'lead_ingestion', 'initial_outreach', 'doc_submission', 'kyb_under_review', 'verified_onboarded', 'spotlight_converted'
+      deal_value REAL DEFAULT 0,
+      referral_source TEXT DEFAULT 'Organic',
+      referral_code TEXT,
+      referrer_name TEXT,
+      assigned_sales_rep TEXT,
+      contact_notes TEXT,
+      last_activity_date TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS referrals (
+      id TEXT PRIMARY KEY,
+      referrer_name TEXT NOT NULL,
+      referrer_email TEXT NOT NULL,
+      referrer_type TEXT NOT NULL, -- 'partner_firm', 'bni_chapter', 'dti_negosyo_center', 'verified_merchant'
+      referral_code TEXT UNIQUE NOT NULL,
+      total_referred_merchants INTEGER DEFAULT 0,
+      converted_merchants INTEGER DEFAULT 0,
+      conversion_rate REAL DEFAULT 0.0,
+      commission_earned REAL DEFAULT 0,
+      commission_paid REAL DEFAULT 0,
+      status TEXT DEFAULT 'active', -- 'active', 'pending_payout'
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS staff_performance_metrics (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL,
+      role_name TEXT NOT NULL,
+      department TEXT NOT NULL,
+      total_tickets_assigned INTEGER DEFAULT 0,
+      total_tickets_resolved INTEGER DEFAULT 0,
+      avg_review_time_mins REAL DEFAULT 0,
+      compliance_accuracy_rate REAL DEFAULT 99.0,
+      approvals_count INTEGER DEFAULT 0,
+      rejections_count INTEGER DEFAULT 0,
+      pending_in_review INTEGER DEFAULT 0,
+      period_label TEXT DEFAULT 'Current Quarter 2026',
+      last_active_at TEXT NOT NULL
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS cardo_compliance_audits (
+      id TEXT PRIMARY KEY,
+      business_id TEXT NOT NULL,
+      business_name TEXT NOT NULL,
+      dti_sec_reg_no TEXT NOT NULL,
+      dti_sec_status TEXT NOT NULL, -- 'verified_active', 'pending_renewal', 'under_investigation', 'flagged_mismatch'
+      cardo_ai_confidence REAL DEFAULT 98.5,
+      bir_2303_status TEXT NOT NULL, -- 'verified_tax_compliant', 'pending_upload', 'tin_mismatched'
+      mayors_permit_status TEXT NOT NULL, -- 'verified_valid', 'expired', 'under_lgu_check'
+      risk_level TEXT DEFAULT 'LOW', -- 'LOW', 'MODERATE', 'HIGH'
+      last_audited_at TEXT NOT NULL,
+      audited_by TEXT NOT NULL
+    );
+  `);
+
   /* CREATE INDEXES FOR PERFORMANCE (Safely wrapped) */
   const indexSqls = [
     `CREATE INDEX IF NOT EXISTS idx_active_sessions_hash ON active_sessions(session_token_hash);`,
@@ -1667,7 +1762,7 @@ function seedDatabaseIfEmpty() {
 
   const now = new Date().toISOString();
 
-  // Always ensure all pricing plans, security data, freelancer profiles, review moderation cases, and support tickets are seeded/updated
+  // Always ensure all pricing plans, security data, freelancer profiles, review moderation cases, support tickets, and role-based reports are seeded/updated
   seedPricingPlans(now);
   seedSecurityData(now);
   seedFreelancerData(now);
@@ -1675,6 +1770,7 @@ function seedDatabaseIfEmpty() {
   seedReviewModerationData(now);
   seedSupportData(now);
   seedUniversalChatData(now);
+  seedRoleBasedReportsData(now);
 
   if (userCheck && userCheck.count > 0) return; // Main tables already seeded
 
@@ -1689,7 +1785,7 @@ function seedDatabaseIfEmpty() {
 
     { code: 'kyb.view', name: 'View KYB Applications', category: 'KYB Business Verification', description: 'View business registration filings and profiles' },
     { code: 'kyb.review', name: 'Review KYB Filing', category: 'KYB Business Verification', description: "Inspect DTI, SEC, Mayor's Permit, and BIR documents" },
-    { code: 'kyb.approve', name: 'Approve KYB', category: 'KYB Business Verification', description: 'Grant Tatak Pinoy verified badge to business' },
+    { code: 'kyb.approve', name: 'Approve KYB', category: 'KYB Business Verification', description: 'Grant VeriPinoy verified badge to business' },
     { code: 'kyb.reject', name: 'Reject KYB', category: 'KYB Business Verification', description: 'Decline business verification submission' },
 
     { code: 'reviews.view', name: 'View Flagged Reviews', category: 'Content Moderation', description: 'Access customer reviews reported for violation' },
@@ -1922,7 +2018,7 @@ function seedDatabaseIfEmpty() {
       risk_level: 'low',
       assigned_reviewer_id: 'STF-103',
       initial_reviewer_id: 'STF-103',
-      reviewer_notes: JSON.stringify([{ author: 'Elena Reyes (Senior KYB Auditor)', text: 'SEC Certificate and 2026 Makati Mayor Permit fully cross-referenced against LGU database. BIR 2303 TIN 402-918-204-000 active. Tatak Pinoy verified merchant badge granted.', timestamp: now }]),
+      reviewer_notes: JSON.stringify([{ author: 'Elena Reyes (Senior KYB Auditor)', text: 'SEC Certificate and 2026 Makati Mayor Permit fully cross-referenced against LGU database. BIR 2303 TIN 402-918-204-000 active. VeriPinoy verified merchant badge granted.', timestamp: now }]),
       submission_date: '2026-08-11T08:30:00Z',
       docs: [
         { doc_type: 'sec_dti', file_name: 'SEC_Certificate_Incorporation_2026.pdf', file_type: 'pdf', file_size: '4.2 MB', status: 'Verified', masked: 'SEC-****-0812', expiry_date: '2050-12-31', notes: 'Valid SEC Certificate of Incorporation with Articles of Incorporation', path: '/private/kyb/3/SEC_Cert.pdf' },
@@ -2183,7 +2279,7 @@ function seedDatabaseIfEmpty() {
   /* REVIEW & KYB NOTIFICATIONS */
   const seedNotifs = [
     { id: 'NOTIF-KYB-101', recipient_type: 'business', recipient_id: '3', type: 'kyb_approved', title: '🎉 SEC Registration Certificate Verified', message: 'Your SEC Certificate of Incorporation (SEC-2026-0812) was verified by Senior Reviewer Elena Reyes.', link: '#m-panel-kyb' },
-    { id: 'NOTIF-KYB-102', recipient_type: 'business', recipient_id: '3', type: 'permit_expiry_warning', title: '⏰ Annual Mayor\'s Permit Renewal Notice', message: 'Makati LGU Mayor\'s Permit renewal window is approaching (valid through Dec 31, 2026). Upload early to retain continuous Tatak Pinoy badge.', link: '#m-panel-kyb' },
+    { id: 'NOTIF-KYB-102', recipient_type: 'business', recipient_id: '3', type: 'permit_expiry_warning', title: '⏰ Annual Mayor\'s Permit Renewal Notice', message: 'Makati LGU Mayor\'s Permit renewal window is approaching (valid through Dec 31, 2026). Upload early to retain continuous VeriPinoy badge.', link: '#m-panel-kyb' },
     { id: 'NOTIF-KYB-103', recipient_type: 'business', recipient_id: '3', type: 'kyb_verified', title: '🛡️ BIR 2303 & Corporate TIN Validated', message: 'TIN 402-918-204-000 successfully cross-checked with Philippine Revenue database.', link: '#m-panel-kyb' },
     { id: 'NOTIF-KYB-104', recipient_type: 'business', recipient_id: '3', type: 'dispute_protection', title: '⚖️ Customer Claim Received — KYB Protection Active', message: 'Claim #CLM-2026-904 filed. Because your business is KYB-Verified, expedited neutral arbitration is available.', link: '#m-panel-disputes' },
     { id: 'NOTIF-101', recipient_type: 'business', recipient_id: '3', type: 'new_review', title: 'New 2-Star Review Received', message: 'Carlos M. posted a 2-star review for Bahay Kubo Restaurant regarding Allergen Spec.', link: '#m-panel-reviews' },
@@ -2242,7 +2338,7 @@ function seedPricingPlans(now = new Date().toISOString()) {
       currency: 'PHP',
       features: [
         'Full KYB Audit (DTI/SEC + Mayor\'s Permit + BIR 2303)',
-        'Tatak Pinoy, Tatak Sigurado Gold Badge',
+        'VeriPinoy Verified Enterprise Gold Badge',
         'Official Merchant Response Portal',
         'Review Response Speed KPI Tracker',
         'Customer Sentiment Matrix & Rating Alerts',
@@ -2302,7 +2398,7 @@ function seedPricingPlans(now = new Date().toISOString()) {
     {
       id: 'PLAN-BUSINESS',
       name: 'Verified Business',
-      description: 'Official Tatak Pinoy KYB Business Badge, business verification page, customer review & claim management.',
+      description: 'Official VeriPinoy KYB Business Badge, business verification page, customer review & claim management.',
       plan_type: 'business',
       monthly_price: 499,
       annual_price: 499,
@@ -2326,7 +2422,7 @@ function seedPricingPlans(now = new Date().toISOString()) {
       currency: 'PHP',
       features: [
         'Full KYB Audit (DTI/SEC + Mayor\'s Permit + BIR 2303)',
-        'Tatak Pinoy, Tatak Sigurado Gold Badge',
+        'VeriPinoy Verified Enterprise Gold Badge',
         'Official Merchant Response Portal',
         'Review Response Speed KPI Tracker',
         'Customer Sentiment Matrix & Rating Alerts',
@@ -3287,7 +3383,7 @@ function seedSecurityData(now = new Date().toISOString()) {
       entity_id: 'BIZ-3001',
       risk_score: 12,
       risk_level: 'LOW',
-      risk_factors: [{ factor: 'Tatak Pinoy KYB Verified Badge Granted', weight: '-10' }, { factor: 'Active Bank & DTI Clean History', weight: '0' }],
+      risk_factors: [{ factor: 'VeriPinoy KYB Verified Badge Granted', weight: '-10' }, { factor: 'Active Bank & DTI Clean History', weight: '0' }],
       duplicate_flags: { duplicatesFound: 0 }
     },
     {
@@ -3973,7 +4069,7 @@ export function seedSupportData(now = new Date().toISOString()) {
       user_type: 'merchant',
       category: 'kyb',
       priority: 'urgent',
-      subject: 'Expedited KYB Tatak Pinoy Verification for New Makati Branch',
+      subject: 'Expedited KYB VeriPinoy Verification for New Makati Branch',
       status: 'open',
       assigned_staff_id: 'STF-105',
       assigned_staff_name: 'Ben Torres',
@@ -3986,7 +4082,7 @@ export function seedSupportData(now = new Date().toISOString()) {
           sender_type: 'user',
           sender_id: 'owner@bahaykubo.ph',
           sender_name: 'Roberto Mendoza (Bahay Kubo)',
-          message: 'Magandang araw! We have opened a new location in Makati and uploaded our 2026 Mayor’s Permit and DTI filings. Could the compliance team please review and update our Tatak Pinoy Verified badge?',
+          message: 'Magandang araw! We have opened a new location in Makati and uploaded our 2026 Mayor’s Permit and DTI filings. Could the compliance team please review and update our VeriPinoy Verified badge?',
           created_at: new Date(Date.now() - 3600 * 1000 * 6).toISOString()
         }
       ]
@@ -4035,7 +4131,7 @@ export function seedSupportData(now = new Date().toISOString()) {
       user_type: 'customer',
       category: 'review',
       priority: 'low',
-      subject: 'Question on Tatak Pinoy Authenticity Score Algorithm',
+      subject: 'Question on VeriPinoy Authenticity Score Algorithm',
       status: 'resolved',
       assigned_staff_id: 'STF-101',
       assigned_staff_name: 'Maria Santos',
@@ -4056,7 +4152,7 @@ export function seedSupportData(now = new Date().toISOString()) {
           sender_type: 'staff',
           sender_id: 'STF-101',
           sender_name: 'Maria Santos (Compliance Officer)',
-          message: 'Hi Juan! Reviews uploaded with receipt images and authenticated user IDs earn top weighted scores in the Tatak Pinoy trust index. Thank you for contributing to fair reviews!',
+          message: 'Hi Juan! Reviews uploaded with receipt images and authenticated user IDs earn top weighted scores in the VeriPinoy trust index. Thank you for contributing to fair reviews!',
           created_at: new Date(Date.now() - 3600 * 1000 * 18).toISOString()
         }
       ]
@@ -4214,7 +4310,7 @@ export function seedUniversalChatData(now = new Date().toISOString()) {
             ciphertext: '91KxL/GroupedWithinTwoMinutesSpecRequirement/GCM==',
             iv: '3aB89100ZzYx==',
             algorithm: 'AES-GCM',
-            plaintext_preview: 'Specifically looking for the Tatak Pinoy QR checkout flow and dark mode tokens.',
+            plaintext_preview: 'Specifically looking for the VeriPinoy QR checkout flow and dark mode tokens.',
             version: '1.0'
           }),
           attachments: null,
@@ -4296,7 +4392,7 @@ export function seedUniversalChatData(now = new Date().toISOString()) {
       participant_b_role: 'freelancer',
       contract_id: null,
       ticket_id: null,
-      title: 'Tatak Pinoy Packaging & Brand Identity Inquiry',
+      title: 'VeriPinoy Packaging & Brand Identity Inquiry',
       is_e2ee: 0,
       last_message_text: 'I would love to help! Let me prepare a custom proposal and quote for your 3 product lines.',
       last_message_sender_id: 'USER-FR-10285',
@@ -4308,7 +4404,7 @@ export function seedUniversalChatData(now = new Date().toISOString()) {
           sender_name: 'Juan Dela Cruz (Manila Bakery)',
           sender_role: 'business',
           recipient_id: 'USER-FR-10285',
-          message_text: 'Good day Maria! We saw your verified freelancer profile on VeriPinoy. We need artisanal packaging designs for our traditional Ensaymada gift boxes with BIR and Tatak Pinoy QR verification.',
+          message_text: 'Good day Maria! We saw your verified freelancer profile on VeriPinoy. We need artisanal packaging designs for our traditional Ensaymada gift boxes with BIR and VeriPinoy QR verification.',
           is_e2ee: 0,
           encrypted_payload: null,
           attachments: null,
@@ -4898,6 +4994,732 @@ export function logEmailFallbackNotification({
 
 export function getDispatchedEmailNotifications(limit = 20) {
   return queryAll(`SELECT * FROM chat_email_notifications ORDER BY sent_at DESC LIMIT ?`, [limit]);
+}
+
+/* ==========================================================================
+   ROLE-BASED REPORTING & ANALYTICS SEEDING & HELPER FUNCTIONS
+   ========================================================================== */
+
+export function seedRoleBasedReportsData(now = new Date().toISOString()) {
+  /* 1. SEED PROFILES TABLE (RBAC) */
+  const profilesSeed = [
+    {
+      id: 'PROF-AUD-001',
+      user_id: 'STAFF-ADM-001',
+      email: 'auditor.santos@veripinoy.ph',
+      full_name: 'Auditor Roberto Santos',
+      role: 'auditor',
+      role_title: 'Senior Compliance & Regulatory Auditor',
+      department: 'Compliance & Security Directorate',
+      permissions_json: JSON.stringify(['audit_logs.view', 'compliance.view', 'security.audit', 'cardo.inspect', 'reports.auditor']),
+      phone: '+63 917 882 1920',
+      status: 'active'
+    },
+    {
+      id: 'PROF-SALES-001',
+      user_id: 'STAFF-SALES-001',
+      email: 'sales.lead@veripinoy.ph',
+      full_name: 'Camille Dizon',
+      role: 'sales',
+      role_title: 'Commercial Pipeline & Merchant Growth Lead',
+      department: 'Sales & Merchant Acquisition',
+      permissions_json: JSON.stringify(['pipeline.view', 'merchants.acquire', 'conversions.view', 'referrals.track', 'reports.sales']),
+      phone: '+63 918 554 3912',
+      status: 'active'
+    },
+    {
+      id: 'PROF-ADM-001',
+      user_id: 'ADM-OPS-001',
+      email: 'admin.ops@veripinoy.ph',
+      full_name: 'Maria Elena Ramos',
+      role: 'admin',
+      role_title: 'Platform Operations Administrator',
+      department: 'Operations Directorate',
+      permissions_json: JSON.stringify(['system.overview', 'staff.track', 'reports.view', 'audit.view', 'sales.view', 'reports.admin']),
+      phone: '+63 920 441 8731',
+      status: 'active'
+    },
+    {
+      id: 'PROF-SUPER-001',
+      user_id: 'ADM-SUPER-001',
+      email: 'admin.director@veripinoy.ph',
+      full_name: 'Director Alejandro Cruz',
+      role: 'super_admin',
+      role_title: 'Super Administrator & Executive Director',
+      department: 'Executive Directorate',
+      permissions_json: JSON.stringify(['*']),
+      phone: '+63 917 111 9000',
+      status: 'active'
+    },
+    {
+      id: 'PROF-CUST-001',
+      user_id: 'USR-CUST-1001',
+      email: 'customer@veripinoy.ph',
+      full_name: 'Maria Clara De Los Santos',
+      role: 'customer',
+      role_title: 'Verified Customer & Reviewer',
+      department: 'Public Registry',
+      permissions_json: JSON.stringify(['reviews.create', 'businesses.view']),
+      phone: '+63 917 332 9901',
+      status: 'active'
+    },
+    {
+      id: 'PROF-BIZ-001',
+      user_id: 'USR-BIZ-2001',
+      email: 'owner@manilabakery.ph',
+      full_name: 'Juan Dela Cruz',
+      role: 'business',
+      role_title: 'Verified Merchant Owner',
+      department: 'Business Registry',
+      permissions_json: JSON.stringify(['business.manage', 'reviews.reply']),
+      phone: '+63 917 555 1234',
+      status: 'active'
+    },
+    {
+      id: 'PROF-FR-001',
+      user_id: 'USER-FR-10284',
+      email: 'freelancer@marcoreyes.dev',
+      full_name: 'Marco Antonio Reyes',
+      role: 'freelancer',
+      role_title: 'Senior Web & Blockchain Specialist',
+      department: 'Freelancer Pro Registry',
+      permissions_json: JSON.stringify(['freelancer.profile', 'escrow.milestones']),
+      phone: '+63 919 777 4412',
+      status: 'active'
+    }
+  ];
+
+  for (const p of profilesSeed) {
+    executeRun(
+      `INSERT OR REPLACE INTO profiles (id, user_id, email, full_name, role, role_title, department, permissions_json, phone, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.id, p.user_id, p.email, p.full_name, p.role, p.role_title, p.department, p.permissions_json, p.phone, p.status, now, now]
+    );
+  }
+
+  /* 2. SEED SENSITIVE AUDIT LOGS (Status changes, user deletions, verification approvals, security checks) */
+  const auditLogsSeed = [
+    {
+      id: 'LOG-AUD-1001',
+      actor_admin_id: 'STAFF-ADM-001',
+      actor_name: 'Auditor Roberto Santos',
+      actor_role: 'Auditor',
+      action: 'STATUS_CHANGE',
+      entity_type: 'BUSINESS_KYB',
+      entity_id: 'BIZ-2001',
+      previous_value: 'PENDING_AUDIT',
+      new_value: 'VERIFIED_ACTIVE',
+      details: 'Changed merchant status from PENDING_AUDIT to VERIFIED_ACTIVE following automated DTI C.A.R.D.O. registry match.',
+      success: 1,
+      ip_address: '112.198.102.44',
+      user_agent: 'VeriPinoy-AuditorDesk/v2.4',
+      timestamp: '2026-08-28 14:32:00'
+    },
+    {
+      id: 'LOG-AUD-1002',
+      actor_admin_id: 'ADM-OPS-001',
+      actor_name: 'Maria Elena Ramos',
+      actor_role: 'Admin',
+      action: 'USER_DELETION',
+      entity_type: 'FRAUD_ACCOUNT',
+      entity_id: 'USR-FRAUD-991',
+      previous_value: 'QUARANTINED',
+      new_value: 'DELETED',
+      details: 'Quarantined astroturfing bot user account permanently deleted and IP cluster blacklisted under Anti-Fraud Rule AF-812.',
+      success: 1,
+      ip_address: '120.28.188.19',
+      user_agent: 'VeriPinoy-AdminHub/v2.4',
+      timestamp: '2026-08-27 09:15:20'
+    },
+    {
+      id: 'LOG-AUD-1003',
+      actor_admin_id: 'STAFF-ADM-001',
+      actor_name: 'Auditor Roberto Santos',
+      actor_role: 'Auditor',
+      action: 'VERIFICATION_APPROVAL',
+      entity_type: 'FREELANCER_PRO',
+      entity_id: 'USER-FR-10284',
+      previous_value: 'SUBMITTED',
+      new_value: 'VERIFIED_PRO',
+      details: 'Approved Pro Freelancer verification and NBI biometric compliance clearance for Marco Antonio Reyes.',
+      success: 1,
+      ip_address: '112.198.102.44',
+      user_agent: 'VeriPinoy-AuditorDesk/v2.4',
+      timestamp: '2026-08-26 16:45:10'
+    },
+    {
+      id: 'LOG-AUD-1004',
+      actor_admin_id: 'ADM-SUPER-001',
+      actor_name: 'Director Alejandro Cruz',
+      actor_role: 'Super Admin',
+      action: 'SECURITY_POLICY_UPDATE',
+      entity_type: 'MFA_POLICY',
+      entity_id: 'MFA-POL-01',
+      previous_value: 'OPTIONAL_FOR_STAFF',
+      new_value: 'MANDATORY_ENFORCED',
+      details: 'Mandatory hardware MFA and FIDO2 policy enforced for all staff members handling DTI/SEC tax vaults.',
+      success: 1,
+      ip_address: '175.176.48.91',
+      user_agent: 'VeriPinoy-ExecutivePortal/v2.4',
+      timestamp: '2026-08-25 11:20:00'
+    },
+    {
+      id: 'LOG-AUD-1005',
+      actor_admin_id: 'STAFF-ADM-001',
+      actor_name: 'Auditor Roberto Santos',
+      actor_role: 'Auditor',
+      action: 'STATUS_CHANGE',
+      entity_type: 'BUSINESS_KYB',
+      entity_id: 'BIZ-2003',
+      previous_value: 'AWAITING_DOCS',
+      new_value: 'UNDER_REVIEW',
+      details: "Cebu Coastal Logistics Mayor's Permit status marked Validated with Cebu City LGU registry database.",
+      success: 1,
+      ip_address: '112.198.102.44',
+      user_agent: 'VeriPinoy-AuditorDesk/v2.4',
+      timestamp: '2026-08-24 10:05:44'
+    },
+    {
+      id: 'LOG-AUD-1006',
+      actor_admin_id: 'ADM-OPS-001',
+      actor_name: 'Maria Elena Ramos',
+      actor_role: 'Admin',
+      action: 'ESCROW_DISPUTE_RESOLVE',
+      entity_type: 'ESCROW_DISPUTE',
+      entity_id: 'DISP-9021',
+      previous_value: 'OPEN_MEDIATION',
+      new_value: 'RESOLVED_SPLIT',
+      details: 'Resolved Escrow Milestone dispute with 50/50 mutual mediated settlement under BSP Circular 942 consumer guidelines.',
+      success: 1,
+      ip_address: '120.28.188.19',
+      user_agent: 'VeriPinoy-AdminHub/v2.4',
+      timestamp: '2026-08-23 15:30:12'
+    },
+    {
+      id: 'LOG-AUD-1007',
+      actor_admin_id: 'STAFF-ADM-001',
+      actor_name: 'Auditor Roberto Santos',
+      actor_role: 'Auditor',
+      action: 'VAULT_ACCESS_INSPECT',
+      entity_type: 'ENCRYPTED_DOC',
+      entity_id: 'DOC-BIR-8812',
+      previous_value: 'ENCRYPTED_REST',
+      new_value: 'INSPECTED_DECRYPTED',
+      details: 'Inspected AES-256 encrypted BIR Form 2303 certificate for Manila Artisan Bakery (TIN 241-998-102-000).',
+      success: 1,
+      ip_address: '112.198.102.44',
+      user_agent: 'VeriPinoy-AuditorDesk/v2.4',
+      timestamp: '2026-08-22 08:44:21'
+    },
+    {
+      id: 'LOG-AUD-1008',
+      actor_admin_id: 'ADM-SUPER-001',
+      actor_name: 'Director Alejandro Cruz',
+      actor_role: 'Super Admin',
+      action: 'ROLE_PERMISSION_UPDATE',
+      entity_type: 'RBAC_ROLE',
+      entity_id: 'ROLE-SALES-01',
+      previous_value: 'PIPELINE_READ_ONLY',
+      new_value: 'PIPELINE_EXPORT_PERMITTED',
+      details: 'Updated Sales Team permission matrix to include live conversion analytics export and merchant attribution tracking.',
+      success: 1,
+      ip_address: '175.176.48.91',
+      user_agent: 'VeriPinoy-ExecutivePortal/v2.4',
+      timestamp: '2026-08-21 13:10:00'
+    },
+    {
+      id: 'LOG-AUD-1009',
+      actor_admin_id: 'CARDO-AI-ENGINE',
+      actor_name: 'C.A.R.D.O. Automated Engine',
+      actor_role: 'System AI',
+      action: 'DATA_INTEGRITY_CHECK',
+      entity_type: 'CRYPTO_LEDGER',
+      entity_id: 'LEDGER-ROOT-2026',
+      previous_value: 'UNCHECKED',
+      new_value: '100%_INTEGRITY_VERIFIED',
+      details: 'Cryptographic SHA-256 merkle audit chain validated with 100% integrity across 1,482 historical state transitions.',
+      success: 1,
+      ip_address: '10.0.0.1',
+      user_agent: 'CARDO-Core/v3.1-AI',
+      timestamp: '2026-08-20 00:00:00'
+    },
+    {
+      id: 'LOG-AUD-1010',
+      actor_admin_id: 'ADM-OPS-001',
+      actor_name: 'Maria Elena Ramos',
+      actor_role: 'Admin',
+      action: 'STATUS_CHANGE',
+      entity_type: 'BUSINESS_KYB',
+      entity_id: 'BIZ-2004',
+      previous_value: 'SUSPENDED_REVIEW',
+      new_value: 'VERIFIED_ACTIVE',
+      details: 'Re-activated Davao Agri-Tech Ventures after LGU validation of updated Mayor Permit and SEC Annual Report.',
+      success: 1,
+      ip_address: '120.28.188.19',
+      user_agent: 'VeriPinoy-AdminHub/v2.4',
+      timestamp: '2026-08-19 11:18:32'
+    }
+  ];
+
+  for (const log of auditLogsSeed) {
+    executeRun(
+      `INSERT OR REPLACE INTO audit_logs (id, actor_admin_id, actor_name, actor_role, action, entity_type, entity_id, previous_value, new_value, details, success, ip_address, user_agent, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [log.id, log.actor_admin_id, log.actor_name, log.actor_role, log.action, log.entity_type, log.entity_id, log.previous_value, log.new_value, log.details, log.success, log.ip_address, log.user_agent, log.timestamp]
+    );
+  }
+
+  /* 3. SEED C.A.R.D.O. COMPLIANCE AUDITS */
+  const cardoSeed = [
+    {
+      id: 'CARDO-AUD-01',
+      business_id: 'BIZ-2001',
+      business_name: 'Manila Artisan Bakery & Cafe',
+      dti_sec_reg_no: 'DTI-NCR-8829104',
+      dti_sec_status: 'verified_active',
+      cardo_ai_confidence: 99.4,
+      bir_2303_status: 'verified_tax_compliant',
+      mayors_permit_status: 'verified_valid',
+      risk_level: 'LOW',
+      last_audited_at: '2026-08-28 14:30:00',
+      audited_by: 'C.A.R.D.O. AI + Auditor Santos'
+    },
+    {
+      id: 'CARDO-AUD-02',
+      business_id: 'BIZ-2002',
+      business_name: 'TechCraft Solutions Philippines',
+      dti_sec_reg_no: 'SEC-CS202109841',
+      dti_sec_status: 'verified_active',
+      cardo_ai_confidence: 98.8,
+      bir_2303_status: 'verified_tax_compliant',
+      mayors_permit_status: 'verified_valid',
+      risk_level: 'LOW',
+      last_audited_at: '2026-08-27 10:12:00',
+      audited_by: 'C.A.R.D.O. AI'
+    },
+    {
+      id: 'CARDO-AUD-03',
+      business_id: 'BIZ-2003',
+      business_name: 'Cebu Coastal Logistics Corp.',
+      dti_sec_reg_no: 'SEC-CS201948102',
+      dti_sec_status: 'verified_active',
+      cardo_ai_confidence: 97.2,
+      bir_2303_status: 'verified_tax_compliant',
+      mayors_permit_status: 'verified_valid',
+      risk_level: 'LOW',
+      last_audited_at: '2026-08-26 15:40:00',
+      audited_by: 'C.A.R.D.O. AI + Auditor Santos'
+    },
+    {
+      id: 'CARDO-AUD-04',
+      business_id: 'BIZ-2004',
+      business_name: 'Davao Agri-Tech Ventures',
+      dti_sec_reg_no: 'DTI-R11-309182',
+      dti_sec_status: 'verified_active',
+      cardo_ai_confidence: 96.5,
+      bir_2303_status: 'verified_tax_compliant',
+      mayors_permit_status: 'verified_valid',
+      risk_level: 'LOW',
+      last_audited_at: '2026-08-25 09:25:00',
+      audited_by: 'C.A.R.D.O. AI'
+    },
+    {
+      id: 'CARDO-AUD-05',
+      business_id: 'BIZ-2005',
+      business_name: 'Pampanga Culinary Express Inc.',
+      dti_sec_reg_no: 'SEC-CS202301948',
+      dti_sec_status: 'pending_renewal',
+      cardo_ai_confidence: 84.1,
+      bir_2303_status: 'verified_tax_compliant',
+      mayors_permit_status: 'under_lgu_check',
+      risk_level: 'MODERATE',
+      last_audited_at: '2026-08-24 16:10:00',
+      audited_by: 'C.A.R.D.O. AI'
+    },
+    {
+      id: 'CARDO-AUD-06',
+      business_id: 'BIZ-2006',
+      business_name: 'Iloilo Heritage Weaving & Crafts',
+      dti_sec_reg_no: 'DTI-R06-991823',
+      dti_sec_status: 'verified_active',
+      cardo_ai_confidence: 98.1,
+      bir_2303_status: 'verified_tax_compliant',
+      mayors_permit_status: 'verified_valid',
+      risk_level: 'LOW',
+      last_audited_at: '2026-08-23 11:00:00',
+      audited_by: 'C.A.R.D.O. AI'
+    },
+    {
+      id: 'CARDO-AUD-07',
+      business_id: 'BIZ-PEND-01',
+      business_name: 'QuickDrop Manila Courier Services',
+      dti_sec_reg_no: 'DTI-NCR-Pending-441',
+      dti_sec_status: 'under_investigation',
+      cardo_ai_confidence: 62.4,
+      bir_2303_status: 'pending_upload',
+      mayors_permit_status: 'under_lgu_check',
+      risk_level: 'MODERATE',
+      last_audited_at: '2026-08-28 08:30:00',
+      audited_by: 'C.A.R.D.O. AI'
+    },
+    {
+      id: 'CARDO-AUD-08',
+      business_id: 'BIZ-PEND-02',
+      business_name: 'BGC Dental & Wellness Clinic',
+      dti_sec_reg_no: 'SEC-CS202511092',
+      dti_sec_status: 'under_investigation',
+      cardo_ai_confidence: 58.0,
+      bir_2303_status: 'tin_mismatched',
+      mayors_permit_status: 'expired',
+      risk_level: 'HIGH',
+      last_audited_at: '2026-08-27 14:15:00',
+      audited_by: 'C.A.R.D.O. AI'
+    }
+  ];
+
+  for (const c of cardoSeed) {
+    executeRun(
+      `INSERT OR REPLACE INTO cardo_compliance_audits (id, business_id, business_name, dti_sec_reg_no, dti_sec_status, cardo_ai_confidence, bir_2303_status, mayors_permit_status, risk_level, last_audited_at, audited_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [c.id, c.business_id, c.business_name, c.dti_sec_reg_no, c.dti_sec_status, c.cardo_ai_confidence, c.bir_2303_status, c.mayors_permit_status, c.risk_level, c.last_audited_at, c.audited_by]
+    );
+  }
+
+  /* 4. SEED MERCHANT PIPELINE (Sales Team Trackers) */
+  const pipelineSeed = [
+    {
+      id: 'PIPE-101',
+      business_name: 'BGC Specialty Roast & Roastery',
+      owner_name: 'Mateo Alcantara',
+      email: 'mateo@bgcroasters.ph',
+      phone: '+63 917 555 4910',
+      industry: 'Food & Dining',
+      city: 'Taguig (BGC)',
+      stage: 'spotlight_converted',
+      deal_value: 12000,
+      referral_source: 'BNI Makati Pinnacle Chapter',
+      referral_code: 'BNI-MAKATI-99',
+      referrer_name: 'Atty. Grace Tan',
+      assigned_sales_rep: 'Camille Dizon',
+      contact_notes: 'Enterprise Verified Plan paid annual subscription with Spotlight Home Carousel placement.',
+      last_activity_date: '2026-08-28',
+      created_at: '2026-08-10'
+    },
+    {
+      id: 'PIPE-102',
+      business_name: 'Zenith Cloud & Cyber Solutions',
+      owner_name: 'Engr. Paulo Delgado',
+      email: 'paulo@zenithcloud.ph',
+      phone: '+63 918 333 8122',
+      industry: 'Web & Software',
+      city: 'Makati City',
+      stage: 'verified_onboarded',
+      deal_value: 4999,
+      referral_source: 'Philippine Web Developers Alliance',
+      referral_code: 'PWDA-COMMERCE',
+      referrer_name: 'DevAlliance Lead',
+      assigned_sales_rep: 'Camille Dizon',
+      contact_notes: 'Full KYB verified. Onboarding complete with verified trustmark badge rendered.',
+      last_activity_date: '2026-08-27',
+      created_at: '2026-08-12'
+    },
+    {
+      id: 'PIPE-103',
+      business_name: 'Cebu Organic Farms & Market',
+      owner_name: 'Elena Soriano',
+      email: 'elena@cebuorganic.ph',
+      phone: '+63 920 111 9482',
+      industry: 'Agriculture & Retail',
+      city: 'Cebu City',
+      stage: 'kyb_under_review',
+      deal_value: 999,
+      referral_source: 'Cebu Chamber of Commerce SME Group',
+      referral_code: 'CCCI-CEBU-01',
+      referrer_name: 'CCCI Secretariat',
+      assigned_sales_rep: 'Camille Dizon',
+      contact_notes: 'Submitted BIR 2303 and Cebu City Mayor permit. Currently in Auditor queue.',
+      last_activity_date: '2026-08-26',
+      created_at: '2026-08-15'
+    },
+    {
+      id: 'PIPE-104',
+      business_name: 'Davao Cold Chain Freight Express',
+      owner_name: 'Rodrigo Tan Jr.',
+      email: 'rodrigo@davaocoldchain.ph',
+      phone: '+63 917 889 0122',
+      industry: 'Logistics & Freight',
+      city: 'Davao City',
+      stage: 'doc_submission',
+      deal_value: 4999,
+      referral_source: 'DTI Negosyo Center NCR Hub',
+      referral_code: 'DTI-NCR-2026',
+      referrer_name: 'DTI Negosyo Specialist',
+      assigned_sales_rep: 'Camille Dizon',
+      contact_notes: 'Awaiting SEC Articles of Incorporation upload.',
+      last_activity_date: '2026-08-25',
+      created_at: '2026-08-18'
+    },
+    {
+      id: 'PIPE-105',
+      business_name: 'Clark Freeport Logistics Hub',
+      owner_name: 'Vincent Yap',
+      email: 'vincent@clarklogistics.ph',
+      phone: '+63 919 444 3321',
+      industry: 'Logistics & Freight',
+      city: 'Angeles / Clark',
+      stage: 'initial_outreach',
+      deal_value: 999,
+      referral_source: 'Organic Search',
+      referral_code: 'ORGANIC-DIR',
+      referrer_name: 'Direct Lead',
+      assigned_sales_rep: 'Camille Dizon',
+      contact_notes: 'Introductory call conducted. Demo scheduled for Friday.',
+      last_activity_date: '2026-08-24',
+      created_at: '2026-08-20'
+    },
+    {
+      id: 'PIPE-106',
+      business_name: 'Iloilo Craft Gin & Spirits',
+      owner_name: 'Beatrice Gomez',
+      email: 'beatrice@iloilogin.ph',
+      phone: '+63 917 662 9011',
+      industry: 'Food & Dining',
+      city: 'Iloilo City',
+      stage: 'lead_ingestion',
+      deal_value: 499,
+      referral_source: 'Sari-Sari Digitalization Program',
+      referral_code: 'SARISARI-GOV',
+      referrer_name: 'LGU Iloilo Lead',
+      assigned_sales_rep: 'Camille Dizon',
+      contact_notes: 'Newly registered lead from Iloilo Negosyo Fair.',
+      last_activity_date: '2026-08-28',
+      created_at: '2026-08-28'
+    }
+  ];
+
+  for (const p of pipelineSeed) {
+    executeRun(
+      `INSERT OR REPLACE INTO merchant_pipeline (id, business_name, owner_name, email, phone, industry, city, stage, deal_value, referral_source, referral_code, referrer_name, assigned_sales_rep, contact_notes, last_activity_date, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.id, p.business_name, p.owner_name, p.email, p.phone, p.industry, p.city, p.stage, p.deal_value, p.referral_source, p.referral_code, p.referrer_name, p.assigned_sales_rep, p.contact_notes, p.last_activity_date, p.created_at, now]
+    );
+  }
+
+  /* 5. SEED REFERRAL PARTNER DIRECTORY */
+  const referralsSeed = [
+    {
+      id: 'REF-001',
+      referrer_name: 'DTI Negosyo Center NCR Hub',
+      referrer_email: 'negosyo.ncr@dti.gov.ph',
+      referrer_type: 'dti_negosyo_center',
+      referral_code: 'DTI-NCR-2026',
+      total_referred_merchants: 48,
+      converted_merchants: 39,
+      conversion_rate: 81.3,
+      commission_earned: 19500,
+      commission_paid: 15000,
+      status: 'active'
+    },
+    {
+      id: 'REF-002',
+      referrer_name: 'BNI Makati Pinnacle Chapter',
+      referrer_email: 'partners@bnipinnacle.ph',
+      referrer_type: 'bni_chapter',
+      referral_code: 'BNI-MAKATI-99',
+      total_referred_merchants: 34,
+      converted_merchants: 28,
+      conversion_rate: 82.4,
+      commission_earned: 14000,
+      commission_paid: 14000,
+      status: 'active'
+    },
+    {
+      id: 'REF-003',
+      referrer_name: 'Cebu Chamber of Commerce SME Group',
+      referrer_email: 'sme@cebuchamber.org.ph',
+      referrer_type: 'partner_firm',
+      referral_code: 'CCCI-CEBU-01',
+      total_referred_merchants: 26,
+      converted_merchants: 19,
+      conversion_rate: 73.1,
+      commission_earned: 9500,
+      commission_paid: 5000,
+      status: 'active'
+    },
+    {
+      id: 'REF-004',
+      referrer_name: 'Philippine Web Developers Alliance',
+      referrer_email: 'commerce@pwda.dev',
+      referrer_type: 'partner_firm',
+      referral_code: 'PWDA-COMMERCE',
+      total_referred_merchants: 22,
+      converted_merchants: 18,
+      conversion_rate: 81.8,
+      commission_earned: 9000,
+      commission_paid: 9000,
+      status: 'active'
+    },
+    {
+      id: 'REF-005',
+      referrer_name: 'Sari-Sari Digitalization Program',
+      referrer_email: 'msme@gov.ph',
+      referrer_type: 'dti_negosyo_center',
+      referral_code: 'SARISARI-GOV',
+      total_referred_merchants: 55,
+      converted_merchants: 41,
+      conversion_rate: 74.5,
+      commission_earned: 20500,
+      commission_paid: 16000,
+      status: 'active'
+    }
+  ];
+
+  for (const r of referralsSeed) {
+    executeRun(
+      `INSERT OR REPLACE INTO referrals (id, referrer_name, referrer_email, referrer_type, referral_code, total_referred_merchants, converted_merchants, conversion_rate, commission_earned, commission_paid, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [r.id, r.referrer_name, r.referrer_email, r.referrer_type, r.referral_code, r.total_referred_merchants, r.converted_merchants, r.conversion_rate, r.commission_earned, r.commission_paid, r.status, now, now]
+    );
+  }
+
+  /* 6. SEED STAFF COMPLIANCE & VERIFICATION OUTPUT METRICS */
+  const staffPerfSeed = [
+    {
+      id: 'PERF-01',
+      staff_id: 'STAFF-ADM-001',
+      staff_name: 'Auditor Roberto Santos',
+      role_name: 'Senior Compliance Auditor',
+      department: 'Compliance & Verification Directorate',
+      total_tickets_assigned: 52,
+      total_tickets_resolved: 48,
+      avg_review_time_mins: 16.4,
+      compliance_accuracy_rate: 99.8,
+      approvals_count: 42,
+      rejections_count: 6,
+      pending_in_review: 4,
+      period_label: 'Q3 2026',
+      last_active_at: '2026-08-28 17:15:00'
+    },
+    {
+      id: 'PERF-02',
+      staff_id: 'ADM-OPS-001',
+      staff_name: 'Maria Elena Ramos',
+      role_name: 'Operations Administrator',
+      department: 'Operations Directorate',
+      total_tickets_assigned: 38,
+      total_tickets_resolved: 36,
+      avg_review_time_mins: 14.2,
+      compliance_accuracy_rate: 99.4,
+      approvals_count: 31,
+      rejections_count: 5,
+      pending_in_review: 2,
+      period_label: 'Q3 2026',
+      last_active_at: '2026-08-28 16:40:00'
+    },
+    {
+      id: 'PERF-03',
+      staff_id: 'STF-AUD-002',
+      staff_name: 'Atty. Cristina Valdez',
+      role_name: 'Legal & Dispute Arbitrator',
+      department: 'Compliance & Verification Directorate',
+      total_tickets_assigned: 29,
+      total_tickets_resolved: 27,
+      avg_review_time_mins: 22.8,
+      compliance_accuracy_rate: 100.0,
+      approvals_count: 24,
+      rejections_count: 3,
+      pending_in_review: 2,
+      period_label: 'Q3 2026',
+      last_active_at: '2026-08-28 15:30:00'
+    },
+    {
+      id: 'PERF-04',
+      staff_id: 'STF-KYC-003',
+      staff_name: 'Danilo Mendoza',
+      role_name: 'Junior KYC Verifier',
+      department: 'Compliance & Verification Directorate',
+      total_tickets_assigned: 64,
+      total_tickets_resolved: 59,
+      avg_review_time_mins: 11.5,
+      compliance_accuracy_rate: 98.6,
+      approvals_count: 53,
+      rejections_count: 6,
+      pending_in_review: 5,
+      period_label: 'Q3 2026',
+      last_active_at: '2026-08-28 18:00:00'
+    }
+  ];
+
+  for (const sp of staffPerfSeed) {
+    executeRun(
+      `INSERT OR REPLACE INTO staff_performance_metrics (id, staff_id, staff_name, role_name, department, total_tickets_assigned, total_tickets_resolved, avg_review_time_mins, compliance_accuracy_rate, approvals_count, rejections_count, pending_in_review, period_label, last_active_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [sp.id, sp.staff_id, sp.staff_name, sp.role_name, sp.department, sp.total_tickets_assigned, sp.total_tickets_resolved, sp.avg_review_time_mins, sp.compliance_accuracy_rate, sp.approvals_count, sp.rejections_count, sp.pending_in_review, sp.period_label, sp.last_active_at]
+    );
+  }
+}
+
+export function getProfiles() {
+  return queryAll(`SELECT * FROM profiles ORDER BY created_at ASC`);
+}
+
+export function getProfileByUserId(userId) {
+  return queryOne(`SELECT * FROM profiles WHERE user_id = ?`, [userId]);
+}
+
+export function getProfileByRole(role) {
+  return queryOne(`SELECT * FROM profiles WHERE role = ?`, [role]);
+}
+
+export function getAuditLogsList({ action = null, keyword = null, limit = 100 } = {}) {
+  let sql = `SELECT * FROM audit_logs WHERE 1=1`;
+  const params = [];
+
+  if (action && action !== 'ALL') {
+    sql += ` AND action LIKE ?`;
+    params.push(`%${action}%`);
+  }
+
+  if (keyword) {
+    sql += ` AND (actor_name LIKE ? OR details LIKE ? OR entity_id LIKE ? OR action LIKE ?)`;
+    const k = `%${keyword}%`;
+    params.push(k, k, k, k);
+  }
+
+  sql += ` ORDER BY timestamp DESC LIMIT ?`;
+  params.push(limit);
+
+  return queryAll(sql, params);
+}
+
+export function getCardoAuditsList() {
+  return queryAll(`SELECT * FROM cardo_compliance_audits ORDER BY last_audited_at DESC`);
+}
+
+export function getMerchantPipelineList({ stage = null, city = null } = {}) {
+  let sql = `SELECT * FROM merchant_pipeline WHERE 1=1`;
+  const params = [];
+
+  if (stage && stage !== 'ALL') {
+    sql += ` AND stage = ?`;
+    params.push(stage);
+  }
+
+  if (city && city !== 'ALL') {
+    sql += ` AND city LIKE ?`;
+    params.push(`%${city}%`);
+  }
+
+  sql += ` ORDER BY created_at DESC`;
+  return queryAll(sql, params);
+}
+
+export function getReferralsList() {
+  return queryAll(`SELECT * FROM referrals ORDER BY total_referred_merchants DESC`);
+}
+
+export function getStaffPerformanceList() {
+  return queryAll(`SELECT * FROM staff_performance_metrics ORDER BY total_tickets_resolved DESC`);
 }
 
 

@@ -96,6 +96,13 @@ export function updateStaffAccount(staffId, { roleId, status, requireMFA, mustRe
   }
 }
 
+export function deleteStaffAccount(staffId) {
+  executeRun('DELETE FROM admin_sessions WHERE admin_user_id = ?', [staffId]);
+  executeRun('DELETE FROM admin_user_roles WHERE admin_user_id = ?', [staffId]);
+  executeRun('DELETE FROM admin_users WHERE id = ?', [staffId]);
+  return { success: true };
+}
+
 export function resetStaffPassword(staffId, newPassword) {
   const passHash = hashPassword(newPassword || 'VeriPinoyReset2026!').hash;
   const now = new Date().toISOString();
